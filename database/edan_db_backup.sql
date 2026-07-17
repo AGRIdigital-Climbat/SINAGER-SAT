@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ber43h3LY3KZxwpL42TzNenkEHbAT1FJnX9ZpvLkOJOc9ZtjbI1qUbTmKubeRvg
+\restrict f7LU5TBfUsTy1YmT2NbwXH2qlHa5r8Q9OJF5HZpdAKYBGdQm9gdH7GaJijEk6cb
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
@@ -64,7 +64,7 @@ CREATE SCHEMA sinb;
 ALTER SCHEMA sinb OWNER TO sinagersat;
 
 --
--- Name: users; Type: SCHEMA; Schema: -; Owner: sinagersat
+-- Name: usuarios; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA usuarios;
@@ -3905,5 +3905,5 @@ GRANT ALL ON TABLE shared.provincia TO sinagersat;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ber43h3LY3KZxwpL42TzNenkEHbAT1FJnX9ZpvLkOJOc9ZtjbI1qUbTmKubeRvg
+\unrestrict f7LU5TBfUsTy1YmT2NbwXH2qlHa5r8Q9OJF5HZpdAKYBGdQm9gdH7GaJijEk6cb
 
