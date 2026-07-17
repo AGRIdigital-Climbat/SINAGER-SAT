@@ -103,3 +103,6 @@ WHERE table_schema NOT IN ('pg_catalog','information_schema')
 GROUP BY table_schema ORDER BY table_schema;
 " 2>/dev/null
 echo ""
+echo "  Conexion:"
+echo "    PGPASSWORD=$PW psql -U $USER -d $DB -h 10.10.10.220"
+echo ""

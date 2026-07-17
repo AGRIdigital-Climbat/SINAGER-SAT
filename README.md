@@ -1,132 +1,72 @@
 # EDAN - Base de Datos
 
-Evaluacion de Danos y Analisis de Necesidades. Sistema de gestion de desastres naturales.
+Evaluación de Daños y Análisis de Necesidades. Sistema de gestión de desastres naturales.
 
 ---
 
-## Instalacion rapida
+## Desplegar desde cero
 
 ```bash
 sudo bash setup.sh
 ```
 
-Eso es todo. Instala PostgreSQL, crea la BD y verifica todo automaticamente.
+Esto instala PostgreSQL, crea la BD y verifica todo automáticamente.
 
 ---
 
-## Instalacion manual (paso a paso)
-
-Si prefieres hacerlo manualmente, ver `deploy/README.md`.
-
----
-
-## Conexion
+## Restaurar BD (si ya tienes PostgreSQL instalado)
 
 ```bash
-PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
-```
-
-## Herramientas graficas
-
-- **pgAdmin4**: File > Import > `database/servers.json`
-- **DBeaver**: Host: 127.0.0.1 | DB: db_sinagersat | User: sinagersat | Pass: 12345678
-
----
-
-## Credenciales
-
-| Parametro  | Valor         |
-|------------|---------------|
-| Usuario    | `sinagersat`  |
-| Password   | `12345678`    |
-| Base datos | `db_sinagersat` |
-| Host       | `127.0.0.1`   |
-| Puerto     | `5432`        |
-
----
-
-## Estructura
-
-```
-DB_EDAN/
-├── setup.sh                              # INSTALACION EN 1 PASO
-├── README.md                             # Este archivo
-├── Formulario.pdf                        # Formulario EDAN original
-├── deploy/
-│   ├── instalar_postgresql.sh            # Solo instalar PostgreSQL
-│   ├── desplegar_bd.sh                   # Desplegar BD desde backup
-│   ├── verificar.sh                      # Verificar la BD
-│   ├── config/                           # Configs PostgreSQL
-│   └── README.md                         # Guia detallada de despliegue
-├── database/
-│   ├── edan_db_backup.sql                # Backup completo
-│   ├── crear_edan_db.sql                 # Esquema SQL (alternativo)
-│   ├── insert_provincias_municipios.sql  # Geografia INE Bolivia
-│   ├── restore_db.sh                     # Restaurar BD
-│   ├── test_conn.sh                      # Test de conexion
-│   ├── servers.json                      # Config pgAdmin4
-│   └── iniciar_edan.bat                  # Inicio desde Windows
-├── config/
-│   ├── postgresql.conf
-│   └── pg_hba.conf
-├── docs/
-│   └── EDAN_BD.md                        # Documentacion completa
-└── home/
+bash deploy/desplegar_bd.sh
 ```
 
 ---
 
-## Comandos utiles
+## Verificar
 
 ```bash
-# Verificar la BD
 bash deploy/verificar.sh
-
-# Restaurar desde backup
-bash database/restore_db.sh
-
-# Test de conexion
-bash database/test_conn.sh
-
-# Crear backup (desde PostgreSQL)
-sudo -u postgres pg_dump -d db_sinagersat > database/edan_db_backup.sql
 ```
 
 ---
 
-## Backup y migracion
+## Conexión
 
-### Crear backup
+| Parámetro | Valor |
+|-----------|-------|
+| Host | `10.10.10.220` |
+| Puerto | `5432` |
+| Base de datos | `db_sinagersat` |
+| Usuario | `sinagersat` |
+| Contraseña | `12345678` |
+
 ```bash
-sudo -u postgres pg_dump -d db_sinagersat > database/edan_db_backup.sql
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 10.10.10.220
 ```
 
-### Migrar a otra maquina
-1. Copiar toda la carpeta `DB_EDAN/`
-2. En la maquina destino: `sudo bash setup.sh`
+---
+
+## Herramientas gráficas
+
+- **DBeaver**: Host: `10.10.10.220` | Port: `5432` | DB: `db_sinagersat` | User: `sinagersat`
+- **pgAdmin4**: File > Import > `database/servers.json`
 
 ---
 
-## Documentacion
+## Documentación
 
-Ver `docs/EDAN_BD.md` para documentacion completa de la estructura de la BD.
-
----
-
-## Windows (WSL)
-
-Si usas Windows con WSL, ejecuta `database/iniciar_edan.bat` para configurar el reenvio de puertos y pgAdmin4.
+Ver `docs/CONECTAR.md` para credenciales y `docs/EDAN_BD.md` para documentación completa de la BD.
 
 ---
 
-## Solucion de problemas
+## Solución de problemas
 
 ```bash
-# PostgreSQL no esta corriendo
+# PostgreSQL no está corriendo
 sudo service postgresql start
 
 # Restaurar BD
-bash database/restore_db.sh
+bash deploy/desplegar_bd.sh
 
 # Verificar
 bash deploy/verificar.sh
