@@ -1,0 +1,30 @@
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de backup
+*.bak
+*.backup
+database/edan_db_backup_pre_multischema.sql
+
+# Archivos temporales
+/tmp/
+*.tmp
+
+# Archivos de logs
+*.log
+
+# Archivos de configuración local
+.env
+.env.local
+
+# Dependencias
+node_modules/
+__pycache__/
+*.pyc
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
