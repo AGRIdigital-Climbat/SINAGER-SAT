@@ -38,11 +38,20 @@ app = FastAPI(
     title="SINAGERSAT API",
     description=(
         "API del Sistema Nacional de Alerta Temprana y Gestión de Riesgos.\n\n"
-        "Módulos:\n"
-        "- **EDAN**: Evaluación de Daños y Análisis de Necesidades (23 tablas)\n"
-        "- **REA**: Reportes de Eventos Adversos (4 tablas)\n"
-        "- **Geografía**: División político-administrativa de Bolivia INE 2024\n"
-        "- **Usuarios**: Gestión de cuentas, roles y permisos\n"
+        "## Autenticación\n"
+        "1. **Público** (no requiere token): Auth, Geografía\n"
+        "2. **Protegido** (requiere token): EDAN, REA, Usuarios\n\n"
+        "### Obtener token\n"
+        "1. Registrar usuario: `POST /api/v1/auth/register`\n"
+        "2. Login: `POST /api/v1/auth/login` → obtiene token JWT\n"
+        "3. Click **Authorize** arriba a la derecha → pegar el token\n"
+        "4. Ahora puedes usar todos los endpoints protegidos\n\n"
+        "## Módulos\n"
+        "- **Auth**: Login y registro (público)\n"
+        "- **Geografía**: Departamentos, provincias, municipios (público)\n"
+        "- **EDAN**: Evaluación de Daños y Análisis de Necesidades (requiere token)\n"
+        "- **REA**: Reportes de Eventos Adversos (requiere token)\n"
+        "- **Usuarios**: Gestión de cuentas, roles y permisos (requiere token)\n"
     ),
     version="1.1.0",
     openapi_tags=TAGS_METADATA,
@@ -63,11 +72,38 @@ app.include_router(rea_router, prefix="/api/v1")
 app.include_router(usuarios_router, prefix="/api/v1")
 
 
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=TAGS_METADATA,
+    )
+    schema["components"] = schema.get("components", {})
+    schema["components"]["securitySchemes"] = {
+        "HTTPBearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Pega tu token JWT aquí. Obtén uno con POST /api/v1/auth/login",
+        }
+    }
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
 @app.get("/")
 def root():
     return {
         "name": "SINAGERSAT API",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "docs": "/docs",
         "redoc": "/redoc",
     }
