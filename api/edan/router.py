@@ -5,7 +5,7 @@ from ..dependencies import get_current_user
 from . import service
 from .schemas import *
 
-router = APIRouter(prefix="/edan", tags=["EDAN"])
+router = APIRouter(prefix="/edan")
 
 
 # ──────────────────────────────────────────────

@@ -44,7 +44,7 @@ app = FastAPI(
         "- **Geografía**: División político-administrativa de Bolivia INE 2024\n"
         "- **Usuarios**: Gestión de cuentas, roles y permisos\n"
     ),
-    version="1.0.0",
+    version="1.1.0",
     openapi_tags=TAGS_METADATA,
 )
 

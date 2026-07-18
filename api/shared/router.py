@@ -10,7 +10,7 @@ from .schemas import (
 )
 from . import service
 
-router = APIRouter(prefix="/shared", tags=["Geografía"])
+router = APIRouter(prefix="/shared")
 
 TAG = "Geografía > Departamentos"
 

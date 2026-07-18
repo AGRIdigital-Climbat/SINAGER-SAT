@@ -5,7 +5,7 @@ from ..dependencies import get_current_user
 from .schemas import *
 from . import service
 
-router = APIRouter(prefix="/rea", tags=["REA"])
+router = APIRouter(prefix="/rea")
 
 TAG_REP = "REA > Reportes"
 TAG_EST = "REA > Estados"
