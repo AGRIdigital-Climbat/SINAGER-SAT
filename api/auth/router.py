@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db
-from .schemas import LoginRequest, RegisterRequest, TokenResponse, MessageResponse
+from ..response import SuccessResponse, MessageResponse
+from .schemas import LoginRequest, RegisterRequest, TokenResponse
 from .service import authenticate_user, register_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", responses={200: {"model": SuccessResponse}})
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     result = authenticate_user(db, data)
     if not result:
@@ -15,10 +16,10 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",
         )
-    return result
+    return SuccessResponse(message="Login exitoso", data=result)
 
 
-@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED, responses={201: {"model": MessageResponse}})
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
     try:
         user_id = register_user(db, data)

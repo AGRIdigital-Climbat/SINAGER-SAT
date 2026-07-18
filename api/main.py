@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from .auth.router import router as auth_router
 from .shared.router import router as shared_router
 from .edan.router import router as edan_router
@@ -38,6 +39,11 @@ app = FastAPI(
     title="SINAGERSAT API",
     description=(
         "API del Sistema Nacional de Alerta Temprana y Gestión de Riesgos.\n\n"
+        "## Formato de respuestas\n"
+        "Todas las respuestas exitosas usan el formato:\n"
+        "```json\n"
+        '{"success": true, "message": "...", "data": ..., "total": ...}\n'
+        "```\n\n"
         "## Autenticación\n"
         "1. **Público** (no requiere token): Auth, Geografía\n"
         "2. **Protegido** (requiere token): EDAN, REA, Usuarios\n\n"
@@ -53,7 +59,7 @@ app = FastAPI(
         "- **REA**: Reportes de Eventos Adversos (requiere token)\n"
         "- **Usuarios**: Gestión de cuentas, roles y permisos (requiere token)\n"
     ),
-    version="1.1.0",
+    version="1.2.0",
     openapi_tags=TAGS_METADATA,
 )
 
@@ -70,6 +76,30 @@ app.include_router(shared_router, prefix="/api/v1")
 app.include_router(edan_router, prefix="/api/v1")
 app.include_router(rea_router, prefix="/api/v1")
 app.include_router(usuarios_router, prefix="/api/v1")
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "Error interno del servidor",
+            "error_code": 500,
+        },
+    )
+
+
+@app.exception_handler(422)
+async def validation_exception_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "message": "Error de validación en los datos enviados",
+            "error_code": 422,
+        },
+    )
 
 
 def custom_openapi():
@@ -103,7 +133,7 @@ app.openapi = custom_openapi
 def root():
     return {
         "name": "SINAGERSAT API",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "docs": "/docs",
         "redoc": "/redoc",
     }

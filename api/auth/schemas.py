@@ -27,8 +27,3 @@ class TokenResponse(BaseModel):
     nombre: str
     id_rol: int | None = None
     rol: str | None = None
-
-
-class MessageResponse(BaseModel):
-    message: str
-    id: int | None = None

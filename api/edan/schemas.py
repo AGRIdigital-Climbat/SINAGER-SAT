@@ -3,6 +3,16 @@ from pydantic import BaseModel
 
 # ── EDAN PRINCIPAL ──
 
+class EdanDepartamento(BaseModel):
+    id: int
+    codigo_ine: str | None = None
+    nombre: str | None = None
+
+class EdanMunicipio(BaseModel):
+    id: int
+    codigo_ine: str | None = None
+    nombre: str | None = None
+
 class EdanCreate(BaseModel):
     codigo_edan: str | None = None
     id_departamento: int | None = None
@@ -64,6 +74,8 @@ class EdanResponse(BaseModel):
     email_responsable: str | None = None
     usuario_registro: int | None = None
     id_reporte_rea: int | None = None
+    departamento: EdanDepartamento | None = None
+    municipio: EdanMunicipio | None = None
 
     class Config:
         from_attributes = True
@@ -156,6 +168,11 @@ class AyudaHumanitariaResponse(BaseModel):
 
 # ── SUB-TABLAS ──
 
+class PoblacionGrupoGrupoEtario(BaseModel):
+    id_grupo_etario: int
+    nombre: str | None = None
+    descripcion: str | None = None
+
 class PoblacionGrupoCreate(BaseModel):
     id_edan: int
     id_grupo_etario: int
@@ -172,9 +189,15 @@ class PoblacionGrupoResponse(BaseModel):
     heridos: int | None = None
     desaparecidos: int | None = None
     observaciones: str | None = None
+    grupo_etario: PoblacionGrupoGrupoEtario | None = None
     class Config:
         from_attributes = True
 
+
+class EdanTipoEventoTipoEvento(BaseModel):
+    id_tipo_evento: int
+    nombre: str | None = None
+    descripcion: str | None = None
 
 class EdanTipoEventoCreate(BaseModel):
     id_edan: int
@@ -184,6 +207,7 @@ class EdanTipoEventoResponse(BaseModel):
     id_tipo_evento_edan: int
     id_edan: int
     id_tipo_evento: int
+    tipo_evento: EdanTipoEventoTipoEvento | None = None
     class Config:
         from_attributes = True
 
@@ -306,6 +330,10 @@ class InfraestructuraPublicaResponse(BaseModel):
         from_attributes = True
 
 
+class ServicioBasicoEdanServicioBasico(BaseModel):
+    id_servicio_basico: int
+    nombre: str | None = None
+
 class ServicioBasicoEdanCreate(BaseModel):
     id_edan: int
     id_servicio_basico: int
@@ -322,6 +350,7 @@ class ServicioBasicoEdanResponse(BaseModel):
     dano_total: bool | None = None
     necesidades_inmediatas: str | None = None
     observaciones: str | None = None
+    servicio_basico: ServicioBasicoEdanServicioBasico | None = None
     class Config:
         from_attributes = True
 
@@ -456,6 +485,10 @@ class InfraProductivaResponse(BaseModel):
         from_attributes = True
 
 
+class ProteccionCategoriaProteccion(BaseModel):
+    id_categoria_proteccion: int
+    nombre: str | None = None
+
 class ProteccionCreate(BaseModel):
     id_edan: int
     id_categoria_proteccion: int
@@ -476,9 +509,14 @@ class ProteccionResponse(BaseModel):
     apoyo_psicosocial: bool | None = None
     reposicion_documentos: bool | None = None
     observaciones: str | None = None
+    categoria_proteccion: ProteccionCategoriaProteccion | None = None
     class Config:
         from_attributes = True
 
+
+class AyudaHumanitariaEdanAyudaHumanitaria(BaseModel):
+    id_ayuda_humanitaria: int
+    nombre: str | None = None
 
 class AyudaHumanitariaEdanCreate(BaseModel):
     id_edan: int
@@ -492,6 +530,7 @@ class AyudaHumanitariaEdanResponse(BaseModel):
     id_ayuda_humanitaria: int
     requiere: bool | None = None
     observaciones: str | None = None
+    ayuda_humanitaria: AyudaHumanitariaEdanAyudaHumanitaria | None = None
     class Config:
         from_attributes = True
 
@@ -506,8 +545,3 @@ class ComunidadResponse(BaseModel):
     nombre_comunidad: str
     class Config:
         from_attributes = True
-
-
-class MessageResponse(BaseModel):
-    message: str
-    id: int | None = None

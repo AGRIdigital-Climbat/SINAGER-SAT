@@ -5,27 +5,61 @@ from ..auth.jwt import hash_password
 
 SELECT_USUARIO = """
     SELECT u.id_usuario, u.usuario, u.nombre, u.celular, u.carnet, u.comunidad,
-           u.id_departamento, u.id_provincia, u.id_municipio, u.id_rol,
-           r.nombre as rol, u.activo
+           u.id_departamento, u.id_provincia, u.id_municipio, u.id_rol, u.activo,
+           d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
+           p.id as p_id, p.codigo_ine as p_codigo_ine, p.nombre as p_nombre,
+           m.id as m_id, m.codigo_ine as m_codigo_ine, m.nombre as m_nombre,
+           r.id_rol as r_id, r.nombre as r_nombre, r.descripcion as r_descripcion, r.jerarquia as r_jerarquia
     FROM usuarios.usuario u
+    LEFT JOIN shared.departamento d ON u.id_departamento = d.id
+    LEFT JOIN shared.provincia p ON u.id_provincia = p.id
+    LEFT JOIN shared.municipio m ON u.id_municipio = m.id
     LEFT JOIN usuarios.rol r ON u.id_rol = r.id_rol
 """
+
+
+def _build_usuario(row):
+    data = dict(row)
+    data["departamento"] = {
+        "id": data.pop("d_id"),
+        "codigo_ine": data.pop("d_codigo_ine"),
+        "nombre": data.pop("d_nombre"),
+    } if data.get("d_id") else None
+    data["provincia"] = {
+        "id": data.pop("p_id"),
+        "codigo_ine": data.pop("p_codigo_ine"),
+        "nombre": data.pop("p_nombre"),
+    } if data.get("p_id") else None
+    data["municipio"] = {
+        "id": data.pop("m_id"),
+        "codigo_ine": data.pop("m_codigo_ine"),
+        "nombre": data.pop("m_nombre"),
+    } if data.get("m_id") else None
+    data["rol"] = {
+        "id_rol": data.pop("r_id"),
+        "nombre": data.pop("r_nombre"),
+        "descripcion": data.pop("r_descripcion"),
+        "jerarquia": data.pop("r_jerarquia"),
+    } if data.get("r_id") else None
+    return data
 
 
 # ── USUARIOS ──
 
 def get_usuarios(db: Session, skip: int = 0, limit: int = 50):
-    return db.execute(
+    rows = db.execute(
         text(f"{SELECT_USUARIO} ORDER BY u.id_usuario LIMIT :limit OFFSET :skip"),
         {"limit": limit, "skip": skip},
     ).mappings().all()
+    return [_build_usuario(r) for r in rows]
 
 
 def get_usuario(db: Session, id: int):
-    return db.execute(
+    row = db.execute(
         text(f"{SELECT_USUARIO} WHERE u.id_usuario = :id"),
         {"id": id},
     ).mappings().first()
+    return _build_usuario(row) if row else None
 
 
 def create_usuario(db: Session, data: dict) -> int:
@@ -66,11 +100,13 @@ def delete_usuario(db: Session, id: int) -> bool:
 # ── ROLES ──
 
 def get_roles(db: Session):
-    return db.execute(text("SELECT * FROM usuarios.rol ORDER BY jerarquia DESC")).mappings().all()
+    rows = db.execute(text("SELECT * FROM usuarios.rol ORDER BY jerarquia DESC")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def get_rol(db: Session, id: int):
-    return db.execute(text("SELECT * FROM usuarios.rol WHERE id_rol = :id"), {"id": id}).mappings().first()
+    row = db.execute(text("SELECT * FROM usuarios.rol WHERE id_rol = :id"), {"id": id}).mappings().first()
+    return dict(row) if row else None
 
 
 def create_rol(db: Session, data: dict) -> int:
@@ -102,10 +138,11 @@ def delete_rol(db: Session, id: int) -> bool:
 # ── USUARIO_ROL ──
 
 def get_usuario_roles(db: Session, id_usuario: int):
-    return db.execute(
+    rows = db.execute(
         text("SELECT id_usuario, id_rol FROM usuarios.usuario_rol WHERE id_usuario = :id"),
         {"id": id_usuario},
     ).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def assign_rol(db: Session, id_usuario: int, id_rol: int):
@@ -128,11 +165,13 @@ def remove_rol(db: Session, id_usuario: int, id_rol: int) -> bool:
 # ── APLICACIONES ──
 
 def get_aplicaciones(db: Session):
-    return db.execute(text("SELECT * FROM usuarios.aplicacion ORDER BY id_aplicacion")).mappings().all()
+    rows = db.execute(text("SELECT * FROM usuarios.aplicacion ORDER BY id_aplicacion")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def get_aplicacion(db: Session, id: int):
-    return db.execute(text("SELECT * FROM usuarios.aplicacion WHERE id_aplicacion = :id"), {"id": id}).mappings().first()
+    row = db.execute(text("SELECT * FROM usuarios.aplicacion WHERE id_aplicacion = :id"), {"id": id}).mappings().first()
+    return dict(row) if row else None
 
 
 def create_aplicacion(db: Session, data: dict) -> int:
@@ -165,11 +204,13 @@ def delete_aplicacion(db: Session, id: int) -> bool:
 
 def get_permisos(db: Session, id_rol: int | None = None):
     if id_rol:
-        return db.execute(
+        rows = db.execute(
             text("SELECT id_rol, id_aplicacion FROM usuarios.permiso_aplicacion WHERE id_rol = :r"),
             {"r": id_rol},
         ).mappings().all()
-    return db.execute(text("SELECT id_rol, id_aplicacion FROM usuarios.permiso_aplicacion")).mappings().all()
+        return [dict(r) for r in rows]
+    rows = db.execute(text("SELECT id_rol, id_aplicacion FROM usuarios.permiso_aplicacion")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def assign_permiso(db: Session, id_rol: int, id_aplicacion: int):
@@ -193,33 +234,39 @@ def remove_permiso(db: Session, id_rol: int, id_aplicacion: int) -> bool:
 
 def get_sesiones(db: Session, id_usuario: int | None = None):
     if id_usuario:
-        return db.execute(
+        rows = db.execute(
             text("SELECT * FROM usuarios.sesion WHERE id_usuario = :id ORDER BY fecha_inicio DESC"),
             {"id": id_usuario},
         ).mappings().all()
-    return db.execute(text("SELECT * FROM usuarios.sesion ORDER BY fecha_inicio DESC LIMIT 100")).mappings().all()
+        return [dict(r) for r in rows]
+    rows = db.execute(text("SELECT * FROM usuarios.sesion ORDER BY fecha_inicio DESC LIMIT 100")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 # ── AUDITORIA ──
 
 def get_auditoria(db: Session, id_usuario: int | None = None, skip: int = 0, limit: int = 100):
     if id_usuario:
-        return db.execute(
+        rows = db.execute(
             text("SELECT * FROM usuarios.auditoria WHERE id_usuario = :id ORDER BY fecha DESC LIMIT :limit OFFSET :skip"),
             {"id": id_usuario, "limit": limit, "skip": skip},
         ).mappings().all()
-    return db.execute(
+        return [dict(r) for r in rows]
+    rows = db.execute(
         text("SELECT * FROM usuarios.auditoria ORDER BY fecha DESC LIMIT :limit OFFSET :skip"),
         {"limit": limit, "skip": skip},
     ).mappings().all()
+    return [dict(r) for r in rows]
 
 
 # ── RESET CONTRASEÑA ──
 
 def get_resets(db: Session, id_usuario: int | None = None):
     if id_usuario:
-        return db.execute(
+        rows = db.execute(
             text("SELECT * FROM usuarios.reset_contrasena WHERE id_usuario = :id ORDER BY fecha_solicitud DESC"),
             {"id": id_usuario},
         ).mappings().all()
-    return db.execute(text("SELECT * FROM usuarios.reset_contrasena ORDER BY fecha_solicitud DESC LIMIT 100")).mappings().all()
+        return [dict(r) for r in rows]
+    rows = db.execute(text("SELECT * FROM usuarios.reset_contrasena ORDER BY fecha_solicitud DESC LIMIT 100")).mappings().all()
+    return [dict(r) for r in rows]

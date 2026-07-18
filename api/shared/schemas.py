@@ -37,6 +37,7 @@ class ProvinciaResponse(BaseModel):
     codigo_ine: str
     id_departamento: int
     nombre: str
+    departamento: DepartamentoResponse | None = None
 
     class Config:
         from_attributes = True
@@ -62,11 +63,8 @@ class MunicipioResponse(BaseModel):
     id_departamento: int
     id_provincia: int
     nombre: str
+    departamento: DepartamentoResponse | None = None
+    provincia: ProvinciaResponse | None = None
 
     class Config:
         from_attributes = True
-
-
-class MessageResponse(BaseModel):
-    message: str
-    id: int | None = None

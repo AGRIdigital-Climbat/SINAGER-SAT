@@ -4,28 +4,102 @@ from sqlalchemy import text
 
 # ── REPORTE EVENTO ──
 
+SQL_REPORTE = """
+    SELECT re.*,
+           d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
+           prov.id as prov_id, prov.codigo_ine as prov_codigo_ine, prov.nombre as prov_nombre,
+           m.id as m_id, m.codigo_ine as m_codigo_ine, m.nombre as m_nombre,
+           te.id_tipo_evento as te_id, te.nombre as te_nombre,
+           er.id_estado as er_id, er.nombre as er_nombre, er.descripcion as er_descripcion, er.orden as er_orden
+    FROM rea.reporte_evento re
+    LEFT JOIN shared.departamento d ON re.id_departamento = d.id
+    LEFT JOIN shared.provincia prov ON re.id_provincia = prov.id
+    LEFT JOIN shared.municipio m ON re.id_municipio = m.id
+    LEFT JOIN edan.tipo_evento te ON re.id_tipo_evento = te.id_tipo_evento
+    LEFT JOIN rea.estado_reporte er ON re.id_estado = er.id_estado
+"""
+
+
+def _build_reporte(row):
+    data = dict(row)
+    data["departamento"] = {
+        "id": data.pop("d_id"),
+        "codigo_ine": data.pop("d_codigo_ine"),
+        "nombre": data.pop("d_nombre"),
+    } if data.get("d_id") else None
+    prov_d = None
+    if data.get("prov_id"):
+        prov_d = None
+        data["provincia"] = {
+            "id": data.pop("prov_id"),
+            "codigo_ine": data.pop("prov_codigo_ine"),
+            "nombre": data.pop("prov_nombre"),
+        }
+    else:
+        data.pop("prov_id", None)
+        data.pop("prov_codigo_ine", None)
+        data.pop("prov_nombre", None)
+        data["provincia"] = None
+    data["municipio"] = {
+        "id": data.pop("m_id"),
+        "codigo_ine": data.pop("m_codigo_ine"),
+        "nombre": data.pop("m_nombre"),
+        "departamento": data["departamento"],
+        "provincia": data["provincia"],
+    } if data.get("m_id") else None
+    data["tipo_evento"] = {
+        "id_tipo_evento": data.pop("te_id"),
+        "nombre": data.pop("te_nombre"),
+    } if data.get("te_id") else None
+    data["estado"] = {
+        "id_estado": data.pop("er_id"),
+        "nombre": data.pop("er_nombre"),
+        "descripcion": data.pop("er_descripcion"),
+        "orden": data.pop("er_orden"),
+    } if data.get("er_id") else None
+    return data
+
+
+def _get_categorias(db: Session, id_reporte: int) -> list:
+    rows = db.execute(
+        text("""
+            SELECT ac.id_categoria, ac.nombre, ac.descripcion, ac.orden
+            FROM rea.reporte_afectacion ra
+            JOIN rea.afectacion_categoria ac ON ra.id_categoria = ac.id_categoria
+            WHERE ra.id_reporte = :id ORDER BY ac.orden
+        """),
+        {"id": id_reporte},
+    ).mappings().all()
+    return [
+        {"id_categoria": r["id_categoria"], "nombre": r["nombre"], "descripcion": r["descripcion"], "orden": r["orden"]}
+        for r in rows
+    ]
+
+
 def get_reportes(db: Session, id_estado: int | None = None, id_municipio: int | None = None, skip: int = 0, limit: int = 50):
-    query = "SELECT * FROM rea.reporte_evento"
+    query = SQL_REPORTE
     params = {}
     conditions = []
     if id_estado:
-        conditions.append("id_estado = :estado")
+        conditions.append("re.id_estado = :estado")
         params["estado"] = id_estado
     if id_municipio:
-        conditions.append("id_municipio = :muni")
+        conditions.append("re.id_municipio = :muni")
         params["muni"] = id_municipio
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY id_reporte DESC LIMIT :limit OFFSET :skip"
+    query += " ORDER BY re.id_reporte DESC LIMIT :limit OFFSET :skip"
     params["limit"] = limit
     params["skip"] = skip
-    return db.execute(text(query), params).mappings().all()
+    rows = db.execute(text(query), params).mappings().all()
+    return [_build_reporte(r) for r in rows]
 
 
 def get_reporte(db: Session, id: int):
-    return db.execute(
-        text("SELECT * FROM rea.reporte_evento WHERE id_reporte = :id"), {"id": id}
+    row = db.execute(
+        text(f"{SQL_REPORTE} WHERE re.id_reporte = :id"), {"id": id}
     ).mappings().first()
+    return _build_reporte(row) if row else None
 
 
 def get_reporte_completo(db: Session, id: int):
@@ -33,10 +107,7 @@ def get_reporte_completo(db: Session, id: int):
     if not reporte:
         return None
     result = dict(reporte)
-    cats = db.execute(
-        text("SELECT id_categoria FROM rea.reporte_afectacion WHERE id_reporte = :id"), {"id": id}
-    ).mappings().all()
-    result["categorias"] = [c["id_categoria"] for c in cats]
+    result["categorias"] = _get_categorias(db, id)
     return result
 
 
@@ -82,7 +153,7 @@ def change_estado(db: Session, id: int, id_estado: int) -> dict | None:
         {"estado": id_estado, "id": id},
     )
     db.commit()
-    return get_reporte(db, id)
+    return get_reporte_completo(db, id)
 
 
 def delete_reporte(db: Session, id: int) -> bool:
@@ -94,11 +165,13 @@ def delete_reporte(db: Session, id: int) -> bool:
 # ── ESTADO REPORTE ──
 
 def get_estados(db: Session):
-    return db.execute(text("SELECT * FROM rea.estado_reporte ORDER BY orden")).mappings().all()
+    rows = db.execute(text("SELECT * FROM rea.estado_reporte ORDER BY orden")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def get_estado(db: Session, id: int):
-    return db.execute(text("SELECT * FROM rea.estado_reporte WHERE id_estado = :id"), {"id": id}).mappings().first()
+    row = db.execute(text("SELECT * FROM rea.estado_reporte WHERE id_estado = :id"), {"id": id}).mappings().first()
+    return dict(row) if row else None
 
 
 def create_estado(db: Session, data: dict) -> int:
@@ -130,11 +203,13 @@ def delete_estado(db: Session, id: int) -> bool:
 # ── AFFECTACION CATEGORIA ──
 
 def get_categorias(db: Session):
-    return db.execute(text("SELECT * FROM rea.afectacion_categoria ORDER BY orden")).mappings().all()
+    rows = db.execute(text("SELECT * FROM rea.afectacion_categoria ORDER BY orden")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def get_categoria(db: Session, id: int):
-    return db.execute(text("SELECT * FROM rea.afectacion_categoria WHERE id_categoria = :id"), {"id": id}).mappings().first()
+    row = db.execute(text("SELECT * FROM rea.afectacion_categoria WHERE id_categoria = :id"), {"id": id}).mappings().first()
+    return dict(row) if row else None
 
 
 def create_categoria(db: Session, data: dict) -> int:

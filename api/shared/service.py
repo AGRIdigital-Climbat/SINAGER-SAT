@@ -10,13 +10,15 @@ from .schemas import (
 # ── DEPARTAMENTOS ──
 
 def get_departamentos(db: Session):
-    return db.execute(text("SELECT id, codigo_ine, nombre FROM shared.departamento ORDER BY id")).mappings().all()
+    rows = db.execute(text("SELECT id, codigo_ine, nombre FROM shared.departamento ORDER BY id")).mappings().all()
+    return [dict(r) for r in rows]
 
 
 def get_departamento(db: Session, id: int):
-    return db.execute(
+    row = db.execute(
         text("SELECT id, codigo_ine, nombre FROM shared.departamento WHERE id = :id"), {"id": id}
     ).mappings().first()
+    return dict(row) if row else None
 
 
 def create_departamento(db: Session, data: DepartamentoCreate):
@@ -51,19 +53,40 @@ def delete_departamento(db: Session, id: int):
 
 # ── PROVINCIAS ──
 
+SQL_PROVINCIA = """
+    SELECT p.id, p.codigo_ine, p.id_departamento, p.nombre,
+           d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre
+    FROM shared.provincia p
+    LEFT JOIN shared.departamento d ON p.id_departamento = d.id
+"""
+
+
+def _build_provincia(row):
+    data = dict(row)
+    data["departamento"] = {
+        "id": data.pop("d_id"),
+        "codigo_ine": data.pop("d_codigo_ine"),
+        "nombre": data.pop("d_nombre"),
+    } if data.get("d_id") else None
+    return data
+
+
 def get_provincias(db: Session, id_departamento: int | None = None):
     if id_departamento:
-        return db.execute(
-            text("SELECT id, codigo_ine, id_departamento, nombre FROM shared.provincia WHERE id_departamento = :d ORDER BY id"),
+        rows = db.execute(
+            text(f"{SQL_PROVINCIA} WHERE p.id_departamento = :d ORDER BY p.id"),
             {"d": id_departamento},
         ).mappings().all()
-    return db.execute(text("SELECT id, codigo_ine, id_departamento, nombre FROM shared.provincia ORDER BY id")).mappings().all()
+    else:
+        rows = db.execute(text(f"{SQL_PROVINCIA} ORDER BY p.id")).mappings().all()
+    return [_build_provincia(r) for r in rows]
 
 
 def get_provincia(db: Session, id: int):
-    return db.execute(
-        text("SELECT id, codigo_ine, id_departamento, nombre FROM shared.provincia WHERE id = :id"), {"id": id}
+    row = db.execute(
+        text(f"{SQL_PROVINCIA} WHERE p.id = :id"), {"id": id}
     ).mappings().first()
+    return _build_provincia(row) if row else None
 
 
 def create_provincia(db: Session, data: ProvinciaCreate):
@@ -100,24 +123,52 @@ def delete_provincia(db: Session, id: int):
 
 # ── MUNICIPIOS ──
 
+SQL_MUNICIPIO = """
+    SELECT m.id, m.codigo_ine, m.id_departamento, m.id_provincia, m.nombre,
+           d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
+           p.id as p_id, p.codigo_ine as p_codigo_ine, p.nombre as p_nombre
+    FROM shared.municipio m
+    LEFT JOIN shared.departamento d ON m.id_departamento = d.id
+    LEFT JOIN shared.provincia p ON m.id_provincia = p.id
+"""
+
+
+def _build_municipio(row):
+    data = dict(row)
+    data["departamento"] = {
+        "id": data.pop("d_id"),
+        "codigo_ine": data.pop("d_codigo_ine"),
+        "nombre": data.pop("d_nombre"),
+    } if data.get("d_id") else None
+    data["provincia"] = {
+        "id": data.pop("p_id"),
+        "codigo_ine": data.pop("p_codigo_ine"),
+        "nombre": data.pop("p_nombre"),
+    } if data.get("p_id") else None
+    return data
+
+
 def get_municipios(db: Session, id_provincia: int | None = None, id_departamento: int | None = None):
     if id_provincia:
-        return db.execute(
-            text("SELECT id, codigo_ine, id_departamento, id_provincia, nombre FROM shared.municipio WHERE id_provincia = :p ORDER BY id"),
+        rows = db.execute(
+            text(f"{SQL_MUNICIPIO} WHERE m.id_provincia = :p ORDER BY m.id"),
             {"p": id_provincia},
         ).mappings().all()
-    if id_departamento:
-        return db.execute(
-            text("SELECT id, codigo_ine, id_departamento, id_provincia, nombre FROM shared.municipio WHERE id_departamento = :d ORDER BY id"),
+    elif id_departamento:
+        rows = db.execute(
+            text(f"{SQL_MUNICIPIO} WHERE m.id_departamento = :d ORDER BY m.id"),
             {"d": id_departamento},
         ).mappings().all()
-    return db.execute(text("SELECT id, codigo_ine, id_departamento, id_provincia, nombre FROM shared.municipio ORDER BY id")).mappings().all()
+    else:
+        rows = db.execute(text(f"{SQL_MUNICIPIO} ORDER BY m.id")).mappings().all()
+    return [_build_municipio(r) for r in rows]
 
 
 def get_municipio(db: Session, id: int):
-    return db.execute(
-        text("SELECT id, codigo_ine, id_departamento, id_provincia, nombre FROM shared.municipio WHERE id = :id"), {"id": id}
+    row = db.execute(
+        text(f"{SQL_MUNICIPIO} WHERE m.id = :id"), {"id": id}
     ).mappings().first()
+    return _build_municipio(row) if row else None
 
 
 def create_municipio(db: Session, data: MunicipioCreate):

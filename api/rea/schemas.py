@@ -1,6 +1,44 @@
 from pydantic import BaseModel
 
 
+# ── REA Reporte Evento ──
+
+class ReporteDepartamento(BaseModel):
+    id: int | None = None
+    codigo_ine: str | None = None
+    nombre: str | None = None
+
+class ReporteProvincia(BaseModel):
+    id: int | None = None
+    codigo_ine: str | None = None
+    nombre: str | None = None
+    departamento: ReporteDepartamento | None = None
+
+class ReporteMunicipio(BaseModel):
+    id: int | None = None
+    codigo_ine: str | None = None
+    nombre: str | None = None
+    departamento: ReporteDepartamento | None = None
+    provincia: ReporteProvincia | None = None
+
+class ReporteTipoEvento(BaseModel):
+    id_tipo_evento: int | None = None
+    nombre: str | None = None
+    descripcion: str | None = None
+
+class ReporteEstado(BaseModel):
+    id_estado: int | None = None
+    nombre: str | None = None
+    descripcion: str | None = None
+    orden: int | None = None
+
+class ReporteCategoria(BaseModel):
+    id_categoria: int | None = None
+    nombre: str | None = None
+    descripcion: str | None = None
+    orden: int | None = None
+
+
 class ReporteEventoCreate(BaseModel):
     id_usuario: int
     id_departamento: int
@@ -49,6 +87,12 @@ class ReporteEventoResponse(BaseModel):
     fotografia: str | None = None
     descripcion: str | None = None
     id_estado: int
+    departamento: ReporteDepartamento | None = None
+    provincia: ReporteProvincia | None = None
+    municipio: ReporteMunicipio | None = None
+    tipo_evento: ReporteTipoEvento | None = None
+    estado: ReporteEstado | None = None
+    categorias: list[ReporteCategoria] | None = None
 
     class Config:
         from_attributes = True
@@ -110,8 +154,3 @@ class ReporteAfectacionResponse(BaseModel):
 
 class CambiarEstadoRequest(BaseModel):
     id_estado: int
-
-
-class MessageResponse(BaseModel):
-    message: str
-    id: int | None = None

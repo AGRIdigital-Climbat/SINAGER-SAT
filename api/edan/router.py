@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
+from ..response import SuccessResponse, ErrorResponse, MessageResponse
 from . import service
 from .schemas import *
 
@@ -15,68 +16,72 @@ router = APIRouter(prefix="/edan")
 def _catalog_crud_routes(parent, path, crud, Create, Update, Response, label, tag):
     get_all, get_one, create, update, delete = crud
 
-    @parent.get(f"/{path}", response_model=list[Response], tags=[tag])
+    @parent.get(f"/{path}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _list(db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        return get_all(db)
+        data = get_all(db)
+        return SuccessResponse(message=f"{label} listados correctamente", data=data, total=len(data))
 
-    @parent.get(f"/{path}/{{id}}", response_model=Response, tags=[tag])
+    @parent.get(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _get(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         result = get_one(db, id)
         if not result:
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return result
+        return SuccessResponse(message=f"{label} obtenido correctamente", data=result)
 
-    @parent.post(f"/{path}", response_model=Response, status_code=201, tags=[tag])
+    @parent.post(f"/{path}", status_code=201, tags=[tag], responses={201: {"model": SuccessResponse}})
     def _create(data: Create, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         try:
             id = create(db, data.model_dump())
-            return get_one(db, id)
+            result = get_one(db, id)
+            return SuccessResponse(message=f"{label} creado correctamente", data=result)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    @parent.put(f"/{path}/{{id}}", response_model=Response, tags=[tag])
+    @parent.put(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _update(id: int, data: Update, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         result = update(db, id, data.model_dump())
         if not result:
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return result
+        return SuccessResponse(message=f"{label} actualizado correctamente", data=result)
 
-    @parent.delete(f"/{path}/{{id}}", response_model=MessageResponse, tags=[tag])
+    @parent.delete(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": MessageResponse}})
     def _delete(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         if not delete(db, id):
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return MessageResponse(message=f"{label} eliminado")
+        return MessageResponse(message=f"{label} eliminado correctamente")
 
 
 def _subtable_crud_routes(parent, path, crud, Create, Response, label, tag):
     get_all, get_one, create, update, delete, _delete_by_edan = crud
 
-    @parent.get(f"/{{id_edan}}/{path}", response_model=list[Response], tags=[tag])
+    @parent.get(f"/{{id_edan}}/{path}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _list(id_edan: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        return get_all(db, id_edan)
+        data = get_all(db, id_edan)
+        return SuccessResponse(message=f"{label} listados correctamente", data=data, total=len(data))
 
-    @parent.post(f"/{{id_edan}}/{path}", response_model=Response, status_code=201, tags=[tag])
+    @parent.post(f"/{{id_edan}}/{path}", status_code=201, tags=[tag], responses={201: {"model": SuccessResponse}})
     def _create(id_edan: int, data: Create, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         try:
             payload = data.model_dump()
             payload["id_edan"] = id_edan
             id = create(db, payload)
-            return get_one(db, id)
+            result = get_one(db, id)
+            return SuccessResponse(message=f"{label} creado correctamente", data=result)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    @parent.put(f"/{path}/{{id}}", response_model=Response, tags=[tag])
+    @parent.put(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _update(id: int, data: Create, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         result = update(db, id, data.model_dump())
         if not result:
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return result
+        return SuccessResponse(message=f"{label} actualizado correctamente", data=result)
 
-    @parent.delete(f"/{path}/{{id}}", response_model=MessageResponse, tags=[tag])
+    @parent.delete(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": MessageResponse}})
     def _delete(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         if not delete(db, id):
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return MessageResponse(message=f"{label} eliminado")
+        return MessageResponse(message=f"{label} eliminado correctamente")
 
 
 TAG_MAIN     = "EDAN > Formulario"
@@ -87,52 +92,6 @@ TAG_INFRA    = "EDAN > Infraestructura"
 TAG_EDUC     = "EDAN > Educación"
 TAG_PRODUCC  = "EDAN > Producción"
 TAG_PROTECC  = "EDAN > Protección"
-
-
-# ──────────────────────────────────────────────
-#  EDAN PRINCIPAL (al final para no capturar /{id})
-# ──────────────────────────────────────────────
-
-@router.get("/", response_model=list[EdanResponse], tags=[TAG_MAIN])
-def listar_edans(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=500),
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
-    return service.get_edans(db, skip=skip, limit=limit)
-
-
-@router.get("/{id}", response_model=EdanResponse, tags=[TAG_MAIN])
-def obtener_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    result = service.get_edan_completo(db, id)
-    if not result:
-        raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return result
-
-
-@router.post("/", response_model=EdanResponse, status_code=201, tags=[TAG_MAIN])
-def crear_edan(data: EdanCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    try:
-        id = service.create_edan(db, data.model_dump())
-        return service.get_edan(db, id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.put("/{id}", response_model=EdanResponse, tags=[TAG_MAIN])
-def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    result = service.update_edan(db, id, data.model_dump())
-    if not result:
-        raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return result
-
-
-@router.delete("/{id}", response_model=MessageResponse, tags=[TAG_MAIN])
-def eliminar_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    if not service.delete_edan(db, id):
-        raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return MessageResponse(message="EDAN eliminado")
 
 
 # ──────────────────────────────────────────────
@@ -256,3 +215,51 @@ _subtable_crud_routes(router, "ayuda-humanitaria-edan", service.ayuda_humanitari
 _subtable_crud_routes(router, "comunidades", service.comunidad_crud,
                       ComunidadCreate, ComunidadResponse,
                       "Comunidad", TAG_PROTECC)
+
+
+# ──────────────────────────────────────────────
+#  EDAN PRINCIPAL (al final para no capturar /{id})
+# ──────────────────────────────────────────────
+
+@router.get("/", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
+def listar_edans(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.get_edans(db, skip=skip, limit=limit)
+    return SuccessResponse(message="EDANs listados correctamente", data=data, total=len(data))
+
+
+@router.get("/{id}", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
+def obtener_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = service.get_edan_completo(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="EDAN no encontrado")
+    return SuccessResponse(message="EDAN obtenido correctamente", data=result)
+
+
+@router.post("/", status_code=201, tags=[TAG_MAIN], responses={201: {"model": SuccessResponse}})
+def crear_edan(data: EdanCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    try:
+        id = service.create_edan(db, data.model_dump())
+        result = service.get_edan(db, id)
+        return SuccessResponse(message="EDAN creado correctamente", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{id}", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
+def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = service.update_edan(db, id, data.model_dump())
+    if not result:
+        raise HTTPException(status_code=404, detail="EDAN no encontrado")
+    return SuccessResponse(message="EDAN actualizado correctamente", data=result)
+
+
+@router.delete("/{id}", tags=[TAG_MAIN], responses={200: {"model": MessageResponse}})
+def eliminar_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if not service.delete_edan(db, id):
+        raise HTTPException(status_code=404, detail="EDAN no encontrado")
+    return MessageResponse(message="EDAN eliminado correctamente")

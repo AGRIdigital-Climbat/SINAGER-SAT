@@ -28,6 +28,31 @@ class UsuarioUpdate(BaseModel):
     activo: bool | None = None
 
 
+class UsuarioDepartamento(BaseModel):
+    id: int
+    codigo_ine: str | None = None
+    nombre: str | None = None
+
+
+class UsuarioProvincia(BaseModel):
+    id: int
+    codigo_ine: str | None = None
+    nombre: str | None = None
+
+
+class UsuarioMunicipio(BaseModel):
+    id: int
+    codigo_ine: str | None = None
+    nombre: str | None = None
+
+
+class UsuarioRol(BaseModel):
+    id_rol: int
+    nombre: str
+    descripcion: str | None = None
+    jerarquia: int
+
+
 class UsuarioResponse(BaseModel):
     id_usuario: int
     usuario: str
@@ -39,8 +64,11 @@ class UsuarioResponse(BaseModel):
     id_provincia: int | None = None
     id_municipio: int | None = None
     id_rol: int
-    rol: str | None = None
     activo: bool | None = None
+    departamento: UsuarioDepartamento | None = None
+    provincia: UsuarioProvincia | None = None
+    municipio: UsuarioMunicipio | None = None
+    rol: UsuarioRol | None = None
 
     class Config:
         from_attributes = True
@@ -149,8 +177,3 @@ class ResetContrasenaResponse(BaseModel):
     ip_origen: str | None = None
     class Config:
         from_attributes = True
-
-
-class MessageResponse(BaseModel):
-    message: str
-    id: int | None = None
