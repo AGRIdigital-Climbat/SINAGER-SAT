@@ -1,6 +1,6 @@
 # SINAGERSAT API - Despliegue y Acceso Externo
 
-Guía completa para desplegar la API REST y acceder desde internet.
+Guía completa para desplegar la API REST y acceder desde internet. v1.2.0.
 
 ---
 
@@ -42,22 +42,44 @@ sudo bash deploy/desplegar_todo.sh --tunnel
 
 ### Externo (desde internet)
 
-Con el Cloudflare Quick Tunnel, la URL es dinámica (cambia al reiniciar).
+Con el Cloudflare Quick Tunnel, la URL es **dinámica** (cambia al reiniciar el servicio `sinagersat-tunnel`).
+
+#### Obtener la URL pública actual
 
 ```bash
-# Iniciar API + tunnel
-bash start_tunnel.sh
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-La URL pública aparece en pantalla al iniciar, y se guarda en:
-```bash
-cat /tmp/cloudflared.log | grep trycloudflare | head -1
+Ejemplo de salida:
+```
+https://abc-def-ghi.trycloudflare.com
 ```
 
-### Desde otra máquina en la red local
+#### Script rápido (agregar a ~/.bashrc)
 
 ```bash
-# Reemplazar IP del servidor
+alias sinagersat-url="grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1"
+```
+
+Uso:
+```bash
+sinagersat-url           # Imprime la URL
+sinagersat-url | xclip   # Copia al portapapeles (Linux)
+sinagersat-url | pbcopy  # Copia al portapapeles (macOS)
+```
+
+#### Verificar que funciona desde internet
+
+```bash
+URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
+echo "URL: $URL"
+curl "$URL/"        # Debe mostrar info de la API
+curl "$URL/docs"    # Debe mostrar Swagger UI
+```
+
+#### Desde otra máquina en la red local
+
+```bash
 curl http://192.168.0.34:8000/docs
 ```
 
@@ -85,21 +107,32 @@ bash start_tunnel.sh
 - URL cambia al reiniciar el tunnel
 - No apto para producción permanente
 
-**Para hacerlo permanente (mismo URL siempre):**
+**Cómo obtener la URL:**
+```bash
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+```
 
-1. Crear cuenta gratuita en [Cloudflare](https://dash.cloudflare.com)
+### Opción B: URL Fija con Cloudflare (Recomendado para producción)
+
+Requiere una cuenta gratuita en Cloudflare y un dominio.
+
+1. Crear cuenta en [Cloudflare](https://dash.cloudflare.com)
 2. Registrar un dominio (o usar uno existente)
-3. Crear un tunnel nombrado:
+3. Login a Cloudflare desde el servidor:
 
 ```bash
-# Login a Cloudflare
 cloudflared tunnel login
+```
 
-# Crear tunnel permanente
+4. Crear tunnel permanente:
+
+```bash
 cloudflared tunnel create sinagersat
+```
 
-# Configurar (reemplaza TU_DOMINIO.com)
-cat > ~/.cloudflared/config.yml << EOF
+5. Configurar `~/.cloudflared/config.yml` (reemplaza `<TUNNEL_ID>` y `TU_DOMINIO.com`):
+
+```yaml
 tunnel: sinagersat
 credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
 
@@ -107,18 +140,23 @@ ingress:
   - hostname: api.TU_DOMINIO.com
     service: http://localhost:8000
   - service: http_status:404
-EOF
+```
 
-# Asociar dominio al tunnel
+6. Asociar dominio al tunnel:
+
+```bash
 cloudflared tunnel route dns sinagersat api.TU_DOMINIO.com
+```
 
-# Iniciar
+7. Iniciar:
+
+```bash
 cloudflared tunnel run sinagersat
 ```
 
 Resultado: `https://api.TU_DOMINIO.com` siempre apunta a tu API.
 
-### Opción B: Port Forwarding en el Router
+### Opción C: Port Forwarding en el Router
 
 Requiere acceso al router (192.168.0.1).
 
@@ -134,11 +172,10 @@ Resultado: `http://181.188.161.73:8000`
 
 **Verificar si funciona:**
 ```bash
-# Desde el servidor
 curl http://181.188.161.73:8000/
 ```
 
-### Opción C: ngrok
+### Opción D: ngrok
 
 Similar a Cloudflare tunnel, pero con ngrok.
 
@@ -152,9 +189,86 @@ ngrok http 8000
 
 ---
 
-## 4. Estructura de Endpoints
+## 4. Formato de Respuestas (v1.2.0)
 
-La API tiene **157 endpoints** v1.1.0 organizados en 5 módulos.
+### Respuesta exitosa (lista)
+
+```json
+{
+  "success": true,
+  "message": "Departamentos listados correctamente",
+  "data": [
+    { "id": 1, "codigo_ine": "01", "nombre": "Chuquisaca" },
+    { "id": 2, "codigo_ine": "02", "nombre": "La Paz" }
+  ],
+  "total": 9
+}
+```
+
+### Respuesta exitosa (objeto)
+
+```json
+{
+  "success": true,
+  "message": "Usuario obtenido correctamente",
+  "data": {
+    "id_usuario": 1,
+    "usuario": "sinagersat",
+    "nombre": "sinagersat",
+    "id_departamento": 2,
+    "departamento": { "id": 2, "codigo_ine": "02", "nombre": "La Paz" },
+    "rol": { "id_rol": 1, "nombre": "superadministrador", "jerarquia": 5 }
+  },
+  "total": null
+}
+```
+
+### Respuesta de eliminación
+
+```json
+{
+  "message": "EDAN eliminado correctamente"
+}
+```
+
+### Error
+
+```json
+{
+  "success": false,
+  "message": "Error interno del servidor",
+  "error_code": 500
+}
+```
+
+### Error de autenticación
+
+```json
+{
+  "detail": "Not authenticated"
+}
+```
+
+### Objetos anidados
+
+Para todas las foreign keys, las respuestas incluyen el `id_*` original **y** un objeto anidado con los datos relacionados:
+
+```json
+{
+  "id_departamento": 2,
+  "id_provincia": 201,
+  "departamento": { "id": 2, "codigo_ine": "02", "nombre": "La Paz" },
+  "provincia": { "id": 201, "codigo_ine": "0201", "nombre": "Murillo" }
+}
+```
+
+Esto aplica a: departamento, provincia, municipio, rol, tipo_evento, estado, grupo_etario, servicio_basico, categoria_proteccion, ayuda_humanitaria.
+
+---
+
+## 5. Estructura de Endpoints
+
+La API tiene **157 endpoints** v1.2.0 organizados en 5 módulos.
 
 ### Endpoints Públicos (sin token)
 
@@ -214,29 +328,33 @@ La API tiene **157 endpoints** v1.1.0 organizados en 5 módulos.
 ├── rea/               # Reportes de Eventos Adversos (🔒 requiere token)
 │   ├── GET/POST /reportes          # Listar/Crear
 │   ├── GET/PUT/DELETE /reportes/{id}
+│   ├── PUT /reportes/{id}/estado   # Cambiar estado
 │   ├── GET/POST /estados           # Estados del reporte
 │   └── GET/POST /categorias        # Categorías de afectación
 │
 └── usuarios/          # Gestión de usuarios (🔒 requiere token)
     ├── GET/POST /              # Listar/Crear
     ├── GET/PUT/DELETE /{id}
-    ├── GET/roles
-    ├── GET/permisos
-    ├── GET/sesiones
-    └── GET/auditoria
+    ├── GET/POST /roles
+    ├── GET/PUT/DELETE /roles/{id}
+    ├── GET/POST /aplicaciones
+    ├── GET/PUT/DELETE /aplicaciones/{id}
+    ├── GET /permisos
+    ├── GET /sesiones
+    └── GET /auditoria
 ```
 
 ---
 
-## 5. Autenticación y Roles
+## 6. Autenticación y Roles
 
-La API usa JWT (JSON Web Tokens) v1.1.0 con sistema de roles.
+La API usa JWT (JSON Web Tokens) v1.2.0 con sistema de roles.
 
 ### Roles del Sistema
 
 | id_rol | Rol | Jerarquía | Descripción |
 |--------|-----|-----------|-------------|
-| 1 | superadmin | 5 | Acceso total a todos los sistemas |
+| 1 | superadministrador | 5 | Acceso total a todos los sistemas |
 | 2 | admin | 4 | Gestiona usuarios y datos de su sistema |
 | 3 | encuestador | 2 | Carga y edita formularios propios |
 | 4 | visor | 1 | Solo lectura en todos los módulos |
@@ -250,39 +368,30 @@ La API usa JWT (JSON Web Tokens) v1.1.0 con sistema de roles.
 | `/api/v1/usuarios/` | POST | Crear usuario (puede asignar id_rol) |
 | `/api/v1/shared/*` | GET/POST/PUT/DELETE | Geografía (CRUD completo) |
 
-### Endpoints con token (protegidos)
-
-Todos los demás endpoints de **EDAN**, **REA** y **Usuarios** requieren token.
-
 ### Obtener token
 
 ```bash
-# Registrar usuario con rol por defecto (visor=4)
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"usuario":"miusuario","contrasena":"pass123","nombre":"Mi Usuario"}'
-
-# Registrar usuario con rol específico
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"usuario":"encuestador1","contrasena":"pass123","nombre":"Encuestador","id_rol":3}'
-
 # Login → obtiene token
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"usuario":"miusuario","contrasena":"pass123"}'
+  -d '{"usuario":"sinagersat","contrasena":"12345678"}'
 ```
 
-Respuesta login:
+Respuesta (v1.2.0):
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "user_id": 1,
-  "usuario": "miusuario",
-  "nombre": "Mi Usuario",
-  "id_rol": 4,
-  "rol": "visor"
+  "success": true,
+  "message": "Login exitoso",
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "token_type": "bearer",
+    "user_id": 1,
+    "usuario": "sinagersat",
+    "nombre": "sinagersat",
+    "id_rol": 1,
+    "rol": "superadministrador"
+  },
+  "total": null
 }
 ```
 
@@ -305,7 +414,7 @@ curl http://localhost:8000/api/v1/edan/ \
 
 ---
 
-## 6. Ejemplos de Uso
+## 7. Ejemplos de Uso
 
 ### Crear un reporte EDAN
 
@@ -315,14 +424,14 @@ curl -X POST http://localhost:8000/api/v1/edan/ \
   -H "Content-Type: application/json" \
   -d '{
     "codigo_edan": "EDAN-2026-001",
-    "id_departamento": 1,
-    "id_municipio": 101,
+    "id_departamento": 2,
+    "id_municipio": 20101,
     "nombre_alcalde": "Juan Perez",
     "telefono_alcalde": "70000000",
-    "fecha_llenado": "2026-07-17",
+    "fecha_llenado": "2026-07-18",
     "fecha_evento": "2026-07-15",
     "hora_evento": "14:30:00",
-    "localidades_afectadas": "Localidad A, Localidad B",
+    "localidades_afectadas": 3,
     "total_poblacion_afectada": 500,
     "total_familias_afectadas": 100,
     "total_familias_damnificadas": 30,
@@ -330,21 +439,29 @@ curl -X POST http://localhost:8000/api/v1/edan/ \
     "cargo_responsable": "Directora DEDECA",
     "telefono_responsable": "71111111",
     "email_responsable": "maria@gov.bo",
-    "usuario_registro": "admin"
+    "usuario_registro": "sinagersat",
+    "id_reporte_rea": null
   }'
 ```
 
 ### Crear un reporte REA
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/rea/reportes/ \
+curl -X POST http://localhost:8000/api/v1/rea/reportes \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "titulo": "Inundación en Oruro",
-    "descripcion": "Lluvias intensas causaron inundaciones",
+    "id_usuario": 1,
+    "id_departamento": 2,
+    "id_provincia": 201,
+    "id_municipio": 20101,
+    "comunidad": "Villa Fátima",
+    "fecha_evento": "2026-07-15",
+    "hora_evento": "14:30:00",
+    "id_tipo_evento": 1,
+    "descripcion": "Inundación en zona urbana",
     "id_estado": 1,
-    "usuario_registro": "admin"
+    "categorias": [1, 3]
   }'
 ```
 
@@ -355,9 +472,18 @@ curl http://localhost:8000/api/v1/edan/1 \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
+### Obtener URL pública y probar desde internet
+
+```bash
+URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
+echo "URL pública: $URL"
+curl "$URL/"
+curl "$URL/docs"
+```
+
 ---
 
-## 7. Configuración
+## 8. Configuración
 
 ### Variables de entorno (.env)
 
@@ -386,13 +512,13 @@ DATABASE_URL=postgresql://sinagersat:12345678@10.10.10.220:5432/db_sinagersat
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### API no inicia
 
 ```bash
 # Ver logs
-tail -20 /tmp/uvicorn.log
+journalctl -u sinagersat-api -n 50
 
 # Verificar que la BD está corriendo
 pg_isready
@@ -418,13 +544,19 @@ curl ifconfig.me
 cat /tmp/cloudflared.log | tail -20
 ```
 
+### Obtener URL del tunnel (cambia al reiniciar)
+
+```bash
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+```
+
 ### Token expirado
 
 ```bash
 # Hacer login de nuevo para obtener nuevo token
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"usuario": "admin", "contrasena": "admin123"}'
+  -d '{"usuario": "sinagersat", "contrasena": "12345678"}'
 ```
 
 ### Error 422 en endpoints
@@ -432,9 +564,19 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 Verificar que el body del request tiene el formato correcto.
 Usar Swagger UI (`/docs`) para probar interactivamente.
 
+### API retorna error 500
+
+```bash
+# Ver logs detallados
+journalctl -u sinagersat-api -f
+
+# Reiniciar
+sudo systemctl restart sinagersat-api
+```
+
 ---
 
-## 9. Archivos
+## 10. Archivos
 
 ```
 SINAGER-SAT/
@@ -443,6 +585,7 @@ SINAGER-SAT/
 │   ├── config.py           # Configuración (.env)
 │   ├── database.py         # Conexión SQLAlchemy
 │   ├── dependencies.py     # JWT auth dependency
+│   ├── response.py         # SuccessResponse/ErrorResponse/MessageResponse
 │   ├── auth/               # Login/Register
 │   ├── shared/             # Geografía
 │   ├── edan/               # Formularios EDAN
@@ -453,6 +596,16 @@ SINAGER-SAT/
 ├── start_api.sh            # Iniciar API local
 ├── start_tunnel.sh         # Iniciar API + tunnel
 ├── stop.sh                 # Detener todo
-└── database/
-    └── edan_db_backup.sql  # Backup completo de BD
+├── deploy/                 # Scripts de despliegue
+│   ├── desplegar_todo.sh   # Despliegue completo
+│   ├── desplegar_bd.sh     # Solo BD
+│   └── verificar.sh        # Verificar estado
+├── database/
+│   ├── edan_db_backup.sql  # Backup completo de BD
+│   └── servers.json        # Config pgAdmin4
+└── docs/
+    ├── DESPLIEGUE_API.md   # Esta guía
+    ├── EDAN_BD.md          # Documentación de la BD
+    ├── SERVICIOS.md        # Gestión de servicios
+    └── CONECTAR.md         # Credenciales
 ```

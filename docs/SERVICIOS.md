@@ -64,15 +64,53 @@ sudo systemctl disable sinagersat-api sinagersat-tunnel
 
 ---
 
-## Obtener URL del Tunnel
+## Obtener URL Pública (Cloudflare Tunnel)
 
-La URL pública (para acceder desde internet):
+La URL pública es **dinámica**: cambia cada vez que se reinicia el servicio `sinagersat-tunnel`.
+
+### Obtener URL actual
 
 ```bash
 grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-**Nota:** La URL cambia cada vez que se reinicia el servicio `sinagersat-tunnel`.
+Ejemplo de salida:
+```
+https://abc-def-ghi.trycloudflare.com
+```
+
+### Script rápido (alias)
+
+```bash
+# Agregar a ~/.bashrc
+alias sinagersat-url="grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1"
+```
+
+Uso:
+```bash
+sinagersat-url           # Imprime la URL actual
+sinagersat-url | xclip   # Copia al portapapeles (Linux)
+sinagersat-url | pbcopy  # Copia al portapapeles (macOS)
+```
+
+### Verificar desde internet
+
+```bash
+URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
+echo "URL pública: $URL"
+curl "$URL/"        # Info de la API
+curl "$URL/docs"    # Swagger UI
+```
+
+### Desde otra máquina en la red local
+
+```bash
+curl http://192.168.0.34:8000/docs
+```
+
+### URL fija (con dominio propio)
+
+Si necesitas una URL permanente, ver `docs/DESPLIEGUE_API.md` sección "Opción B: URL Fija con Cloudflare".
 
 ---
 
@@ -104,10 +142,21 @@ curl http://localhost:8000/
 # 2. Swagger funciona
 curl http://localhost:8000/docs
 
-# 3. URL externa funciona (reemplazar con la URL actual)
+# 3. URL externa funciona
 URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
 curl "$URL/"
 curl "$URL/docs"
+
+# 4. Login funciona
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"sinagersat","contrasena":"12345678"}'
+
+# 5. Endpoint protegido funciona
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"sinagersat","contrasena":"12345678"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/usuarios/roles
 ```
 
 ---
@@ -155,10 +204,22 @@ ss -tlnp | grep 8000
 sudo fuser -k 8000/tcp
 ```
 
-### URL del tunnel cambió y necesito la nueva
+### URL del tunnel cambió
+
+La URL cambia al reiniciar `sinagersat-tunnel`. Obtener la nueva:
 
 ```bash
 grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+```
+
+### API retorna error 500
+
+```bash
+# Ver logs detallados
+journalctl -u sinagersat-api -f
+
+# Reiniciar
+sudo systemctl restart sinagersat-api
 ```
 
 ---

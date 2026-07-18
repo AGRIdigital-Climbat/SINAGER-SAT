@@ -1,6 +1,6 @@
 # SINAGERSAT - Base de Datos
 
-Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.1.0.
+Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.0.
 
 ---
 
@@ -42,6 +42,81 @@ bash deploy/verificar.sh
 
 ---
 
+## Obtener URL Pública (Cloudflare Tunnel)
+
+La API se expone a internet mediante Cloudflare Quick Tunnel. La URL es **dinámica** (cambia al reiniciar).
+
+### Obtener URL actual
+
+```bash
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+```
+
+### Obtener URL + copiar al portapapeles
+
+```bash
+# Linux
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 | xclip -selection clipboard
+
+# macOS
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 | pbcopy
+```
+
+### Script rápido
+
+```bash
+# Agregar alias a ~/.bashrc
+alias sinagersat-url="grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1"
+
+# Uso
+sinagersat-url           # Imprime la URL actual
+sinagersat-url | xclip   # Copia al portapapeles
+```
+
+### Verificar que funciona desde internet
+
+```bash
+URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
+curl "$URL/"
+curl "$URL/docs"
+```
+
+### URL fija (con dominio propio)
+
+Si necesitas una URL permanente:
+
+1. Crear cuenta gratuita en [Cloudflare](https://dash.cloudflare.com)
+2. Registrar un dominio (o usar uno existente)
+3. Crear tunnel nombrado:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create sinagersat
+```
+
+4. Configurar `~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: sinagersat
+credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: api.TU_DOMINIO.com
+    service: http://localhost:8000
+  - service: http_status:404
+```
+
+5. Asociar DNS e iniciar:
+
+```bash
+cloudflared tunnel route dns sinagersat api.TU_DOMINIO.com
+cloudflared tunnel run sinagersat
+```
+
+Resultado: `https://api.TU_DOMINIO.com` siempre apunta a tu API.
+
+---
+
 ## Arquitectura
 
 | Esquema | Descripción |
@@ -58,21 +133,21 @@ bash deploy/verificar.sh
 
 | Parámetro | Valor |
 |-----------|-------|
-| Host | `10.10.10.220` o `localhost` |
+| Host | `localhost` o `192.168.0.34` |
 | Puerto | `5432` |
 | Base de datos | `db_sinagersat` |
 | Usuario | `sinagersat` |
 | Contraseña | `12345678` |
 
 ```bash
-PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 10.10.10.220
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h localhost
 ```
 
 ---
 
 ## Herramientas gráficas
 
-- **DBeaver**: Host: `10.10.10.220` | Port: `5432` | DB: `db_sinagersat` | User: `sinagersat`
+- **DBeaver**: Host: `localhost` | Port: `5432` | DB: `db_sinagersat` | User: `sinagersat`
 - **pgAdmin4**: File > Import > `database/servers.json`
 
 ---
@@ -81,6 +156,8 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 10.10.10.220
 
 - `docs/EDAN_BD.md` - Documentación completa de la BD (esquemas, tablas, relaciones, SQL)
 - `docs/DESPLIEGUE_API.md` - Guía de despliegue de la API y acceso externo desde internet
+- `docs/SERVICIOS.md` - Gestión de servicios systemd (API + tunnel)
+- `docs/CONECTAR.md` - Credenciales y formas de conexión a la BD
 
 ---
 
@@ -99,7 +176,7 @@ bash deploy/verificar.sh
 
 ---
 
-## API REST (FastAPI)
+## API REST (FastAPI) v1.2.0
 
 ### Iniciar API local
 
@@ -115,15 +192,74 @@ bash start_tunnel.sh
 # → URL temporal: https://xxx.trycloudflare.com/docs
 ```
 
-### Endpoints (157 totales, v1.1.0)
+### Obtener URL pública
+
+```bash
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+```
+
+### Formato de Respuestas (v1.2.0)
+
+Todas las respuestas exitosas usan el formato estándar:
+
+```json
+{
+  "success": true,
+  "message": "Operación exitosa",
+  "data": { ... },
+  "total": 9
+}
+```
+
+Para errores:
+
+```json
+{
+  "success": false,
+  "message": "Error interno del servidor",
+  "error_code": 500
+}
+```
+
+Para eliminaciones:
+
+```json
+{
+  "message": "Recurso eliminado correctamente"
+}
+```
+
+### Objetos Anidados (v1.2.0)
+
+Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de usuario:
+
+```json
+{
+  "id_usuario": 1,
+  "usuario": "sinagersat",
+  "nombre": "sinagersat",
+  "id_departamento": 2,
+  "id_provincia": 201,
+  "id_municipio": 20101,
+  "id_rol": 1,
+  "departamento": { "id": 2, "codigo_ine": "02", "nombre": "La Paz" },
+  "provincia": { "id": 201, "codigo_ine": "0201", "nombre": "Murillo" },
+  "municipio": { "id": 20101, "codigo_ine": "020101", "nombre": "La Paz" },
+  "rol": { "id_rol": 1, "nombre": "superadministrador", "descripcion": "...", "jerarquia": 5 }
+}
+```
+
+Los campos `id_*` originales se mantienen para compatibilidad; los objetos anidados son información complementaria.
+
+### Endpoints (157 totales)
 
 | Grupo | Prefijo | Acceso | Operaciones |
 |---|---|---|---|
 | Auth | `/api/v1/auth/` | Público | Login, Register |
 | Shared | `/api/v1/shared/` | Público | CRUD deptos, provs, municipios |
-| EDAN | `/api/v1/edan/` | 🔒 Token | CRUD EDAN + 17 sub-tablas + 5 catálogos |
-| REA | `/api/v1/rea/` | 🔒 Token | CRUD reportes, estados, categorías |
-| Usuarios | `/api/v1/usuarios/` | 🔒 Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
+| EDAN | `/api/v1/edan/` | Token | CRUD EDAN + 17 sub-tablas + 5 catálogos |
+| REA | `/api/v1/rea/` | Token | CRUD reportes, estados, categorías |
+| Usuarios | `/api/v1/usuarios/` | Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
 
 ### Autenticación
 
@@ -150,12 +286,12 @@ curl http://localhost:8000/api/v1/edan/ \
 
 ### Roles
 
-| id | Rol | Descripción |
-|----|-----|-------------|
-| 1 | superadmin | Acceso total |
-| 2 | admin | Gestiona usuarios y datos |
-| 3 | encuestador | Carga formularios |
-| 4 | visor | Solo lectura (default) |
+| id | Rol | Jerarquía | Descripción |
+|----|-----|-----------|-------------|
+| 1 | superadministrador | 5 | Acceso total |
+| 2 | admin | 4 | Gestiona usuarios y datos |
+| 3 | encuestador | 2 | Carga formularios |
+| 4 | visor | 1 | Solo lectura (default) |
 
 ### Documentación interactiva
 
