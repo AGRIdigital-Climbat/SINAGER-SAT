@@ -6,7 +6,13 @@ from .schemas import LoginRequest, RegisterRequest
 
 def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     result = db.execute(
-        text("SELECT id_usuario, usuario, nombre, contrasena, activo FROM usuarios.usuario WHERE usuario = :u"),
+        text("""
+            SELECT u.id_usuario, u.usuario, u.nombre, u.contrasena, u.activo, u.id_rol,
+                   r.nombre as rol
+            FROM usuarios.usuario u
+            LEFT JOIN usuarios.rol r ON u.id_rol = r.id_rol
+            WHERE u.usuario = :u
+        """),
         {"u": data.usuario},
     )
     user = result.mappings().first()
@@ -16,13 +22,15 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         return None
     if not verify_password(data.contrasena, user["contrasena"]):
         return None
-    token = create_access_token({"sub": str(user["id_usuario"]), "usuario": user["usuario"]})
+    token = create_access_token({"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]})
     return {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user["id_usuario"],
         "usuario": user["usuario"],
         "nombre": user["nombre"],
+        "id_rol": user["id_rol"],
+        "rol": user["rol"],
     }
 
 
@@ -37,9 +45,9 @@ def register_user(db: Session, data: RegisterRequest) -> int:
     result = db.execute(
         text("""
             INSERT INTO usuarios.usuario (usuario, contrasena, nombre, celular, carnet, comunidad,
-                id_departamento, id_provincia, id_municipio, activo)
+                id_departamento, id_provincia, id_municipio, id_rol, activo)
             VALUES (:usuario, :contrasena, :nombre, :celular, :carnet, :comunidad,
-                :id_departamento, :id_provincia, :id_municipio, true)
+                :id_departamento, :id_provincia, :id_municipio, :id_rol, true)
             RETURNING id_usuario
         """),
         {
@@ -52,6 +60,7 @@ def register_user(db: Session, data: RegisterRequest) -> int:
             "id_departamento": data.id_departamento,
             "id_provincia": data.id_provincia,
             "id_municipio": data.id_municipio,
+            "id_rol": data.id_rol,
         },
     )
     db.commit()

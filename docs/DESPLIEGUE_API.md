@@ -228,44 +228,61 @@ La API tiene **157 endpoints** v1.1.0 organizados en 5 módulos.
 
 ---
 
-## 5. Autenticación
+## 5. Autenticación y Roles
 
-La API usa JWT (JSON Web Tokens) v1.1.0.
+La API usa JWT (JSON Web Tokens) v1.1.0 con sistema de roles.
+
+### Roles del Sistema
+
+| id_rol | Rol | Jerarquía | Descripción |
+|--------|-----|-----------|-------------|
+| 1 | superadmin | 5 | Acceso total a todos los sistemas |
+| 2 | admin | 4 | Gestiona usuarios y datos de su sistema |
+| 3 | encuestador | 2 | Carga y edita formularios propios |
+| 4 | visor | 1 | Solo lectura en todos los módulos |
 
 ### Endpoints sin token (públicos)
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/api/v1/auth/login` | POST | Login → token JWT |
-| `/api/v1/auth/register` | POST | Crear usuario |
+| `/api/v1/auth/register` | POST | Registrar usuario (default: rol visor) |
+| `/api/v1/auth/login` | POST | Login → token JWT + info de rol |
+| `/api/v1/usuarios/` | POST | Crear usuario (puede asignar id_rol) |
 | `/api/v1/shared/*` | GET/POST/PUT/DELETE | Geografía (CRUD completo) |
 
 ### Endpoints con token (protegidos)
 
-Todos los endpoints de **EDAN**, **REA** y **Usuarios** requieren token.
+Todos los demás endpoints de **EDAN**, **REA** y **Usuarios** requieren token.
 
 ### Obtener token
 
 ```bash
-# 1. Registrar usuario (sin token)
+# Registrar usuario con rol por defecto (visor=4)
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"usuario":"admin","contrasena":"pass123","nombre":"Admin"}'
+  -d '{"usuario":"miusuario","contrasena":"pass123","nombre":"Mi Usuario"}'
 
-# 2. Login → obtiene token
+# Registrar usuario con rol específico
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"encuestador1","contrasena":"pass123","nombre":"Encuestador","id_rol":3}'
+
+# Login → obtiene token
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"usuario":"admin","contrasena":"pass123"}'
+  -d '{"usuario":"miusuario","contrasena":"pass123"}'
 ```
 
-Respuesta:
+Respuesta login:
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "token_type": "bearer",
   "user_id": 1,
-  "usuario": "admin",
-  "nombre": "Admin"
+  "usuario": "miusuario",
+  "nombre": "Mi Usuario",
+  "id_rol": 4,
+  "rol": "visor"
 }
 ```
 

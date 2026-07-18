@@ -3,18 +3,27 @@ from sqlalchemy import text
 from ..auth.jwt import hash_password
 
 
+SELECT_USUARIO = """
+    SELECT u.id_usuario, u.usuario, u.nombre, u.celular, u.carnet, u.comunidad,
+           u.id_departamento, u.id_provincia, u.id_municipio, u.id_rol,
+           r.nombre as rol, u.activo
+    FROM usuarios.usuario u
+    LEFT JOIN usuarios.rol r ON u.id_rol = r.id_rol
+"""
+
+
 # ── USUARIOS ──
 
 def get_usuarios(db: Session, skip: int = 0, limit: int = 50):
     return db.execute(
-        text("SELECT id_usuario, usuario, nombre, celular, carnet, comunidad, id_departamento, id_provincia, id_municipio, activo FROM usuarios.usuario ORDER BY id_usuario LIMIT :limit OFFSET :skip"),
+        text(f"{SELECT_USUARIO} ORDER BY u.id_usuario LIMIT :limit OFFSET :skip"),
         {"limit": limit, "skip": skip},
     ).mappings().all()
 
 
 def get_usuario(db: Session, id: int):
     return db.execute(
-        text("SELECT id_usuario, usuario, nombre, celular, carnet, comunidad, id_departamento, id_provincia, id_municipio, activo FROM usuarios.usuario WHERE id_usuario = :id"),
+        text(f"{SELECT_USUARIO} WHERE u.id_usuario = :id"),
         {"id": id},
     ).mappings().first()
 
@@ -24,9 +33,9 @@ def create_usuario(db: Session, data: dict) -> int:
     result = db.execute(
         text("""
             INSERT INTO usuarios.usuario (usuario, contrasena, nombre, celular, carnet, comunidad,
-                id_departamento, id_provincia, id_municipio, activo)
+                id_departamento, id_provincia, id_municipio, id_rol, activo)
             VALUES (:usuario, :contrasena, :nombre, :celular, :carnet, :comunidad,
-                :id_departamento, :id_provincia, :id_municipio, :activo)
+                :id_departamento, :id_provincia, :id_municipio, :id_rol, :activo)
             RETURNING id_usuario
         """),
         {**data, "contrasena": hashed},

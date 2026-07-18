@@ -11,6 +11,7 @@ class UsuarioCreate(BaseModel):
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
+    id_rol: int = 4
     activo: bool = True
 
 
@@ -23,6 +24,7 @@ class UsuarioUpdate(BaseModel):
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
+    id_rol: int | None = None
     activo: bool | None = None
 
 
@@ -36,6 +38,8 @@ class UsuarioResponse(BaseModel):
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
+    id_rol: int
+    rol: str | None = None
     activo: bool | None = None
 
     class Config:

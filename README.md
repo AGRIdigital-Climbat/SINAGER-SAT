@@ -128,12 +128,17 @@ bash start_tunnel.sh
 ### Autenticación
 
 ```bash
-# Registrar usuario (sin token)
+# Registrar usuario (sin token, default rol visor)
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"usuario":"admin","contrasena":"pass123","nombre":"Admin"}'
 
-# Login → obtiene token JWT
+# Registrar con rol específico
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"enc1","contrasena":"pass123","nombre":"Enc1","id_rol":3}'
+
+# Login → obtiene token JWT + info de rol
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"usuario":"admin","contrasena":"pass123"}'
@@ -142,6 +147,15 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 curl http://localhost:8000/api/v1/edan/ \
   -H "Authorization: Bearer <TU_TOKEN>"
 ```
+
+### Roles
+
+| id | Rol | Descripción |
+|----|-----|-------------|
+| 1 | superadmin | Acceso total |
+| 2 | admin | Gestiona usuarios y datos |
+| 3 | encuestador | Carga formularios |
+| 4 | visor | Solo lectura (default) |
 
 ### Documentación interactiva
 
