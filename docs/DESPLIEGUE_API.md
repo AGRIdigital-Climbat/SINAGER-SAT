@@ -154,20 +154,38 @@ ngrok http 8000
 
 ## 4. Estructura de Endpoints
 
-La API tiene **157 endpoints** organizados en 5 módulos:
+La API tiene **157 endpoints** v1.1.0 organizados en 5 módulos.
+
+### Endpoints Públicos (sin token)
+
+| Grupo | Prefijo | Descripción |
+|-------|---------|-------------|
+| Auth | `/api/v1/auth/` | Login y registro |
+| Shared | `/api/v1/shared/` | Geografía: deptos, provs, municipios (CRUD completo) |
+
+### Endpoints Protegidos (requieren token JWT)
+
+| Grupo | Prefijo | Descripción |
+|-------|---------|-------------|
+| EDAN | `/api/v1/edan/` | Formularios + 17 sub-tablas + 5 catálogos |
+| REA | `/api/v1/rea/` | Reportes, estados, categorías |
+| Usuarios | `/api/v1/usuarios/` | Cuentas, roles, permisos, sesiones, auditoría |
 
 ```
 /api/v1/
-├── auth/              # Autenticación
+├── auth/              # Autenticación (PÚBLICO)
 │   ├── POST /login         # Login → token JWT
 │   └── POST /register      # Registrar usuario
 │
-├── shared/            # Geografía (solo lectura)
-│   ├── GET /departamentos   # 9 departamentos
-│   ├── GET /provincias      # 112 provincias
-│   └── GET /municipios      # 340 municipios
+├── shared/            # Geografía (PÚBLICO, CRUD completo)
+│   ├── GET/POST /departamentos       # 9 departamentos
+│   ├── GET/PUT/DELETE /departamentos/{id}
+│   ├── GET/POST /provincias          # 112 provincias
+│   ├── GET/PUT/DELETE /provincias/{id}
+│   ├── GET/POST /municipios          # 340 municipios
+│   └── GET/PUT/DELETE /municipios/{id}
 │
-├── edan/              # Formularios EDAN
+├── edan/              # Formularios EDAN (🔒 requiere token)
 │   ├── GET/POST /           # Listar/Crear EDAN
 │   ├── GET/PUT/DELETE /{id} # Obtener/Actualizar/Eliminar
 │   ├── /{id}/poblacion-grupo
@@ -193,13 +211,13 @@ La API tiene **157 endpoints** organizados en 5 módulos:
 │   ├── /categoria-proteccion # Catálogo
 │   └── /ayuda-humanitaria   # Catálogo
 │
-├── rea/               # Reportes de Eventos Adversos
+├── rea/               # Reportes de Eventos Adversos (🔒 requiere token)
 │   ├── GET/POST /reportes          # Listar/Crear
 │   ├── GET/PUT/DELETE /reportes/{id}
 │   ├── GET/POST /estados           # Estados del reporte
 │   └── GET/POST /categorias        # Categorías de afectación
 │
-└── usuarios/          # Gestión de usuarios
+└── usuarios/          # Gestión de usuarios (🔒 requiere token)
     ├── GET/POST /              # Listar/Crear
     ├── GET/PUT/DELETE /{id}
     ├── GET/roles
@@ -212,21 +230,42 @@ La API tiene **157 endpoints** organizados en 5 módulos:
 
 ## 5. Autenticación
 
-La API usa JWT (JSON Web Tokens). Todos los endpoints excepto `/auth/login`, `/auth/register` y los de `shared` requieren autenticación.
+La API usa JWT (JSON Web Tokens) v1.1.0.
 
-### Login
+### Endpoints sin token (públicos)
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/v1/auth/login` | POST | Login → token JWT |
+| `/api/v1/auth/register` | POST | Crear usuario |
+| `/api/v1/shared/*` | GET/POST/PUT/DELETE | Geografía (CRUD completo) |
+
+### Endpoints con token (protegidos)
+
+Todos los endpoints de **EDAN**, **REA** y **Usuarios** requieren token.
+
+### Obtener token
 
 ```bash
+# 1. Registrar usuario (sin token)
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"admin","contrasena":"pass123","nombre":"Admin"}'
+
+# 2. Login → obtiene token
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"usuario": "admin", "contrasena": "admin123"}'
+  -d '{"usuario":"admin","contrasena":"pass123"}'
 ```
 
 Respuesta:
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "user_id": 1,
+  "usuario": "admin",
+  "nombre": "Admin"
 }
 ```
 
@@ -235,17 +274,17 @@ Respuesta:
 ```bash
 TOKEN="eyJhbGciOiJIUzI1NiIs..."
 
-# Listar departamentos (requiere auth)
-curl http://localhost:8000/api/v1/shared/departamentos \
+# Listar EDAN (requiere auth)
+curl http://localhost:8000/api/v1/edan/ \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Desde Swagger UI
 
 1. Ir a `http://localhost:8000/docs`
-2. Click en "Authorize"
-3. Pegar el token (sin "Bearer ")
-4. Ahora todos los endpoints autorizados funcionan
+2. Probar endpoints públicos sin token
+3. Para endpoints protegidos: click **Authorize** → pegar el token
+4. Ahora todos los endpoints protegidos funcionan
 
 ---
 

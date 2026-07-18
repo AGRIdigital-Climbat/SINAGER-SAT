@@ -1,6 +1,6 @@
 # SINAGERSAT - Base de Datos
 
-Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA.
+Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.1.0.
 
 ---
 
@@ -115,20 +115,20 @@ bash start_tunnel.sh
 # → URL temporal: https://xxx.trycloudflare.com/docs
 ```
 
-### Endpoints (157 totales)
+### Endpoints (157 totales, v1.1.0)
 
-| Grupo | Prefijo | Operaciones |
-|---|---|---|
-| Auth | `/api/v1/auth/` | Login, Register (JWT) |
-| Shared | `/api/v1/shared/` | CRUD departamentos, provincias, municipios |
-| EDAN | `/api/v1/edan/` | CRUD EDAN + 17 sub-tablas + 5 catálogos |
-| REA | `/api/v1/rea/` | CRUD reportes, estados, categorías |
-| Usuarios | `/api/v1/usuarios/` | CRUD usuarios, roles, permisos, sesiones, auditoría |
+| Grupo | Prefijo | Acceso | Operaciones |
+|---|---|---|---|
+| Auth | `/api/v1/auth/` | Público | Login, Register |
+| Shared | `/api/v1/shared/` | Público | CRUD deptos, provs, municipios |
+| EDAN | `/api/v1/edan/` | 🔒 Token | CRUD EDAN + 17 sub-tablas + 5 catálogos |
+| REA | `/api/v1/rea/` | 🔒 Token | CRUD reportes, estados, categorías |
+| Usuarios | `/api/v1/usuarios/` | 🔒 Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
 
 ### Autenticación
 
 ```bash
-# Registrar usuario
+# Registrar usuario (sin token)
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"usuario":"admin","contrasena":"pass123","nombre":"Admin"}'
@@ -138,8 +138,8 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"usuario":"admin","contrasena":"pass123"}'
 
-# Usar token en requests
-curl http://localhost:8000/api/v1/shared/departamentos \
+# Usar token en requests protegidos
+curl http://localhost:8000/api/v1/edan/ \
   -H "Authorization: Bearer <TU_TOKEN>"
 ```
 
