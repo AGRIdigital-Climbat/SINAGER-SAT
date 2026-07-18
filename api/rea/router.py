@@ -5,12 +5,14 @@ from ..dependencies import get_current_user
 from .schemas import *
 from . import service
 
-router = APIRouter(prefix="/rea", tags=["REA - Reportes Eventos Adversos"])
+router = APIRouter(prefix="/rea", tags=["REA"])
+
+TAG_REP = "REA > Reportes"
+TAG_EST = "REA > Estados"
+TAG_CAT = "REA > Categorías"
 
 
-# ── REPORTES ──
-
-@router.get("/reportes", response_model=list[ReporteEventoResponse])
+@router.get("/reportes", response_model=list[ReporteEventoResponse], tags=[TAG_REP])
 def listar_reportes(
     id_estado: int | None = Query(None),
     id_municipio: int | None = Query(None),
@@ -22,7 +24,7 @@ def listar_reportes(
     return service.get_reportes(db, id_estado, id_municipio, skip, limit)
 
 
-@router.get("/reportes/{id}")
+@router.get("/reportes/{id}", tags=[TAG_REP])
 def obtener_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_reporte_completo(db, id)
     if not result:
@@ -30,7 +32,7 @@ def obtener_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_cu
     return result
 
 
-@router.post("/reportes", status_code=201)
+@router.post("/reportes", status_code=201, tags=[TAG_REP])
 def crear_reporte(data: ReporteEventoCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         reporte_id = service.create_reporte(db, data.model_dump())
@@ -39,7 +41,7 @@ def crear_reporte(data: ReporteEventoCreate, db: Session = Depends(get_db), _use
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.put("/reportes/{id}")
+@router.put("/reportes/{id}", tags=[TAG_REP])
 def actualizar_reporte(id: int, data: ReporteEventoUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.update_reporte(db, id, data.model_dump(exclude_unset=True))
     if not result:
@@ -47,7 +49,7 @@ def actualizar_reporte(id: int, data: ReporteEventoUpdate, db: Session = Depends
     return result
 
 
-@router.put("/reportes/{id}/estado")
+@router.put("/reportes/{id}/estado", tags=[TAG_REP])
 def cambiar_estado(id: int, data: CambiarEstadoRequest, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.change_estado(db, id, data.id_estado)
     if not result:
@@ -55,21 +57,19 @@ def cambiar_estado(id: int, data: CambiarEstadoRequest, db: Session = Depends(ge
     return result
 
 
-@router.delete("/reportes/{id}")
+@router.delete("/reportes/{id}", tags=[TAG_REP])
 def eliminar_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_reporte(db, id):
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     return MessageResponse(message="Reporte eliminado")
 
 
-# ── ESTADOS ──
-
-@router.get("/estados", response_model=list[EstadoReporteResponse])
+@router.get("/estados", response_model=list[EstadoReporteResponse], tags=[TAG_EST])
 def listar_estados(db: Session = Depends(get_db), _user=Depends(get_current_user)):
     return service.get_estados(db)
 
 
-@router.get("/estados/{id}", response_model=EstadoReporteResponse)
+@router.get("/estados/{id}", response_model=EstadoReporteResponse, tags=[TAG_EST])
 def obtener_estado(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_estado(db, id)
     if not result:
@@ -77,13 +77,13 @@ def obtener_estado(id: int, db: Session = Depends(get_db), _user=Depends(get_cur
     return result
 
 
-@router.post("/estados", response_model=EstadoReporteResponse, status_code=201)
+@router.post("/estados", response_model=EstadoReporteResponse, status_code=201, tags=[TAG_EST])
 def crear_estado(data: EstadoReporteCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     id = service.create_estado(db, data.model_dump())
     return service.get_estado(db, id)
 
 
-@router.put("/estados/{id}", response_model=EstadoReporteResponse)
+@router.put("/estados/{id}", response_model=EstadoReporteResponse, tags=[TAG_EST])
 def actualizar_estado(id: int, data: EstadoReporteUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.update_estado(db, id, data.model_dump(exclude_unset=True))
     if not result:
@@ -91,21 +91,19 @@ def actualizar_estado(id: int, data: EstadoReporteUpdate, db: Session = Depends(
     return result
 
 
-@router.delete("/estados/{id}")
+@router.delete("/estados/{id}", tags=[TAG_EST])
 def eliminar_estado(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_estado(db, id):
         raise HTTPException(status_code=404, detail="Estado no encontrado")
     return MessageResponse(message="Estado eliminado")
 
 
-# ── CATEGORIAS AFECTACION ──
-
-@router.get("/categorias", response_model=list[AfectacionCategoriaResponse])
+@router.get("/categorias", response_model=list[AfectacionCategoriaResponse], tags=[TAG_CAT])
 def listar_categorias(db: Session = Depends(get_db), _user=Depends(get_current_user)):
     return service.get_categorias(db)
 
 
-@router.get("/categorias/{id}", response_model=AfectacionCategoriaResponse)
+@router.get("/categorias/{id}", response_model=AfectacionCategoriaResponse, tags=[TAG_CAT])
 def obtener_categoria(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_categoria(db, id)
     if not result:
@@ -113,13 +111,13 @@ def obtener_categoria(id: int, db: Session = Depends(get_db), _user=Depends(get_
     return result
 
 
-@router.post("/categorias", response_model=AfectacionCategoriaResponse, status_code=201)
+@router.post("/categorias", response_model=AfectacionCategoriaResponse, status_code=201, tags=[TAG_CAT])
 def crear_categoria(data: AfectacionCategoriaCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     id = service.create_categoria(db, data.model_dump())
     return service.get_categoria(db, id)
 
 
-@router.put("/categorias/{id}", response_model=AfectacionCategoriaResponse)
+@router.put("/categorias/{id}", response_model=AfectacionCategoriaResponse, tags=[TAG_CAT])
 def actualizar_categoria(id: int, data: AfectacionCategoriaUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.update_categoria(db, id, data.model_dump(exclude_unset=True))
     if not result:
@@ -127,7 +125,7 @@ def actualizar_categoria(id: int, data: AfectacionCategoriaUpdate, db: Session =
     return result
 
 
-@router.delete("/categorias/{id}")
+@router.delete("/categorias/{id}", tags=[TAG_CAT])
 def eliminar_categoria(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_categoria(db, id):
         raise HTTPException(status_code=404, detail="Categoría no encontrada")

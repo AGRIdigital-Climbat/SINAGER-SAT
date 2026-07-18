@@ -10,17 +10,17 @@ from .schemas import (
 )
 from . import service
 
-router = APIRouter(prefix="/shared", tags=["Shared - Geografía"])
+router = APIRouter(prefix="/shared", tags=["Geografía"])
+
+TAG = "Geografía > Departamentos"
 
 
-# ── DEPARTAMENTOS ──
-
-@router.get("/departamentos", response_model=list[DepartamentoResponse])
+@router.get("/departamentos", response_model=list[DepartamentoResponse], tags=[TAG])
 def listar_departamentos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
     return service.get_departamentos(db)
 
 
-@router.get("/departamentos/{id}", response_model=DepartamentoResponse)
+@router.get("/departamentos/{id}", response_model=DepartamentoResponse, tags=[TAG])
 def obtener_departamento(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_departamento(db, id)
     if not result:
@@ -28,7 +28,7 @@ def obtener_departamento(id: int, db: Session = Depends(get_db), _user=Depends(g
     return result
 
 
-@router.post("/departamentos", response_model=DepartamentoResponse, status_code=201)
+@router.post("/departamentos", response_model=DepartamentoResponse, status_code=201, tags=[TAG])
 def crear_departamento(data: DepartamentoCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         id = service.create_departamento(db, data)
@@ -37,7 +37,7 @@ def crear_departamento(data: DepartamentoCreate, db: Session = Depends(get_db), 
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.put("/departamentos/{id}", response_model=DepartamentoResponse)
+@router.put("/departamentos/{id}", response_model=DepartamentoResponse, tags=[TAG])
 def actualizar_departamento(id: int, data: DepartamentoUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.update_departamento(db, id, data)
     if not result:
@@ -45,16 +45,17 @@ def actualizar_departamento(id: int, data: DepartamentoUpdate, db: Session = Dep
     return result
 
 
-@router.delete("/departamentos/{id}", response_model=MessageResponse)
+@router.delete("/departamentos/{id}", response_model=MessageResponse, tags=[TAG])
 def eliminar_departamento(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_departamento(db, id):
         raise HTTPException(status_code=404, detail="Departamento no encontrado")
     return MessageResponse(message="Departamento eliminado")
 
 
-# ── PROVINCIAS ──
+TAG = "Geografía > Provincias"
 
-@router.get("/provincias", response_model=list[ProvinciaResponse])
+
+@router.get("/provincias", response_model=list[ProvinciaResponse], tags=[TAG])
 def listar_provincias(
     id_departamento: int | None = Query(None),
     db: Session = Depends(get_db),
@@ -63,7 +64,7 @@ def listar_provincias(
     return service.get_provincias(db, id_departamento)
 
 
-@router.get("/provincias/{id}", response_model=ProvinciaResponse)
+@router.get("/provincias/{id}", response_model=ProvinciaResponse, tags=[TAG])
 def obtener_provincia(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_provincia(db, id)
     if not result:
@@ -71,7 +72,7 @@ def obtener_provincia(id: int, db: Session = Depends(get_db), _user=Depends(get_
     return result
 
 
-@router.post("/provincias", response_model=ProvinciaResponse, status_code=201)
+@router.post("/provincias", response_model=ProvinciaResponse, status_code=201, tags=[TAG])
 def crear_provincia(data: ProvinciaCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         id = service.create_provincia(db, data)
@@ -80,7 +81,7 @@ def crear_provincia(data: ProvinciaCreate, db: Session = Depends(get_db), _user=
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.put("/provincias/{id}", response_model=ProvinciaResponse)
+@router.put("/provincias/{id}", response_model=ProvinciaResponse, tags=[TAG])
 def actualizar_provincia(id: int, data: ProvinciaUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.update_provincia(db, id, data)
     if not result:
@@ -88,16 +89,17 @@ def actualizar_provincia(id: int, data: ProvinciaUpdate, db: Session = Depends(g
     return result
 
 
-@router.delete("/provincias/{id}", response_model=MessageResponse)
+@router.delete("/provincias/{id}", response_model=MessageResponse, tags=[TAG])
 def eliminar_provincia(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_provincia(db, id):
         raise HTTPException(status_code=404, detail="Provincia no encontrada")
     return MessageResponse(message="Provincia eliminada")
 
 
-# ── MUNICIPIOS ──
+TAG = "Geografía > Municipios"
 
-@router.get("/municipios", response_model=list[MunicipioResponse])
+
+@router.get("/municipios", response_model=list[MunicipioResponse], tags=[TAG])
 def listar_municipios(
     id_provincia: int | None = Query(None),
     id_departamento: int | None = Query(None),
@@ -107,7 +109,7 @@ def listar_municipios(
     return service.get_municipios(db, id_provincia, id_departamento)
 
 
-@router.get("/municipios/{id}", response_model=MunicipioResponse)
+@router.get("/municipios/{id}", response_model=MunicipioResponse, tags=[TAG])
 def obtener_municipio(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_municipio(db, id)
     if not result:
@@ -115,7 +117,7 @@ def obtener_municipio(id: int, db: Session = Depends(get_db), _user=Depends(get_
     return result
 
 
-@router.post("/municipios", response_model=MunicipioResponse, status_code=201)
+@router.post("/municipios", response_model=MunicipioResponse, status_code=201, tags=[TAG])
 def crear_municipio(data: MunicipioCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         id = service.create_municipio(db, data)
@@ -124,7 +126,7 @@ def crear_municipio(data: MunicipioCreate, db: Session = Depends(get_db), _user=
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.put("/municipios/{id}", response_model=MunicipioResponse)
+@router.put("/municipios/{id}", response_model=MunicipioResponse, tags=[TAG])
 def actualizar_municipio(id: int, data: MunicipioUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.update_municipio(db, id, data)
     if not result:
@@ -132,7 +134,7 @@ def actualizar_municipio(id: int, data: MunicipioUpdate, db: Session = Depends(g
     return result
 
 
-@router.delete("/municipios/{id}", response_model=MessageResponse)
+@router.delete("/municipios/{id}", response_model=MessageResponse, tags=[TAG])
 def eliminar_municipio(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_municipio(db, id):
         raise HTTPException(status_code=404, detail="Municipio no encontrado")
