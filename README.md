@@ -79,7 +79,8 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 10.10.10.220
 
 ## Documentación
 
-Ver `docs/EDAN_BD.md` para documentación completa de la BD (esquemas, tablas, relaciones, ejemplos SQL).
+- `docs/EDAN_BD.md` - Documentación completa de la BD (esquemas, tablas, relaciones, SQL)
+- `docs/DESPLIEGUE_API.md` - Guía de despliegue de la API y acceso externo desde internet
 
 ---
 
