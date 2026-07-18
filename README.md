@@ -4,23 +4,35 @@ Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-e
 
 ---
 
-## Desplegar desde cero
+## Desplegar desde cero (entorno vacío)
 
 ```bash
-sudo bash setup.sh
+sudo bash deploy/desplegar_todo.sh
 ```
 
-Esto instala PostgreSQL, crea la BD y verifica todo automáticamente.
+Esto instala PostgreSQL, Python, crea la BD completa con todos los datos, configura la API y la inicia.
 
----
+**Opciones:**
+```bash
+sudo bash deploy/desplegar_todo.sh              # Todo (BD + API)
+sudo bash deploy/desplegar_todo.sh --db-only    # Solo base de datos
+sudo bash deploy/desplegar_todo.sh --api-only   # Solo API (si PG ya está)
+sudo bash deploy/desplegar_todo.sh --tunnel     # Todo + Cloudflare tunnel público
+```
 
-## Restaurar BD (si ya tienes PostgreSQL instalado)
+## Restaurar solo BD (si ya tienes PostgreSQL)
 
 ```bash
 bash deploy/desplegar_bd.sh
 ```
 
----
+## Iniciar API
+
+```bash
+bash start_api.sh           # Local: http://localhost:8000/docs
+bash start_tunnel.sh        # + Tunnel público Cloudflare
+bash stop.sh                # Detener todo
+```
 
 ## Verificar
 
