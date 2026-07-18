@@ -198,12 +198,12 @@ echo ""
 echo "[7/7] Concediendo permisos..."
 
 # Permisos en todos los schemas
-for SCHEMA in public edan shared usuarios recursos rida sinb; do
+for SCHEMA in public edan shared usuarios rea recursos rida sinb; do
     sudo -u postgres psql -d $DB -c "GRANT ALL ON SCHEMA $SCHEMA TO $USER;" 2>/dev/null || true
 done
 
 # Permisos en tablas y secuencias de todos los schemas
-for SCHEMA in public edan shared usuarios recursos rida sinb; do
+for SCHEMA in public edan shared usuarios rea recursos rida sinb; do
     sudo -u postgres psql -d $DB -c "GRANT ALL ON ALL TABLES IN SCHEMA $SCHEMA TO $USER;" 2>/dev/null || true
     sudo -u postgres psql -d $DB -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA $SCHEMA TO $USER;" 2>/dev/null || true
 done
@@ -214,10 +214,10 @@ DO \$\$
 DECLARE
     r RECORD;
 BEGIN
-    FOR r IN SELECT schemaname, tablename FROM pg_tables WHERE schemaname IN ('edan','shared','usuarios') LOOP
+    FOR r IN SELECT schemaname, tablename FROM pg_tables WHERE schemaname IN ('edan','shared','usuarios','rea') LOOP
         EXECUTE 'ALTER TABLE ' || quote_ident(r.schemaname) || '.' || quote_ident(r.tablename) || ' OWNER TO $USER';
     END LOOP;
-    FOR r SELECT sequence_schema, sequence_name FROM information_schema.sequences WHERE sequence_schema IN ('edan','shared','usuarios') LOOP
+    FOR r SELECT sequence_schema, sequence_name FROM information_schema.sequences WHERE sequence_schema IN ('edan','shared','usuarios','rea') LOOP
         EXECUTE 'ALTER SEQUENCE ' || quote_ident(r.sequence_schema) || '.' || quote_ident(r.sequence_name) || ' OWNER TO $USER';
     END LOOP;
 END \$\$;
@@ -240,7 +240,8 @@ SELECT
     (SELECT COUNT(*) FROM shared.provincia) as provincias,
     (SELECT COUNT(*) FROM shared.municipio) as municipios,
     (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'edan') as tablas_edan,
-    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'usuarios') as tablas_usuarios
+    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'usuarios') as tablas_usuarios,
+    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'rea') as tablas_rea
 " 2>/dev/null || echo "ERROR")
 
 if echo "$RESULTADO" | grep -q "ERROR"; then
@@ -257,6 +258,9 @@ fi
 echo "  Departamentos: $(echo $RESULTADO | cut -d'|' -f1)"
 echo "  Provincias:    $(echo $RESULTADO | cut -d'|' -f2)"
 echo "  Municipios:    $(echo $RESULTADO | cut -d'|' -f3)"
+echo "  Tablas EDAN:   $(echo $RESULTADO | cut -d'|' -f4)"
+echo "  Tablas USR:    $(echo $RESULTADO | cut -d'|' -f5)"
+echo "  Tablas REA:    $(echo $RESULTADO | cut -d'|' -f6)"
 echo ""
 
 # Total de tablas

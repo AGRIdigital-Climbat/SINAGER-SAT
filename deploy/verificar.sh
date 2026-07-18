@@ -87,6 +87,15 @@ if [ "$SCHEMA_MODE" = "edan" ]; then
     ORDER BY table_name;
     " 2>/dev/null
 
+    echo ""
+    echo "    --- REA (schema rea) ---"
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -c "
+    SELECT 'Reportes Eventos' as tabla, COUNT(*) as total FROM rea.reporte_evento
+    UNION ALL SELECT 'Estados', COUNT(*) FROM rea.estado_reporte
+    UNION ALL SELECT 'Categorias', COUNT(*) FROM rea.afectacion_categoria
+    ORDER BY tabla;
+    " 2>/dev/null
+
 elif [ "$SCHEMA_MODE" = "public" ]; then
     echo ""
     echo "    --- PUBLIC ---"

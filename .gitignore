@@ -22,6 +22,9 @@ database/edan_db_backup_pre_multischema.sql
 node_modules/
 __pycache__/
 *.pyc
+venv/
+.venv/
+*.egg-info/
 
 # Archivos de IDE
 .vscode/

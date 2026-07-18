@@ -34,16 +34,17 @@ Una sola base de datos `db_sinagersat` con 6 esquemas que separan responsabilida
 ```
 PostgreSQL: db_sinagersat
 ├── shared   → Geografía (catálogos INE: departamento, provincia, municipio)
-├── users    → Gestión de usuarios (cuentas, roles, sesiones, permisos, auditoría)
+├── usuarios → Gestión de usuarios (cuentas, roles, sesiones, permisos, auditoría)
 ├── edan     → Formularios EDAN (23 tablas)
+├── rea      → Reportes de Eventos Adversos (4 tablas)
 ├── rida     → (vacío - futuro sistema RIDA)
 ├── sinb     → (vacío - futuro sistema SINB)
 └── recursos → (vacío - futura gestión de recursos)
 ```
 
-**Total de tablas:** 34  
-**Foreign Keys:** 30+  
-**Índices:** 25+
+**Total de tablas:** 38  
+**Foreign Keys:** 35+  
+**Índices:** 29+
 
 Las consultas entre esquemas son igual de rápidas que entre tablas del mismo schema
 (una sola conexión PostgreSQL, sin overhead de BDs separadas).
@@ -136,20 +137,16 @@ Sistema global de autenticación y autorización para todas las aplicaciones del
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id_usuario` | SERIAL PK | ID único |
-| `usuario` | VARCHAR(50) NOT NULL UNIQUE | Nombre de usuario (login) |
-| `email` | VARCHAR(200) NOT NULL UNIQUE | Correo electrónico |
-| `contrasena_hash` | VARCHAR(255) NOT NULL | Hash bcrypt de la contraseña |
-| `nombre_completo` | VARCHAR(200) NOT NULL | Nombre real del encuestador/responsable |
-| `cargo` | VARCHAR(100) | Cargo institucional (ej: Técnico UGR) |
-| `telefono` | VARCHAR(30) | Teléfono de contacto |
+| `usuario` | VARCHAR(100) NOT NULL UNIQUE | Nombre de usuario (login) |
+| `contrasena` | VARCHAR(255) NOT NULL | Hash de la contraseña |
+| `nombre` | VARCHAR(200) NOT NULL | Nombre real del usuario |
+| `celular` | VARCHAR(30) | Teléfono/celular |
+| `carnet` | VARCHAR(30) | N° de carnet de identidad |
+| `comunidad` | VARCHAR(200) | Comunidad a la que pertenece |
+| `id_departamento` | INTEGER FK | Departamento (FK → shared.departamento.id) |
+| `id_provincia` | INTEGER FK | Provincia (FK → shared.provincia.id) |
+| `id_municipio` | INTEGER FK | Municipio (FK → shared.municipio.id) |
 | `activo` | BOOLEAN DEFAULT TRUE | Cuenta activa/inactiva |
-| `intentos_fallidos` | INTEGER DEFAULT 0 | Intentos de login fallidos |
-| `bloqueado_hasta` | TIMESTAMP | Bloqueo temporal por intentos |
-| `debe_cambiar_contrasena` | BOOLEAN DEFAULT TRUE | Obligar cambio en próximo login |
-| `ultimo_acceso` | TIMESTAMP | Último inicio de sesión |
-| `fecha_creacion` | TIMESTAMP DEFAULT NOW | Fecha de registro |
-| `creado_por` | INTEGER FK | Quién creó este usuario |
-| `fecha_actualizacion` | TIMESTAMP DEFAULT NOW | Última modificación |
 
 ### Estructura de `usuarios.rol`
 
@@ -265,6 +262,7 @@ Incluye la tabla padre `edan`, 17 tablas hijas por sección y 5 catálogos propi
 | `usuario_registro` | INTEGER FK | Usuario que registró (FK → usuarios.usuario.id_usuario) |
 | `fecha_registro` | TIMESTAMP | Auditoría |
 | `fecha_actualizacion` | TIMESTAMP | Auditoría |
+| `id_reporte_rea` | BIGINT FK | Reporte REA origen (FK → rea.reporte_evento.id_reporte, nullable) |
 
 ### Catálogos propios del formulario
 
@@ -516,6 +514,89 @@ Incluye la tabla padre `edan`, 17 tablas hijas por sección y 5 catálogos propi
 
 ---
 
+## Schema `rea` — Reportes de Eventos Adversos
+
+Sistema para que líderes comunitarios reporten eventos adversos antes de la evaluación EDAN completa.
+Permite registrar eventos desde el campo con información básica, que luego puede generar una EDAN.
+
+### Estructura de `rea.estado_reporte`
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_estado` | SERIAL PK | ID único |
+| `nombre` | VARCHAR(50) NOT NULL UNIQUE | Nombre del estado |
+| `descripcion` | VARCHAR(200) | Descripción del estado |
+| `orden` | INTEGER NOT NULL | Orden de visualización |
+
+**Estados por defecto:** Pendiente (1), Revisado (2), Atendido (3), Cerrado (4), Rechazado (5)
+
+### Estructura de `rea.afectacion_categoria`
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_categoria` | SERIAL PK | ID único |
+| `nombre` | VARCHAR(100) NOT NULL UNIQUE | Nombre de la categoría |
+| `descripcion` | VARCHAR(200) | Descripción de la categoría |
+| `orden` | INTEGER NOT NULL | Orden de visualización |
+
+**Categorías por defecto:** Población (1), Salud (2), Infraestructura (3), Servicios básicos (4), Educación (5), Vivienda (6), Agropecuario (7)
+
+### Estructura de `rea.reporte_evento`
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_reporte` | SERIAL PK | ID único del reporte |
+| `id_usuario` | INTEGER FK | Líder que reporta (FK → usuarios.usuario.id_usuario) |
+| `id_departamento` | INTEGER FK | Departamento (FK → shared.departamento.id) |
+| `id_provincia` | INTEGER FK | Provincia (FK → shared.provincia.id) |
+| `id_municipio` | INTEGER FK | Municipio (FK → shared.municipio.id) |
+| `comunidad` | VARCHAR(200) NOT NULL | Nombre de la comunidad |
+| `fecha_evento` | DATE NOT NULL | Fecha en que ocurrió el evento |
+| `hora_evento` | TIME | Hora aproximada del evento |
+| `fecha_reporte` | TIMESTAMP DEFAULT NOW | Fecha y hora del reporte |
+| `id_tipo_evento` | INTEGER FK | Tipo de evento (FK → edan.tipo_evento.id_tipo_evento) |
+| `coordenada_lat` | NUMERIC(10,8) | Latitud GPS |
+| `coordenada_lon` | NUMERIC(11,8) | Longitud GPS |
+| `fotografia` | VARCHAR(500) | Ruta/nombre del archivo de foto |
+| `descripcion` | TEXT | Descripción del evento |
+| `id_estado` | INTEGER FK | Estado del reporte (FK → rea.estado_reporte.id_estado) |
+
+### Estructura de `rea.reporte_afectacion` (tabla puente)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_reporte` | INTEGER FK PK | Reporte (FK → rea.reporte_evento.id_reporte, ON DELETE CASCADE) |
+| `id_categoria` | INTEGER FK PK | Categoría de afectación (FK → rea.afectacion_categoria.id_categoria) |
+
+### Relación REA → EDAN
+
+Un reporte REA puede generar un formulario EDAN completo. La relación se establece mediante el campo `edan.edan.id_reporte_rea`:
+- **NULL**: El EDAN fue creado directamente (sin reporte REA previo)
+- **Con valor**: El EDAN fue creado a partir del reporte REA indicado
+
+No se copia información del REA al EDAN; solo se establece la trazabilidad para saber de qué reporte surgió cada evaluación.
+
+### Árbol de relaciones REA
+
+```
+usuarios.usuario ←─ (FK: id_usuario en rea.reporte_evento)
+    │
+rea.reporte_evento
+    ├── FK → shared.departamento
+    ├── FK → shared.provincia
+    ├── FK → shared.municipio
+    ├── FK → edan.tipo_evento
+    ├── FK → rea.estado_reporte
+    │
+    └── rea.reporte_afectacion (puente N:M)
+         └── FK → rea.afectacion_categoria
+
+edan.edan
+    └── FK → rea.reporte_evento (nullable, id_reporte_rea)
+```
+
+---
+
 ## Consultas entre esquemas
 
 Las tablas de diferentes esquemas se consultan igual que si estuvieran en el mismo,
@@ -526,19 +607,32 @@ sin penalidad de rendimiento (una sola BD, un pool de conexiones):
 SELECT e.id_edan,
        d.nombre AS departamento,
        m.nombre AS municipio,
-       u.nombre_completo AS encuestador,
+       u.nombre AS encuestador,
        e.fecha_evento
 FROM edan.edan e
 JOIN shared.departamento d ON d.id = e.id_departamento
 JOIN shared.municipio m ON m.id = e.id_municipio
 JOIN usuarios.usuario u ON u.id_usuario = e.usuario_registro;
 
--- Obtener usuarios con sus roles
-SELECT u.usuario, u.nombre_completo, r.nombre AS rol
-FROM usuarios.usuario u
-JOIN usuarios.usuario_rol ur ON ur.id_usuario = u.id_usuario
-JOIN usuarios.rol r ON r.id_rol = ur.id_rol
-WHERE u.activo = true;
+-- Obtener reportes REA con ubicación y estado
+SELECT r.id_reporte,
+       r.comunidad,
+       d.nombre AS departamento,
+       m.nombre AS municipio,
+       t.nombre AS tipo_evento,
+       er.nombre AS estado,
+       r.fecha_evento,
+       r.descripcion
+FROM rea.reporte_evento r
+JOIN shared.departamento d ON d.id = r.id_departamento
+JOIN shared.municipio m ON m.id = r.id_municipio
+JOIN edan.tipo_evento t ON t.id_tipo_evento = r.id_tipo_evento
+JOIN rea.estado_reporte er ON er.id_estado = r.id_estado;
+
+-- EDANs que provienen de un reporte REA
+SELECT e.id_edan, e.codigo_edan, r.comunidad, r.fecha_evento
+FROM edan.edan e
+JOIN rea.reporte_evento r ON r.id_reporte = e.id_reporte_rea;
 ```
 
 ---
@@ -552,31 +646,39 @@ shared.departamento
     │
     └── shared.municipio (FK: id_provincia)
         │
-        └── edan.edan (FK: id_municipio, id_departamento)
+        ├── edan.edan (FK: id_municipio, id_departamento)
+        │    │
+        │    ├── edan.poblacion_grupo (FK: id_grupo_etario → edan.grupo_etario)
+        │    ├── edan.tipo_evento (FK: → edan.tipo_evento)
+        │    ├── edan.primera_respuesta (1:1)
+        │    ├── edan.salud_establecimiento (1:N)
+        │    ├── edan.salud_necesidades (1:1)
+        │    ├── edan.infraestructura_vial (1:N)
+        │    ├── edan.infraestructura_publica (1:N)
+        │    ├── edan.servicio_basico (FK: → edan.servicio_basico)
+        │    ├── edan.educacion_dano (1:N)
+        │    ├── edan.educacion_afectacion (1:N, FK → edan.educacion_dano)
+        │    ├── edan.vivienda (1:N)
+        │    ├── edan.agricultura (1:N)
+        │    ├── edan.pecuaria (1:N)
+        │    ├── edan.infraestructura_productiva (1:N)
+        │    ├── edan.proteccion (FK: → edan.categoria_proteccion)
+        │    ├── edan.ayuda_humanitaria (FK: → edan.ayuda_humanitaria)
+        │    ├── edan.comunidad (1:N)
+        │    └── FK → rea.reporte_evento (nullable: id_reporte_rea)
+        │
+        └── rea.reporte_evento (FK: id_municipio, id_departamento)
              │
-             ├── edan.poblacion_grupo (FK: id_grupo_etario → sinagersat.grupo_etario)
-             ├── edan.tipo_evento (FK: → edan.tipo_evento)
-             ├── edan.primera_respuesta (1:1)
-             ├── edan.salud_establecimiento (1:N)
-             ├── edan.salud_necesidades (1:1)
-             ├── edan.infraestructura_vial (1:N)
-             ├── edan.infraestructura_publica (1:N)
-             ├── edan.servicio_basico (FK: → edan.servicio_basico)
-             ├── edan.educacion_dano (1:N)
-             ├── edan.educacion_afectacion (1:N, FK → edan.educacion_dano)
-             ├── edan.vivienda (1:N)
-             ├── edan.agricultura (1:N)
-             ├── edan.pecuaria (1:N)
-             ├── edan.infraestructura_productiva (1:N)
-             ├── edan.proteccion (FK: → sinagersat.categoria_proteccion)
-             ├── edan.ayuda_humanitaria (FK: → edan.ayuda_humanitaria)
-             └── edan.comunidad (1:N)
-                  │
-usuarios.usuario ←─ (FK: usuario_registro en edan.edan)
+             ├── FK → edan.tipo_evento
+             ├── FK → rea.estado_reporte
+             ├── FK → usuarios.usuario (id_usuario)
+             │
+             └── rea.reporte_afectacion (puente N:M)
+                  └── FK → rea.afectacion_categoria
+
+usuarios.usuario ←── (FK: usuario_registro en edan.edan, id_usuario en rea.reporte_evento)
     │
     └── usuarios.usuario_rol → usuarios.rol
-                              │
-                              └── usuarios.permiso_aplicacion → usuarios.aplicacion
 ```
 
 ---
@@ -617,6 +719,12 @@ cur.execute("""
     SELECT e.* FROM edan.edan e
     JOIN shared.municipio m ON m.id = e.id_municipio
 """)
+# Consultar reportes REA
+cur.execute("""
+    SELECT r.*, t.nombre AS tipo_evento
+    FROM rea.reporte_evento r
+    JOIN edan.tipo_evento t ON t.id_tipo_evento = r.id_tipo_evento
+""")
 ```
 
 ### Node.js (pg)
@@ -637,6 +745,14 @@ const result = await pool.query(`
   FROM edan.edan e
   JOIN shared.departamento d ON d.id = e.id_departamento
   JOIN shared.municipio m ON m.id = e.id_municipio
+`);
+
+// Consultar reportes REA
+const reaResult = await pool.query(`
+  SELECT r.comunidad, t.nombre AS tipo_evento, er.nombre AS estado
+  FROM rea.reporte_evento r
+  JOIN edan.tipo_evento t ON t.id_tipo_evento = r.id_tipo_evento
+  JOIN rea.estado_reporte er ON er.id_estado = r.id_estado
 `);
 ```
 

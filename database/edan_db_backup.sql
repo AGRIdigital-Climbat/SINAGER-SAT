@@ -274,7 +274,8 @@ CREATE TABLE edan.edan (
     email_responsable character varying(150),
     usuario_registro integer,
     fecha_registro timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    fecha_actualizacion timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    fecha_actualizacion timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    id_reporte_rea bigint
 );
 
 
@@ -1390,20 +1391,16 @@ ALTER SEQUENCE usuarios.sesion_id_sesion_seq OWNED BY usuarios.sesion.id_sesion;
 
 CREATE TABLE usuarios.usuario (
     id_usuario integer NOT NULL,
-    usuario character varying(50) NOT NULL,
-    email character varying(200) NOT NULL,
-    contrasena_hash character varying(255) NOT NULL,
-    nombre_completo character varying(200) NOT NULL,
-    cargo character varying(100),
-    telefono character varying(30),
-    activo boolean DEFAULT true,
-    intentos_fallidos integer DEFAULT 0,
-    bloqueado_hasta timestamp without time zone,
-    debe_cambiar_contrasena boolean DEFAULT true,
-    ultimo_acceso timestamp without time zone,
-    fecha_creacion timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    creado_por integer,
-    fecha_actualizacion timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    usuario character varying(100) NOT NULL,
+    contrasena character varying(255) NOT NULL,
+    nombre character varying(200) NOT NULL,
+    celular character varying(30),
+    carnet character varying(30),
+    comunidad character varying(200),
+    id_departamento integer,
+    id_provincia integer,
+    id_municipio integer,
+    activo boolean DEFAULT true
 );
 
 
@@ -3448,6 +3445,14 @@ ALTER TABLE ONLY edan.edan
 
 
 --
+-- Name: edan edan_id_reporte_rea_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: postgres
+--
+
+ALTER TABLE ONLY edan.edan
+    ADD CONSTRAINT edan_id_reporte_rea_fkey FOREIGN KEY (id_reporte_rea) REFERENCES rea.reporte_evento(id_reporte);
+
+
+--
 -- Name: edan_vivienda edan_vivienda_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: postgres
 --
 
@@ -3878,6 +3883,391 @@ GRANT ALL ON TABLE edan.edan_vivienda TO sinagersat;
 --
 
 GRANT ALL ON SEQUENCE edan.edan_vivienda_id_vivienda_seq TO sinagersat;
+
+
+--
+-- Name: rea; Type: SCHEMA; Schema: -; Owner: sinagersat
+--
+
+CREATE SCHEMA rea;
+
+
+ALTER SCHEMA rea OWNER TO sinagersat;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: estado_reporte; Type: TABLE; Schema: rea; Owner: sinagersat
+--
+
+CREATE TABLE rea.estado_reporte (
+    id_estado integer NOT NULL,
+    nombre character varying(50) NOT NULL,
+    descripcion character varying(200),
+    orden integer NOT NULL
+);
+
+
+ALTER TABLE rea.estado_reporte OWNER TO sinagersat;
+
+--
+-- Name: estado_reporte_id_estado_seq; Type: SEQUENCE; Schema: rea; Owner: sinagersat
+--
+
+CREATE SEQUENCE rea.estado_reporte_id_estado_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE rea.estado_reporte_id_estado_seq OWNER TO sinagersat;
+
+--
+-- Name: estado_reporte_id_estado_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: sinagersat
+--
+
+ALTER SEQUENCE rea.estado_reporte_id_estado_seq OWNED BY rea.estado_reporte.id_estado;
+
+
+--
+-- Name: afectacion_categoria; Type: TABLE; Schema: rea; Owner: sinagersat
+--
+
+CREATE TABLE rea.afectacion_categoria (
+    id_categoria integer NOT NULL,
+    nombre character varying(100) NOT NULL,
+    descripcion character varying(200),
+    orden integer NOT NULL
+);
+
+
+ALTER TABLE rea.afectacion_categoria OWNER TO sinagersat;
+
+--
+-- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE; Schema: rea; Owner: sinagersat
+--
+
+CREATE SEQUENCE rea.afectacion_categoria_id_categoria_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE rea.afectacion_categoria_id_categoria_seq OWNER TO sinagersat;
+
+--
+-- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: sinagersat
+--
+
+ALTER SEQUENCE rea.afectacion_categoria_id_categoria_seq OWNED BY rea.afectacion_categoria.id_categoria;
+
+
+--
+-- Name: reporte_evento; Type: TABLE; Schema: rea; Owner: sinagersat
+--
+
+CREATE TABLE rea.reporte_evento (
+    id_reporte bigint NOT NULL,
+    id_usuario integer NOT NULL,
+    id_departamento integer NOT NULL,
+    id_provincia integer NOT NULL,
+    id_municipio integer NOT NULL,
+    comunidad character varying(200) NOT NULL,
+    fecha_evento date NOT NULL,
+    hora_evento time without time zone,
+    fecha_reporte timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    id_tipo_evento integer NOT NULL,
+    coordenada_lat numeric(10,8),
+    coordenada_lon numeric(11,8),
+    fotografia character varying(500),
+    descripcion text,
+    id_estado integer NOT NULL
+);
+
+
+ALTER TABLE rea.reporte_evento OWNER TO sinagersat;
+
+--
+-- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE; Schema: rea; Owner: sinagersat
+--
+
+CREATE SEQUENCE rea.reporte_evento_id_reporte_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE rea.reporte_evento_id_reporte_seq OWNER TO sinagersat;
+
+--
+-- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: sinagersat
+--
+
+ALTER SEQUENCE rea.reporte_evento_id_reporte_seq OWNED BY rea.reporte_evento.id_reporte;
+
+
+--
+-- Name: reporte_afectacion; Type: TABLE; Schema: rea; Owner: sinagersat
+--
+
+CREATE TABLE rea.reporte_afectacion (
+    id_reporte bigint NOT NULL,
+    id_categoria integer NOT NULL
+);
+
+
+ALTER TABLE rea.reporte_afectacion OWNER TO sinagersat;
+
+--
+-- Name: afectacion_categoria PK; Type: DEFAULT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.afectacion_categoria ALTER COLUMN id_categoria SET DEFAULT nextval('rea.afectacion_categoria_id_categoria_seq'::regclass);
+
+
+--
+-- Name: estado_reporte PK; Type: DEFAULT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.estado_reporte ALTER COLUMN id_estado SET DEFAULT nextval('rea.estado_reporte_id_estado_seq'::regclass);
+
+
+--
+-- Name: reporte_evento PK; Type: DEFAULT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento ALTER COLUMN id_reporte SET DEFAULT nextval('rea.reporte_evento_id_reporte_seq'::regclass);
+
+
+--
+-- Data for Name: estado_reporte; Type: TABLE DATA; Schema: rea; Owner: sinagersat
+--
+
+INSERT INTO rea.estado_reporte (nombre, descripcion, orden) VALUES
+    ('Pendiente', 'Reporte nuevo, sin revisar', 1),
+    ('Revisado', 'Revisado por UGR, pendiente de acción', 2),
+    ('Atendido', 'Acción tomada, en proceso', 3),
+    ('Cerrado', 'Resuelto y documentado', 4),
+    ('Rechazado', 'No procede o dato falso', 5);
+
+
+--
+-- Data for Name: afectacion_categoria; Type: TABLE DATA; Schema: rea; Owner: sinagersat
+--
+
+INSERT INTO rea.afectacion_categoria (nombre, descripcion, orden) VALUES
+    ('Población', 'Afectación a personas y comunidades', 1),
+    ('Salud', 'Afectación a establecimientos de salud y servicios', 2),
+    ('Infraestructura', 'Daños en infraestructura pública y vial', 3),
+    ('Servicios básicos', 'Interrupción de servicios esenciales', 4),
+    ('Educación', 'Afectación a unidades educativas', 5),
+    ('Vivienda', 'Daños en viviendas particulares', 6),
+    ('Agropecuario', 'Pérdidas en agricultura y ganadería', 7);
+
+
+--
+-- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE SET; Schema: rea; Owner: sinagersat
+--
+
+SELECT pg_catalog.setval('rea.reporte_evento_id_reporte_seq', 1, false);
+
+
+--
+-- Name: estado_reporte_id_estado_seq; Type: SEQUENCE SET; Schema: rea; Owner: sinagersat
+--
+
+SELECT pg_catalog.setval('rea.estado_reporte_id_estado_seq', 5, true);
+
+
+--
+-- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE SET; Schema: rea; Owner: sinagersat
+--
+
+SELECT pg_catalog.setval('rea.afectacion_categoria_id_categoria_seq', 7, true);
+
+
+--
+-- Name: reporte_evento reporte_evento_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_pkey PRIMARY KEY (id_reporte);
+
+
+--
+-- Name: reporte_afectacion reporte_afectacion_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_afectacion
+    ADD CONSTRAINT reporte_afectacion_pkey PRIMARY KEY (id_reporte, id_categoria);
+
+
+--
+-- Name: estado_reporte estado_reporte_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.estado_reporte
+    ADD CONSTRAINT estado_reporte_pkey PRIMARY KEY (id_estado);
+
+
+--
+-- Name: afectacion_categoria afectacion_categoria_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.afectacion_categoria
+    ADD CONSTRAINT afectacion_categoria_pkey PRIMARY KEY (id_categoria);
+
+
+--
+-- Name: idx_reporte_estado; Type: INDEX; Schema: rea; Owner: sinagersat
+--
+
+CREATE INDEX idx_reporte_estado ON rea.reporte_evento USING btree (id_estado);
+
+
+--
+-- Name: idx_reporte_municipio; Type: INDEX; Schema: rea; Owner: sinagersat
+--
+
+CREATE INDEX idx_reporte_municipio ON rea.reporte_evento USING btree (id_municipio);
+
+
+--
+-- Name: idx_reporte_fecha; Type: INDEX; Schema: rea; Owner: sinagersat
+--
+
+CREATE INDEX idx_reporte_fecha ON rea.reporte_evento USING btree (fecha_reporte);
+
+
+--
+-- Name: idx_reporte_usuario; Type: INDEX; Schema: rea; Owner: sinagersat
+--
+
+CREATE INDEX idx_reporte_usuario ON rea.reporte_evento USING btree (id_usuario);
+
+
+--
+-- Name: reporte_evento reporte_evento_id_usuario_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES usuarios.usuario(id_usuario);
+
+
+--
+-- Name: reporte_evento reporte_evento_id_departamento_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_id_departamento_fkey FOREIGN KEY (id_departamento) REFERENCES shared.departamento(id);
+
+
+--
+-- Name: reporte_evento reporte_evento_id_provincia_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_id_provincia_fkey FOREIGN KEY (id_provincia) REFERENCES shared.provincia(id);
+
+
+--
+-- Name: reporte_evento reporte_evento_id_municipio_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_id_municipio_fkey FOREIGN KEY (id_municipio) REFERENCES shared.municipio(id);
+
+
+--
+-- Name: reporte_evento reporte_evento_id_tipo_evento_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_id_tipo_evento_fkey FOREIGN KEY (id_tipo_evento) REFERENCES edan.tipo_evento(id_tipo_evento);
+
+
+--
+-- Name: reporte_evento reporte_evento_id_estado_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_evento
+    ADD CONSTRAINT reporte_evento_id_estado_fkey FOREIGN KEY (id_estado) REFERENCES rea.estado_reporte(id_estado);
+
+
+--
+-- Name: reporte_afectacion reporte_afectacion_id_reporte_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_afectacion
+    ADD CONSTRAINT reporte_afectacion_id_reporte_fkey FOREIGN KEY (id_reporte) REFERENCES rea.reporte_evento(id_reporte) ON DELETE CASCADE;
+
+
+--
+-- Name: reporte_afectacion reporte_afectacion_id_categoria_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
+--
+
+ALTER TABLE ONLY rea.reporte_afectacion
+    ADD CONSTRAINT reporte_afectacion_id_categoria_fkey FOREIGN KEY (id_categoria) REFERENCES rea.afectacion_categoria(id_categoria);
+
+
+--
+-- Name: TABLE estado_reporte; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON TABLE rea.estado_reporte TO sinagersat;
+
+
+--
+-- Name: SEQUENCE estado_reporte_id_estado_seq; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON SEQUENCE rea.estado_reporte_id_estado_seq TO sinagersat;
+
+
+--
+-- Name: TABLE afectacion_categoria; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON TABLE rea.afectacion_categoria TO sinagersat;
+
+
+--
+-- Name: SEQUENCE afectacion_categoria_id_categoria_seq; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON SEQUENCE rea.afectacion_categoria_id_categoria_seq TO sinagersat;
+
+
+--
+-- Name: TABLE reporte_evento; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON TABLE rea.reporte_evento TO sinagersat;
+
+
+--
+-- Name: SEQUENCE reporte_evento_id_reporte_seq; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON SEQUENCE rea.reporte_evento_id_reporte_seq TO sinagersat;
+
+
+--
+-- Name: TABLE reporte_afectacion; Type: ACL; Schema: rea; Owner: sinagersat
+--
+
+GRANT ALL ON TABLE rea.reporte_afectacion TO sinagersat;
 
 
 --
