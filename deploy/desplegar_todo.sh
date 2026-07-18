@@ -408,77 +408,87 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+CYAN="\033[0;36m"; VERDE="\033[0;32m"; ROJO="\033[0;31m"; AMARILLO="\033[1;33m"; BOLD="\033[1m"; SIN_COLOR="\033[0m"
+
 echo ""
-echo "  SINAGERSAT API + Cloudflare Tunnel"
+echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
+echo -e "${CYAN}${BOLD}  SINAGERSAT API + Cloudflare Tunnel${SIN_COLOR}"
+echo -e "${CYAN}${BOLD}  Acceso externo desde internet${SIN_COLOR}"
+echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
 echo ""
 
-# Verificar/crear venv
 if [ ! -d "venv" ]; then
-    echo "Creando entorno virtual..."
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
+    python3 -m venv venv && source venv/bin/activate && pip install -q -r requirements.txt
 else
     source venv/bin/activate
 fi
 
-# Matar procesos anteriores
+if ! command -v cloudflared &>/dev/null; then
+    echo -e "${AMARILLO}[!]${SIN_COLOR} Instalando cloudflared..."
+    curl -L --output /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb 2>/dev/null
+    sudo dpkg -i /tmp/cloudflared.deb 2>/dev/null
+    rm -f /tmp/cloudflared.deb
+fi
+
 pkill -f "uvicorn api.main" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
 
-# Verificar cloudflared
-if ! command -v cloudflared &>/dev/null; then
-    echo "  Instalando cloudflared..."
-    curl -L --output /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb 2>/dev/null
-    dpkg -i /tmp/cloudflared.deb 2>/dev/null
-    rm -f /tmp/cloudflared.deb
-fi
-
-echo "[1/2] Iniciando API en puerto 8000..."
+echo -e "${BOLD}[1/3]${SIN_COLOR} Iniciando API..."
 uvicorn api.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
 API_PID=$!
 sleep 3
 
 if ! curl -s http://127.0.0.1:8000/ > /dev/null 2>&1; then
-    echo "ERROR: La API no pudo iniciarse"
-    cat /tmp/uvicorn.log | tail -5
-    exit 1
+    echo -e "${ROJO}[ERROR]${SIN_COLOR} La API no pudo iniciarse"; cat /tmp/uvicorn.log | tail -5; exit 1
 fi
-echo "  API corriendo (PID: $API_PID)"
+echo -e "  ${VERDE}[OK]${SIN_COLOR} API corriendo (PID: $API_PID)"
 
-echo "[2/2] Iniciando Cloudflare Quick Tunnel..."
+echo -e "${BOLD}[2/3]${SIN_COLOR} Iniciando Cloudflare Quick Tunnel..."
 cloudflared tunnel --url http://localhost:8000 > /tmp/cloudflared.log 2>&1 &
 TUNNEL_PID=$!
-sleep 8
 
-TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | head -1)
+TUNNEL_URL=""
+for i in $(seq 1 15); do
+    TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1)
+    [ -n "$TUNNEL_URL" ] && break
+    sleep 1
+done
 
 if [ -z "$TUNNEL_URL" ]; then
-    echo "ERROR: No se pudo obtener la URL del tunnel"
-    cat /tmp/cloudflared.log | tail -10
-    kill $API_PID 2>/dev/null
-    exit 1
+    echo -e "${ROJO}[ERROR]${SIN_COLOR} No se pudo obtener la URL del tunnel"; kill $API_PID 2>/dev/null; exit 1
 fi
+echo -e "  ${VERDE}[OK]${SIN_COLOR} Tunnel activo (PID: $TUNNEL_PID)"
+
+echo -e "${BOLD}[3/3]${SIN_COLOR} Verificando acceso externo..."
+sleep 2
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$TUNNEL_URL/" 2>/dev/null)
+[ "$HTTP_CODE" = "200" ] && echo -e "  ${VERDE}[OK]${SIN_COLOR} Acceso externo verificado" || echo -e "  ${AMARILLO}[!]${SIN_COLOR} HTTP: $HTTP_CODE (puede estar propagándose)"
+
+echo "$TUNNEL_URL" > /tmp/sinagersat_url.txt
 
 echo ""
-echo "================================================"
-echo "  SERVIDOR ACTIVO"
-echo "================================================"
+echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
+echo -e "${CYAN}${BOLD}  SERVIDOR SINAGERSAT ACTIVO${SIN_COLOR}"
+echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
 echo ""
-echo "  Local:     http://localhost:8000"
-echo "  Tunnel:    $TUNNEL_URL"
-echo "  Docs:      $TUNNEL_URL/docs"
-echo "  API Docs:  $TUNNEL_URL/redoc"
+echo -e "  ${BOLD}LOCAL:${SIN_COLOR}"
+echo "    API:       http://localhost:8000"
+echo "    Swagger:   http://localhost:8000/docs"
+echo "    ReDoc:     http://localhost:8000/redoc"
 echo ""
-echo "  API PID:   $API_PID"
-echo "  Tunnel PID: $TUNNEL_PID"
+echo -e "  ${BOLD}ACCESO EXTERNO (desde internet):${SIN_COLOR}"
+echo -e "    ${VERDE}$TUNNEL_URL${SIN_COLOR}"
 echo ""
-echo "  Para detener: kill $API_PID $TUNNEL_PID"
+echo -e "    ${BOLD}Swagger:${SIN_COLOR}  $TUNNEL_URL/docs"
+echo -e "    ${BOLD}ReDoc:${SIN_COLOR}    $TUNNEL_URL/redoc"
+echo -e "    ${BOLD}Health:${SIN_COLOR}   $TUNNEL_URL/health"
 echo ""
-echo "  Logs:"
-echo "    API:     tail -f /tmp/uvicorn.log"
-echo "    Tunnel:  tail -f /tmp/cloudflared.log"
+echo -e "  ${BOLD}Comparte esta URL:${SIN_COLOR}"
+echo -e "    ${VERDE}$TUNNEL_URL${SIN_COLOR}"
+echo ""
+echo -e "  ${BOLD}DETENER:${SIN_COLOR} kill $API_PID $TUNNEL_PID"
+echo -e "  ${BOLD}LOGS:${SIN_COLOR}   tail -f /tmp/uvicorn.log | tail -f /tmp/cloudflared.log"
 echo ""
 
 echo "$API_PID $TUNNEL_PID" > /tmp/sinagersat_pids.txt
@@ -538,7 +548,7 @@ if [ "$MODE" = "tunnel" ]; then
         rm -f /tmp/cloudflared.deb
         ok "cloudflared instalado"
     else
-        ok "cloudflared ya instalado"
+        ok "cloudflared ya instalado ($(cloudflared --version 2>/dev/null | head -1))"
     fi
 
     # Iniciar tunnel
@@ -546,12 +556,22 @@ if [ "$MODE" = "tunnel" ]; then
     sleep 1
     cloudflared tunnel --url "http://localhost:$API_PORT" > /tmp/cloudflared.log 2>&1 &
     TUNNEL_PID=$!
-    sleep 8
 
-    TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | head -1)
+    # Esperar URL con reintentos
+    TUNNEL_URL=""
+    for i in $(seq 1 20); do
+        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1)
+        [ -n "$TUNNEL_URL" ] && break
+        sleep 1
+    done
 
     if [ -n "$TUNNEL_URL" ]; then
+        # Verificar acceso externo
+        sleep 2
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$TUNNEL_URL/" 2>/dev/null)
         ok "Tunnel activo: $TUNNEL_URL"
+        [ "$HTTP_CODE" = "200" ] && ok "Acceso externo verificado" || warn "HTTP $HTTP_CODE (puede estar propagándose)"
+        echo "$TUNNEL_URL" > /tmp/sinagersat_url.txt
         echo "$TUNNEL_PID" > /tmp/sinagersat_tunnel_pid.txt
     else
         warn "No se pudo obtener la URL del tunnel"
