@@ -29,7 +29,7 @@ def obtener_usuario(id: int, db: Session = Depends(get_db), _user=Depends(get_cu
 
 
 @router.post("/", response_model=UsuarioResponse, status_code=201, tags=[TAG_USR])
-def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db)):
     try:
         id = service.create_usuario(db, data.model_dump())
         return service.get_usuario(db, id)
