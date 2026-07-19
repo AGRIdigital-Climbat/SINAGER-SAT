@@ -8,6 +8,8 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     result = db.execute(
         text("""
             SELECT u.id_usuario, u.usuario, u.nombre, u.contrasena, u.activo, u.id_rol,
+                   u.celular, u.carnet, u.comunidad,
+                   u.id_departamento, u.id_provincia, u.id_municipio,
                    r.nombre as rol
             FROM usuarios.usuario u
             LEFT JOIN usuarios.rol r ON u.id_rol = r.id_rol
@@ -29,8 +31,15 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         "user_id": user["id_usuario"],
         "usuario": user["usuario"],
         "nombre": user["nombre"],
+        "celular": user["celular"],
+        "carnet": user["carnet"],
+        "comunidad": user["comunidad"],
+        "id_departamento": user["id_departamento"],
+        "id_provincia": user["id_provincia"],
+        "id_municipio": user["id_municipio"],
         "id_rol": user["id_rol"],
         "rol": user["rol"],
+        "activo": user["activo"],
     }
 
 
