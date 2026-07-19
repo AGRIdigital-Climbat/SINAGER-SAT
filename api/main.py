@@ -1,11 +1,15 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from .auth.router import router as auth_router
 from .shared.router import router as shared_router
 from .edan.router import router as edan_router
 from .rea.router import router as rea_router
 from .usuarios.router import router as usuarios_router
+from .upload import router as upload_router
 
 TAGS_METADATA = [
     {"name": "Auth",                    "description": "Login y registro de usuarios (JWT)"},
@@ -33,6 +37,7 @@ TAGS_METADATA = [
     {"name": "Usuarios > Permisos",     "description": "Asignación de permisos por rol y aplicación"},
     {"name": "Usuarios > Sesiones",     "description": "Sesiones activas de usuarios"},
     {"name": "Usuarios > Auditoría",    "description": "Log de auditoría y resets de contraseña"},
+    {"name": "Upload",                  "description": "Subida de archivos (imágenes)"},
 ]
 
 app = FastAPI(
@@ -59,7 +64,7 @@ app = FastAPI(
         "- **REA**: Reportes de Eventos Adversos (requiere token)\n"
         "- **Usuarios**: Gestión de cuentas, roles y permisos (requiere token)\n"
     ),
-    version="1.2.0",
+    version="1.2.1",
     openapi_tags=TAGS_METADATA,
 )
 
@@ -76,6 +81,11 @@ app.include_router(shared_router, prefix="/api/v1")
 app.include_router(edan_router, prefix="/api/v1")
 app.include_router(rea_router, prefix="/api/v1")
 app.include_router(usuarios_router, prefix="/api/v1")
+app.include_router(upload_router, prefix="/api/v1")
+
+uploads_dir = Path(__file__).parent.parent / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 
 @app.exception_handler(Exception)
@@ -133,7 +143,7 @@ app.openapi = custom_openapi
 def root():
     return {
         "name": "SINAGERSAT API",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "docs": "/docs",
         "redoc": "/redoc",
     }
