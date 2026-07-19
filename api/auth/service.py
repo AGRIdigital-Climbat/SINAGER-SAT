@@ -41,6 +41,13 @@ def register_user(db: Session, data: RegisterRequest) -> int:
     ).first()
     if existing:
         raise ValueError("El usuario ya existe")
+    if data.carnet:
+        existing_carnet = db.execute(
+            text("SELECT id_usuario FROM usuarios.usuario WHERE carnet = :c"),
+            {"c": data.carnet},
+        ).first()
+        if existing_carnet:
+            raise ValueError("El número de carnet ya está registrado")
     hashed = hash_password(data.contrasena)
     result = db.execute(
         text("""

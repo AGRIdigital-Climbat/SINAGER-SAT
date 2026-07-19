@@ -162,7 +162,10 @@ CREATE TABLE edan (
     -- Auditoría
     usuario_registro VARCHAR(50),
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Fotografía (base64)
+    fotografia TEXT
 );
 
 

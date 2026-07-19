@@ -32,6 +32,7 @@ class EdanCreate(BaseModel):
     email_responsable: str | None = None
     usuario_registro: int | None = None
     id_reporte_rea: int | None = None
+    fotografia: str | None = None
 
 
 class EdanUpdate(BaseModel):
@@ -52,6 +53,7 @@ class EdanUpdate(BaseModel):
     telefono_responsable: str | None = None
     email_responsable: str | None = None
     id_reporte_rea: int | None = None
+    fotografia: str | None = None
 
 
 class EdanResponse(BaseModel):
@@ -74,6 +76,7 @@ class EdanResponse(BaseModel):
     email_responsable: str | None = None
     usuario_registro: int | None = None
     id_reporte_rea: int | None = None
+    fotografia: str | None = None
     departamento: EdanDepartamento | None = None
     municipio: EdanMunicipio | None = None
 

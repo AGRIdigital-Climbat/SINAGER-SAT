@@ -143,12 +143,12 @@ def create_edan(db: Session, data: dict) -> int:
                 telefono_alcalde, fecha_llenado, fecha_evento, hora_evento, localidades_afectadas,
                 total_poblacion_afectada, total_familias_afectadas, total_familias_damnificadas,
                 nombre_responsable, cargo_responsable, telefono_responsable, email_responsable,
-                usuario_registro, id_reporte_rea)
+                usuario_registro, id_reporte_rea, fotografia)
             VALUES (:codigo_edan, :id_departamento, :id_municipio, :nombre_alcalde,
                 :telefono_alcalde, :fecha_llenado, :fecha_evento, :hora_evento, :localidades_afectadas,
                 :total_poblacion_afectada, :total_familias_afectadas, :total_familias_damnificadas,
                 :nombre_responsable, :cargo_responsable, :telefono_responsable, :email_responsable,
-                :usuario_registro, :id_reporte_rea)
+                :usuario_registro, :id_reporte_rea, :fotografia)
             RETURNING id_edan
         """),
         data,
