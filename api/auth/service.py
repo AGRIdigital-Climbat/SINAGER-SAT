@@ -10,9 +10,15 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
             SELECT u.id_usuario, u.usuario, u.nombre, u.contrasena, u.activo, u.id_rol,
                    u.celular, u.carnet, u.comunidad,
                    u.id_departamento, u.id_provincia, u.id_municipio,
-                   r.nombre as rol
+                   r.nombre as rol,
+                   d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
+                   prov.codigo_ine as prov_codigo_ine, prov.nombre as prov_nombre,
+                   m.codigo_ine as m_codigo_ine, m.nombre as m_nombre
             FROM usuarios.usuario u
             LEFT JOIN usuarios.rol r ON u.id_rol = r.id_rol
+            LEFT JOIN shared.departamento d ON u.id_departamento = d.id
+            LEFT JOIN shared.provincia prov ON u.id_provincia = prov.id
+            LEFT JOIN shared.municipio m ON u.id_municipio = m.id
             WHERE u.usuario = :u
         """),
         {"u": data.usuario},
@@ -34,9 +40,21 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         "celular": user["celular"],
         "carnet": user["carnet"],
         "comunidad": user["comunidad"],
-        "id_departamento": user["id_departamento"],
-        "id_provincia": user["id_provincia"],
-        "id_municipio": user["id_municipio"],
+        "departamento": {
+            "id": user["id_departamento"],
+            "codigo_ine": user["d_codigo_ine"],
+            "nombre": user["d_nombre"],
+        } if user["id_departamento"] else None,
+        "provincia": {
+            "id": user["id_provincia"],
+            "codigo_ine": user["prov_codigo_ine"],
+            "nombre": user["prov_nombre"],
+        } if user["id_provincia"] else None,
+        "municipio": {
+            "id": user["id_municipio"],
+            "codigo_ine": user["m_codigo_ine"],
+            "nombre": user["m_nombre"],
+        } if user["id_municipio"] else None,
         "id_rol": user["id_rol"],
         "rol": user["rol"],
         "activo": user["activo"],
