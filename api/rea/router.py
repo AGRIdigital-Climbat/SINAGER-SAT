@@ -28,23 +28,27 @@ def listar_reportes(
 
 @router.get("/reportes/mis-resumen", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
 def mis_resumen(
+    id_usuario: int | None = Query(None),
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    data = service.get_mis_resumen(db, _user["id_usuario"])
+    uid = id_usuario if id_usuario else _user["id_usuario"]
+    data = service.get_mis_resumen(db, uid)
     return SuccessResponse(message="Resumen de reportes del usuario listado correctamente", data=data, total=len(data))
 
 
 @router.get("/reportes/mis-reportes", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
 def mis_reportes(
+    id_usuario: int | None = Query(None),
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    data = service.get_mis_reportes(db, _user["id_usuario"], skip, limit)
+    uid = id_usuario if id_usuario else _user["id_usuario"]
+    data = service.get_mis_reportes(db, uid, skip, limit)
     return SuccessResponse(message="Reportes del usuario listados correctamente", data=data, total=len(data))
 
 
