@@ -98,7 +98,10 @@ def descargar_archivo(
     path: str,
     _user=Depends(get_current_user),
 ):
-    filepath = Path(settings.UPLOAD_DIR) / path
+    clean_path = path.lstrip("/")
+    if clean_path.startswith("uploads/"):
+        clean_path = clean_path[len("uploads/"):]
+    filepath = Path(settings.UPLOAD_DIR) / clean_path
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     content_type = {
