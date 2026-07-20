@@ -1,0 +1,7 @@
+# Base de datos
+*.sql linguist-language=SQL
+*.sh linguist-language=Shell
+*.bat linguist-language=Batchfile
+
+# Configuración PostgreSQL
+*.conf linguist-language=INI
