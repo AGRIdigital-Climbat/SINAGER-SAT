@@ -31,3 +31,6 @@ venv/
 .idea/
 *.swp
 *.swo
+
+# Archivos subidos (imágenes, documentos)
+uploads/reports/

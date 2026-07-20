@@ -225,6 +225,8 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database
 
 Contenido:
 - Columna `id_rol` en `usuarios.usuario` con FK a `usuarios.rol`
+- UNIQUE constraint en `usuarios.usuario.carnet`
+- Columna `fotografia` en `edan.edan` (soporte de imágenes)
 - Esquema `rea` completo: `estado_reporte`, `afectacion_categoria`, `reporte_evento`, `reporte_afectacion`
 - Datos iniciales: 5 estados + 8 categorías de afectación
 - Índices para optimizar consultas
@@ -352,6 +354,7 @@ La API tiene **157 endpoints** v1.2.3 organizados en 6 módulos.
 │
 ├── edan/              # Formularios EDAN (🔒 requiere token)
 │   ├── GET/POST /           # Listar/Crear EDAN
+│   ├── POST /con-foto       # Crear EDAN + imagen (multipart)
 │   ├── GET/PUT/DELETE /{id} # Obtener/Actualizar/Eliminar
 │   ├── /{id}/poblacion-grupo
 │   ├── /{id}/tipos-evento
@@ -378,6 +381,7 @@ La API tiene **157 endpoints** v1.2.3 organizados en 6 módulos.
 │
 ├── rea/               # Reportes de Eventos Adversos (🔒 requiere token)
 │   ├── GET/POST /reportes          # Listar/Crear
+│   ├── POST /reportes/con-foto     # Crear reporte + imagen (multipart)
 │   ├── GET/PUT/DELETE /reportes/{id}
 │   ├── PUT /reportes/{id}/estado   # Cambiar estado
 │   ├── GET /reportes/mis-resumen   # Resumen (filtro por id_usuario opcional)
@@ -533,6 +537,43 @@ curl -X POST http://localhost:8000/api/v1/rea/reportes \
     "id_estado": 1,
     "categorias": [1, 3]
   }'
+```
+
+### Crear un reporte REA con imagen (un solo paso)
+
+```bash
+curl -X POST http://localhost:8000/api/v1/rea/reportes/con-foto \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@foto_inundacion.jpg" \
+  -F "id_usuario=1" \
+  -F "id_departamento=2" \
+  -F "id_provincia=201" \
+  -F "id_municipio=20101" \
+  -F "comunidad=Villa Fátima" \
+  -F "fecha_evento=2026-07-15" \
+  -F "hora_evento=14:30:00" \
+  -F "id_tipo_evento=1" \
+  -F "descripcion=Inundación en zona urbana" \
+  -F "categorias=[1,3]"
+```
+
+### Crear un EDAN con imagen (un solo paso)
+
+```bash
+curl -X POST http://localhost:8000/api/v1/edan/con-foto \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@foto_dano.jpg" \
+  -F "codigo_edan=EDAN-2026-001" \
+  -F "id_departamento=2" \
+  -F "id_municipio=20101" \
+  -F "nombre_alcalde=Juan Perez" \
+  -F "telefono_alcalde=70000000" \
+  -F "fecha_llenado=2026-07-18" \
+  -F "fecha_evento=2026-07-15" \
+  -F "localidades_afectadas=3" \
+  -F "total_poblacion_afectada=500" \
+  -F "nombre_responsable=Maria Garcia" \
+  -F "cargo_responsable=Directora DEDECA"
 ```
 
 ### Obtener EDAN completa (con sub-tablas)

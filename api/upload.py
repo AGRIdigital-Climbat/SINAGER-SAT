@@ -42,14 +42,13 @@ def _sanitize(name: str) -> str:
     )
 
 
-@router.post("", status_code=201, responses={201: {"model": SuccessResponse}})
-async def upload_file(
-    file: UploadFile = File(...),
+async def save_upload_file(
+    file: UploadFile,
+    db: Session,
     id_municipio: int | None = None,
     comunidad: str | None = None,
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
+) -> str:
+    """Save an uploaded file and return the path. Raises HTTPException on failure."""
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
@@ -80,15 +79,23 @@ async def upload_file(
     with open(filepath, "wb") as f:
         f.write(contents)
 
-    path = f"/uploads/{subfolder}/{filename}"
+    return f"/uploads/{subfolder}/{filename}"
+
+
+@router.post("", status_code=201, responses={201: {"model": SuccessResponse}})
+async def upload_file(
+    file: UploadFile = File(...),
+    id_municipio: int | None = None,
+    comunidad: str | None = None,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    path = await save_upload_file(file, db, id_municipio, comunidad)
 
     return SuccessResponse(
         message="Archivo subido correctamente",
         data={
-            "filename": filename,
             "path": path,
-            "size": len(contents),
-            "content_type": file.content_type,
         },
     )
 

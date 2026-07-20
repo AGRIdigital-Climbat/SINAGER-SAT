@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import json
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..response import SuccessResponse, MessageResponse
+from ..upload import save_upload_file
 from .schemas import *
 from . import service
 
@@ -66,6 +70,56 @@ def crear_reporte(data: ReporteEventoCreate, db: Session = Depends(get_db), _use
         reporte_id = service.create_reporte(db, data.model_dump())
         result = service.get_reporte_completo(db, reporte_id)
         return SuccessResponse(message="Reporte creado correctamente", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/reportes/con-foto", status_code=201, tags=[TAG_REP], responses={201: {"model": SuccessResponse}})
+async def crear_reporte_con_foto(
+    file: UploadFile = File(...),
+    id_usuario: int = Form(...),
+    id_departamento: int = Form(...),
+    id_provincia: int = Form(...),
+    id_municipio: int = Form(...),
+    comunidad: str = Form(...),
+    fecha_evento: str = Form(...),
+    hora_evento: str | None = Form(None),
+    id_tipo_evento: int = Form(...),
+    coordenada_lat: float | None = Form(None),
+    coordenada_lon: float | None = Form(None),
+    descripcion: str | None = Form(None),
+    id_estado: int = Form(1),
+    categorias: str | None = Form(None),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        fotografia = await save_upload_file(file, db, id_municipio, comunidad)
+
+        cat_list = json.loads(categorias) if categorias else None
+
+        data = {
+            "id_usuario": id_usuario,
+            "id_departamento": id_departamento,
+            "id_provincia": id_provincia,
+            "id_municipio": id_municipio,
+            "comunidad": comunidad,
+            "fecha_evento": fecha_evento,
+            "hora_evento": hora_evento,
+            "id_tipo_evento": id_tipo_evento,
+            "coordenada_lat": coordenada_lat,
+            "coordenada_lon": coordenada_lon,
+            "fotografia": fotografia,
+            "descripcion": descripcion,
+            "id_estado": id_estado,
+            "categorias": cat_list,
+        }
+
+        reporte_id = service.create_reporte(db, data)
+        result = service.get_reporte_completo(db, reporte_id)
+        return SuccessResponse(message="Reporte creado correctamente", data=result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

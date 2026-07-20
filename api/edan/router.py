@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..response import SuccessResponse, ErrorResponse, MessageResponse
+from ..upload import save_upload_file
 from . import service
 from .schemas import *
 
@@ -246,6 +247,64 @@ def crear_edan(data: EdanCreate, db: Session = Depends(get_db), _user=Depends(ge
         id = service.create_edan(db, data.model_dump())
         result = service.get_edan(db, id)
         return SuccessResponse(message="EDAN creado correctamente", data=result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/con-foto", status_code=201, tags=[TAG_MAIN], responses={201: {"model": SuccessResponse}})
+async def crear_edan_con_foto(
+    file: UploadFile = File(...),
+    codigo_edan: str | None = Form(None),
+    id_departamento: int | None = Form(None),
+    id_municipio: int | None = Form(None),
+    nombre_alcalde: str | None = Form(None),
+    telefono_alcalde: str | None = Form(None),
+    fecha_llenado: str | None = Form(None),
+    fecha_evento: str | None = Form(None),
+    hora_evento: str | None = Form(None),
+    localidades_afectadas: int = Form(0),
+    total_poblacion_afectada: int = Form(0),
+    total_familias_afectadas: int = Form(0),
+    total_familias_damnificadas: int = Form(0),
+    nombre_responsable: str | None = Form(None),
+    cargo_responsable: str | None = Form(None),
+    telefono_responsable: str | None = Form(None),
+    email_responsable: str | None = Form(None),
+    usuario_registro: int | None = Form(None),
+    id_reporte_rea: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        fotografia = await save_upload_file(file, db, id_municipio)
+
+        data = {
+            "codigo_edan": codigo_edan,
+            "id_departamento": id_departamento,
+            "id_municipio": id_municipio,
+            "nombre_alcalde": nombre_alcalde,
+            "telefono_alcalde": telefono_alcalde,
+            "fecha_llenado": fecha_llenado,
+            "fecha_evento": fecha_evento,
+            "hora_evento": hora_evento,
+            "localidades_afectadas": localidades_afectadas,
+            "total_poblacion_afectada": total_poblacion_afectada,
+            "total_familias_afectadas": total_familias_afectadas,
+            "total_familias_damnificadas": total_familias_damnificadas,
+            "nombre_responsable": nombre_responsable,
+            "cargo_responsable": cargo_responsable,
+            "telefono_responsable": telefono_responsable,
+            "email_responsable": email_responsable,
+            "usuario_registro": usuario_registro,
+            "id_reporte_rea": id_reporte_rea,
+            "fotografia": fotografia,
+        }
+
+        id = service.create_edan(db, data)
+        result = service.get_edan(db, id)
+        return SuccessResponse(message="EDAN creado correctamente", data=result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

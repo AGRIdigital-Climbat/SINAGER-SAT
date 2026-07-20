@@ -2,17 +2,37 @@
 -- MIGRACIÓN v1.2.3
 -- ============================================
 -- Ejecutar como usuario con permisos de creación en PostgreSQL.
--- Contiene: columna id_rol en usuarios, esquema REA completo con datos iniciales.
+-- Contiene: columna id_rol, fixes EDAN, esquema REA completo con datos iniciales.
 -- ============================================
 
 -- ── 1. Agregar columna id_rol a usuarios.usuario ──
 ALTER TABLE usuarios.usuario ADD COLUMN IF NOT EXISTS id_rol INTEGER;
-ALTER TABLE usuarios.usuario
-    ADD CONSTRAINT usuario_id_rol_fkey
-    FOREIGN KEY (id_rol) REFERENCES usuarios.rol(id_rol);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'usuario_id_rol_fkey'
+    ) THEN
+        ALTER TABLE usuarios.usuario
+            ADD CONSTRAINT usuario_id_rol_fkey
+            FOREIGN KEY (id_rol) REFERENCES usuarios.rol(id_rol);
+    END IF;
+END $$;
 ALTER TABLE usuarios.usuario ALTER COLUMN id_rol SET DEFAULT 4;
 
--- ── 2. Crear esquema REA ──
+-- ── 2. UNIQUE constraint en carnet ──
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'uq_usuario_carnet'
+    ) THEN
+        ALTER TABLE usuarios.usuario ADD CONSTRAINT uq_usuario_carnet UNIQUE (carnet);
+    END IF;
+END $$;
+
+-- ── 3. Columna fotografia en edan.edan ──
+ALTER TABLE edan.edan ADD COLUMN IF NOT EXISTS fotografia TEXT;
+
+-- ── 4. Crear esquema REA ──
 CREATE SCHEMA IF NOT EXISTS rea;
 
 -- ── 3. Tabla de estados del reporte ──
