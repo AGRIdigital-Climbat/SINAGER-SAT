@@ -26,6 +26,28 @@ def listar_reportes(
     return SuccessResponse(message="Reportes listados correctamente", data=data, total=len(data))
 
 
+@router.get("/reportes/mis-resumen", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
+def mis_resumen(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.get_mis_resumen(db, _user["id_usuario"])
+    return SuccessResponse(message="Resumen de reportes del usuario listado correctamente", data=data, total=len(data))
+
+
+@router.get("/reportes/mis-reportes", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
+def mis_reportes(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.get_mis_reportes(db, _user["id_usuario"], skip, limit)
+    return SuccessResponse(message="Reportes del usuario listados correctamente", data=data, total=len(data))
+
+
 @router.get("/reportes/{id}", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
 def obtener_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_reporte_completo(db, id)

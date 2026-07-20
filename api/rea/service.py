@@ -95,6 +95,20 @@ def get_reportes(db: Session, id_estado: int | None = None, id_municipio: int | 
     return [_build_reporte(r) for r in rows]
 
 
+def get_mis_resumen(db: Session, id_usuario: int):
+    rows = db.execute(
+        text("SELECT id_reporte, id_estado FROM rea.reporte_evento WHERE id_usuario = :uid ORDER BY id_reporte DESC"),
+        {"uid": id_usuario},
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def get_mis_reportes(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
+    query = SQL_REPORTE + " WHERE re.id_usuario = :uid ORDER BY re.id_reporte DESC LIMIT :limit OFFSET :skip"
+    rows = db.execute(text(query), {"uid": id_usuario, "limit": limit, "skip": skip}).mappings().all()
+    return [_build_reporte(r) for r in rows]
+
+
 def get_reporte(db: Session, id: int):
     row = db.execute(
         text(f"{SQL_REPORTE} WHERE re.id_reporte = :id"), {"id": id}

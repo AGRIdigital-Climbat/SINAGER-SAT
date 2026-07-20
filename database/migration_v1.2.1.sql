@@ -6,3 +6,6 @@
 
 -- Corregir campo fotografia en REA: VARCHAR(500) → TEXT para guardar paths
 ALTER TABLE rea.reporte_evento ALTER COLUMN fotografia TYPE TEXT;
+
+-- Índice para optimizar consultas de reportes por usuario
+CREATE INDEX IF NOT EXISTS idx_reporte_usuario ON rea.reporte_evento(id_usuario);

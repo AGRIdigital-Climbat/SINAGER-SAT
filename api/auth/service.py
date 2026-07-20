@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .jwt import hash_password, verify_password, create_access_token
-from .schemas import LoginRequest, RegisterRequest
+from .schemas import LoginRequest, RegisterRequest, VerificarIdentidadRequest, CambiarContrasenaRequest
 
 
 def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
@@ -99,3 +99,37 @@ def register_user(db: Session, data: RegisterRequest) -> int:
     )
     db.commit()
     return result.scalar()
+
+
+def verificar_identidad(db: Session, data: VerificarIdentidadRequest) -> dict | None:
+    result = db.execute(
+        text("""
+            SELECT id_usuario FROM usuarios.usuario
+            WHERE carnet = :carnet
+              AND celular = :celular
+              AND id_departamento = :dep
+              AND id_provincia = :prov
+              AND id_municipio = :muni
+              AND comunidad = :comunidad
+              AND activo = true
+        """),
+        {"carnet": data.carnet, "celular": data.celular, "dep": data.id_departamento,
+         "prov": data.id_provincia, "muni": data.id_municipio, "comunidad": data.comunidad},
+    ).mappings().first()
+    return {"id_usuario": result["id_usuario"]} if result else None
+
+
+def cambiar_contrasena(db: Session, data: CambiarContrasenaRequest) -> bool:
+    user = db.execute(
+        text("SELECT id_usuario FROM usuarios.usuario WHERE id_usuario = :id AND activo = true"),
+        {"id": data.id_usuario},
+    ).first()
+    if not user:
+        return False
+    hashed = hash_password(data.nueva_contrasena)
+    db.execute(
+        text("UPDATE usuarios.usuario SET contrasena = :contrasena WHERE id_usuario = :id"),
+        {"contrasena": hashed, "id": data.id_usuario},
+    )
+    db.commit()
+    return True

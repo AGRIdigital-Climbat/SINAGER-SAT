@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -90,3 +91,21 @@ async def upload_file(
             "content_type": file.content_type,
         },
     )
+
+
+@router.get("/descargar/{path:path}")
+def descargar_archivo(
+    path: str,
+    _user=Depends(get_current_user),
+):
+    filepath = Path(settings.UPLOAD_DIR) / path
+    if not filepath.exists() or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    content_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }.get(filepath.suffix.lower(), "application/octet-stream")
+    return FileResponse(path=str(filepath), media_type=content_type, filename=filepath.name)

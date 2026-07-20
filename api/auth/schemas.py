@@ -34,3 +34,17 @@ class TokenResponse(BaseModel):
     id_rol: int | None = None
     rol: str | None = None
     activo: bool | None = None
+
+
+class VerificarIdentidadRequest(BaseModel):
+    carnet: str
+    celular: str
+    id_departamento: int
+    id_provincia: int
+    id_municipio: int
+    comunidad: str
+
+
+class CambiarContrasenaRequest(BaseModel):
+    id_usuario: int
+    nueva_contrasena: str
