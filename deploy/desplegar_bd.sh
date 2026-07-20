@@ -1,7 +1,7 @@
 #!/bin/bash
 # ================================================================
 #  EDAN - DESPLEGAR BASE DE DATOS
-#  Restaura la BD desde el backup completo
+#  Restaura la BD desde el backup completo y ejecuta migraciones
 #
 #  Uso:  bash desplegar_bd.sh
 #  Requiere: PostgreSQL instalado y corriendo
@@ -127,6 +127,37 @@ for SCHEMA in $SCHEMAS; do
     sudo -u postgres psql -d $DB -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA $SCHEMA TO $USER;" 2>/dev/null || true
     ok "Permisos concedidos en schema '$SCHEMA'"
 done
+
+# --------------------------------------------------
+# [6/6] Ejecutar migraciones
+# --------------------------------------------------
+echo ""
+echo "[6/6] Ejecutando migraciones..."
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Ejecutar migración v1.2.0
+MIGRATION_120="$PROJECT_DIR/database/migration_v1.2.0.sql"
+if [ -f "$MIGRATION_120" ]; then
+    echo "  Ejecutando migración v1.2.0..."
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_120" 2>/dev/null || true
+    ok "Migración v1.2.0 ejecutada"
+else
+    warn "Archivo migration_v1.2.0.sql no encontrado"
+fi
+
+# Ejecutar migración v1.2.1
+MIGRATION_121="$PROJECT_DIR/database/migration_v1.2.1.sql"
+if [ -f "$MIGRATION_121" ]; then
+    echo "  Ejecutando migración v1.2.1..."
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_121" 2>/dev/null || true
+    ok "Migración v1.2.1 ejecutada"
+else
+    warn "Archivo migration_v1.2.1.sql no encontrado"
+fi
+
+ok "Migraciones completadas"
 
 # --------------------------------------------------
 # RESUMEN

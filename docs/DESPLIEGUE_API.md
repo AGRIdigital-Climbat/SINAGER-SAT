@@ -1,6 +1,6 @@
 # SINAGERSAT API - Despliegue y Acceso Externo
 
-Guía completa para desplegar la API REST y acceder desde internet. v1.2.0.
+Guía completa para desplegar la API REST y acceder desde internet. v1.2.2.
 
 ---
 
@@ -25,6 +25,12 @@ sudo bash deploy/desplegar_todo.sh --api-only
 
 ```bash
 sudo bash deploy/desplegar_todo.sh --tunnel
+```
+
+### Actualizar desde versión anterior (preservar datos)
+
+```bash
+sudo bash deploy/desplegar_todo.sh --update
 ```
 
 ---
@@ -189,7 +195,37 @@ ngrok http 8000
 
 ---
 
-## 4. Formato de Respuestas (v1.2.0)
+## 4. Migraciones de Base de Datos
+
+### Migración v1.2.0
+
+```bash
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database/migration_v1.2.0.sql
+```
+
+Contenido:
+- UNIQUE constraint en `carnet` para prevenir duplicados
+- Campo `fotografia` en tabla EDAN para soporte de imágenes
+
+### Migración v1.2.1
+
+```bash
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database/migration_v1.2.1.sql
+```
+
+Contenido:
+- Corregir campo `fotografia` en REA: VARCHAR(500) → TEXT
+- Índice `idx_reporte_usuario` para optimizar consultas
+
+### Ejecutar todas las migraciones
+
+```bash
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database/migration_v1.2.0.sql -f database/migration_v1.2.1.sql
+```
+
+---
+
+## 5. Formato de Respuestas (v1.2.2)
 
 ### Respuesta exitosa (lista)
 
@@ -266,9 +302,9 @@ Esto aplica a: departamento, provincia, municipio, rol, tipo_evento, estado, gru
 
 ---
 
-## 5. Estructura de Endpoints
+## 6. Estructura de Endpoints
 
-La API tiene **157 endpoints** v1.2.0 organizados en 5 módulos.
+La API tiene **157 endpoints** v1.2.2 organizados en 6 módulos.
 
 ### Endpoints Públicos (sin token)
 
@@ -284,12 +320,15 @@ La API tiene **157 endpoints** v1.2.0 organizados en 5 módulos.
 | EDAN | `/api/v1/edan/` | Formularios + 17 sub-tablas + 5 catálogos |
 | REA | `/api/v1/rea/` | Reportes, estados, categorías |
 | Usuarios | `/api/v1/usuarios/` | Cuentas, roles, permisos, sesiones, auditoría |
+| Upload | `/api/v1/upload/` | Subir y descargar archivos |
 
 ```
 /api/v1/
 ├── auth/              # Autenticación (PÚBLICO)
 │   ├── POST /login         # Login → token JWT
-│   └── POST /register      # Registrar usuario
+│   ├── POST /register      # Registrar usuario
+│   ├── POST /verificar-identidad  # Verificar identidad
+│   └── POST /cambiar-contrasena   # Cambiar contraseña
 │
 ├── shared/            # Geografía (PÚBLICO, CRUD completo)
 │   ├── GET/POST /departamentos       # 9 departamentos
@@ -329,8 +368,14 @@ La API tiene **157 endpoints** v1.2.0 organizados en 5 módulos.
 │   ├── GET/POST /reportes          # Listar/Crear
 │   ├── GET/PUT/DELETE /reportes/{id}
 │   ├── PUT /reportes/{id}/estado   # Cambiar estado
+│   ├── GET /reportes/mis-resumen   # Resumen del usuario
+│   ├── GET /reportes/mis-reportes  # Reportes del usuario
 │   ├── GET/POST /estados           # Estados del reporte
 │   └── GET/POST /categorias        # Categorías de afectación
+│
+├── upload/            # Archivos (🔒 requiere token)
+│   ├── POST /                    # Subir imagen
+│   └── GET /descargar/{path}     # Descargar imagen
 │
 └── usuarios/          # Gestión de usuarios (🔒 requiere token)
     ├── GET/POST /              # Listar/Crear
@@ -346,9 +391,9 @@ La API tiene **157 endpoints** v1.2.0 organizados en 5 módulos.
 
 ---
 
-## 6. Autenticación y Roles
+## 7. Autenticación y Roles
 
-La API usa JWT (JSON Web Tokens) v1.2.0 con sistema de roles.
+La API usa JWT (JSON Web Tokens) v1.2.2 con sistema de roles.
 
 ### Roles del Sistema
 
@@ -377,7 +422,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
   -d '{"usuario":"sinagersat","contrasena":"12345678"}'
 ```
 
-Respuesta (v1.2.0):
+Respuesta (v1.2.2):
 ```json
 {
   "success": true,
@@ -414,7 +459,7 @@ curl http://localhost:8000/api/v1/edan/ \
 
 ---
 
-## 7. Ejemplos de Uso
+## 8. Ejemplos de Uso
 
 ### Crear un reporte EDAN
 
@@ -483,7 +528,7 @@ curl "$URL/docs"
 
 ---
 
-## 8. Configuración
+## 9. Configuración
 
 ### Variables de entorno (.env)
 
@@ -512,7 +557,7 @@ DATABASE_URL=postgresql://sinagersat:12345678@10.10.10.220:5432/db_sinagersat
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 ### API no inicia
 
@@ -576,7 +621,7 @@ sudo systemctl restart sinagersat-api
 
 ---
 
-## 10. Archivos
+## 11. Archivos
 
 ```
 SINAGER-SAT/
@@ -586,7 +631,8 @@ SINAGER-SAT/
 │   ├── database.py         # Conexión SQLAlchemy
 │   ├── dependencies.py     # JWT auth dependency
 │   ├── response.py         # SuccessResponse/ErrorResponse/MessageResponse
-│   ├── auth/               # Login/Register
+│   ├── upload.py           # Subir/descargar archivos
+│   ├── auth/               # Login/Register/Verificar/Cambiar contraseña
 │   ├── shared/             # Geografía
 │   ├── edan/               # Formularios EDAN
 │   ├── rea/                # Reportes REA
@@ -596,16 +642,75 @@ SINAGER-SAT/
 ├── start_api.sh            # Iniciar API local
 ├── start_tunnel.sh         # Iniciar API + tunnel
 ├── stop.sh                 # Detener todo
+├── uploads/                # Archivos subidos (NO commitear)
+│   └── reports/            # Imágenes de reportes
+│       └── {codigo_ine}/   # Organizado por código INE
 ├── deploy/                 # Scripts de despliegue
 │   ├── desplegar_todo.sh   # Despliegue completo
 │   ├── desplegar_bd.sh     # Solo BD
 │   └── verificar.sh        # Verificar estado
 ├── database/
 │   ├── edan_db_backup.sql  # Backup completo de BD
+│   ├── migration_v1.2.0.sql # Migración: carnet UNIQUE + edan fotografia
+│   ├── migration_v1.2.1.sql # Migración: rea fotografia TEXT + índice
 │   └── servers.json        # Config pgAdmin4
 └── docs/
     ├── DESPLIEGUE_API.md   # Esta guía
     ├── EDAN_BD.md          # Documentación de la BD
     ├── SERVICIOS.md        # Gestión de servicios
     └── CONECTAR.md         # Credenciales
+```
+
+---
+
+## 12. Preservación de Datos
+
+### Al actualizar (modo --update)
+
+El script `desplegar_todo.sh --update` preserva datos existentes:
+
+1. **No elimina la base de datos** - ejecuta solo las migraciones
+2. **No elimina archivos subidos** - mantiene `/uploads/reports/`
+3. **No elimina `.env`** - mantiene configuración actual
+
+### Backup manual antes de actualizar
+
+```bash
+PGPASSWORD=12345678 pg_dump -U sinagersat -d db_sinagersat -h 127.0.0.1 > /tmp/backup_manual_$(date +%Y%m%d_%H%M%S).sql
+```
+
+### Restaurar backup
+
+```bash
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 < /tmp/backup_manual_YYYYMMDD_HHMMSS.sql
+```
+
+---
+
+## 13. Verificación Post-Despliegue
+
+```bash
+# 1. Verificar servicios
+sudo systemctl status sinagersat-api sinagersat-tunnel
+
+# 2. Verificar API
+curl http://localhost:8000/
+
+# 3. Verificar Swagger
+curl http://localhost:8000/docs
+
+# 4. Verificar login
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"sinagersat","contrasena":"12345678"}'
+
+# 5. Verificar BD
+bash deploy/verificar.sh
+
+# 6. Verificar uploads
+ls -la uploads/reports/
+
+# 7. Verificar URL externa
+URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
+curl "$URL/"
 ```

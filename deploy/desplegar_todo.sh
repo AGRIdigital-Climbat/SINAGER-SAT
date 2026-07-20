@@ -8,6 +8,7 @@
 #    sudo bash deploy/desplegar_todo.sh --db-only    # solo base de datos
 #    sudo bash deploy/desplegar_todo.sh --api-only   # solo API (si PG ya está)
 #    sudo bash deploy/desplegar_todo.sh --tunnel     # completo + Cloudflare tunnel
+#    sudo bash deploy/desplegar_todo.sh --update     # actualizar desde versión anterior
 #
 #  Requiere: Ubuntu/Debian, internet, archivos del proyecto
 # ================================================================
@@ -48,6 +49,7 @@ for arg in "$@"; do
         --db-only)  MODE="db" ;;
         --api-only) MODE="api" ;;
         --tunnel)   MODE="tunnel" ;;
+        --update)   MODE="update" ;;
         --help|-h)
             echo "Uso: sudo bash deploy/desplegar_todo.sh [opciones]"
             echo ""
@@ -56,6 +58,7 @@ for arg in "$@"; do
             echo "  --db-only     Solo base de datos"
             echo "  --api-only    Solo API (PostgreSQL debe estar corriendo)"
             echo "  --tunnel      Completo + Cloudflare Quick Tunnel"
+            echo "  --update      Actualizar desde versión anterior (preserva datos)"
             echo "  --help        Mostrar esta ayuda"
             exit 0
             ;;
@@ -67,6 +70,7 @@ case $MODE in
     db)     TOTAL_STEPS=5 ;;
     api)    TOTAL_STEPS=3 ;;
     tunnel) TOTAL_STEPS=9 ;;
+    update) TOTAL_STEPS=7 ;;
 esac
 
 # ================================================================
@@ -353,9 +357,44 @@ else
 fi
 
 # ================================================================
+#  5.1 EJECUTAR MIGRACIONES (modo update o full)
+# ================================================================
+if [ "$MODE" = "update" ] || [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ]; then
+    step 6 "Ejecutando migraciones de base de datos..."
+    
+    # Verificar que la BD existe
+    if ! PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -c "SELECT 1;" >/dev/null 2>&1; then
+        fail "Base de datos '$DB' no existe"
+        exit 1
+    fi
+    
+    # Ejecutar migración v1.2.0
+    MIGRATION_120="$PROJECT_DIR/database/migration_v1.2.0.sql"
+    if [ -f "$MIGRATION_120" ]; then
+        echo "  Ejecutando migración v1.2.0..."
+        PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_120" 2>/dev/null || true
+        ok "Migración v1.2.0 ejecutada"
+    else
+        warn "Archivo migration_v1.2.0.sql no encontrado"
+    fi
+    
+    # Ejecutar migración v1.2.1
+    MIGRATION_121="$PROJECT_DIR/database/migration_v1.2.1.sql"
+    if [ -f "$MIGRATION_121" ]; then
+        echo "  Ejecutando migración v1.2.1..."
+        PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_121" 2>/dev/null || true
+        ok "Migración v1.2.1 ejecutada"
+    else
+        warn "Archivo migration_v1.2.1.sql no encontrado"
+    fi
+    
+    ok "Migraciones completadas"
+fi
+
+# ================================================================
 #  6. CONFIGURAR ARCHIVO .env
 # ================================================================
-step 6 "Configurando variables de entorno..."
+step 7 "Configurando variables de entorno..."
 
 ENV_FILE="$PROJECT_DIR/.env"
 
@@ -381,9 +420,23 @@ chmod 600 "$ENV_FILE" 2>/dev/null || true
 ok "Archivo .env configurado (host: 127.0.0.1)"
 
 # ================================================================
-#  7. CREAR SCRIPTS DE INICIO
+#  7.1 CREAR DIRECTORIO DE UPLOADS
 # ================================================================
-step 7 "Generando scripts de inicio..."
+step 8 "Creando directorio de uploads..."
+
+UPLOADS_DIR="$PROJECT_DIR/uploads/reports"
+if [ ! -d "$UPLOADS_DIR" ]; then
+    mkdir -p "$UPLOADS_DIR"
+    chown -R "$REAL_USER":"$(id -gn "$REAL_USER")" "$PROJECT_DIR/uploads" 2>/dev/null || true
+    ok "Directorio de uploads creado: $UPLOADS_DIR"
+else
+    ok "Directorio de uploads ya existe"
+fi
+
+# ================================================================
+#  7.2 CREAR SCRIPTS DE INICIO
+# ================================================================
+step 8 "Generando scripts de inicio..."
 
 # --- start_api.sh ---
 cat > "$PROJECT_DIR/start_api.sh" << 'APIEOF'
@@ -510,10 +563,10 @@ chmod +x "$PROJECT_DIR/stop.sh"
 ok "stop.sh creado"
 
 # ================================================================
-#  8. INICIAR API (y opcionalmente tunnel)
+#  9. INICIAR API (y opcionalmente tunnel)
 # ================================================================
 if [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ] || [ "$MODE" = "api" ]; then
-    step 8 "Iniciando API SINAGERSAT..."
+    step 9 "Iniciando API SINAGERSAT..."
 
     # Matar instancias anteriores
     pkill -f "uvicorn api.main" 2>/dev/null || true
@@ -535,10 +588,10 @@ else
 fi
 
 # ================================================================
-#  9. CLOUDFLARE TUNNEL (solo con --tunnel)
+#  10. CLOUDFLARE TUNNEL (solo con --tunnel)
 # ================================================================
 if [ "$MODE" = "tunnel" ]; then
-    step 9 "Iniciando Cloudflare Quick Tunnel..."
+    step 10 "Iniciando Cloudflare Quick Tunnel..."
 
     # Verificar/instalar cloudflared
     if ! command -v cloudflared &>/dev/null; then
@@ -579,7 +632,7 @@ if [ "$MODE" = "tunnel" ]; then
     fi
 else
     if [ "$MODE" != "db" ]; then
-        step 9 "Saltando Cloudflare tunnel..."
+        step 10 "Saltando Cloudflare tunnel..."
         ok "Para activar: bash start_tunnel.sh"
     fi
 fi
@@ -628,6 +681,11 @@ echo "    bash start_api.sh          # Iniciar API local"
 echo "    bash start_tunnel.sh       # Iniciar API + tunnel público"
 echo "    bash stop.sh               # Detener todo"
 echo "    bash deploy/verificar.sh   # Verificar base de datos"
+echo ""
+echo -e "  ${VERDE}ARCHIVOS:${SIN_COLOR}"
+echo "    uploads/reports/           # Imágenes de reportes"
+echo "    .env                       # Variables de entorno"
+echo "    database/edan_db_backup.sql # Backup de BD"
 echo ""
 echo -e "  ${VERDE}HERRAMIENTAS:${SIN_COLOR}"
 echo "    DBeaver:   Host: 127.0.0.1 | DB: $DB | User: $USER"

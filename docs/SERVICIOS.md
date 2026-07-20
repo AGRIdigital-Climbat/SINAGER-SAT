@@ -1,6 +1,6 @@
 # SINAGERSAT - Gestión de Servicios
 
-Guía rápida para administrar la API y el tunnel de acceso externo.
+Guía rápida para administrar la API y el tunnel de acceso externo. v1.2.2.
 
 ---
 
