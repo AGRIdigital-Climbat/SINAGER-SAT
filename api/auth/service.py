@@ -42,7 +42,7 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     else:
         token = create_access_token({"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]})
         db.execute(
-            text("INSERT INTO usuarios.sesion (id_usuario, token, activo) VALUES (:uid, :token, true)"),
+            text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_expiracion) VALUES (:uid, :token, true, '2099-12-31')"),
             {"uid": user["id_usuario"], "token": token}
         )
         db.commit()
