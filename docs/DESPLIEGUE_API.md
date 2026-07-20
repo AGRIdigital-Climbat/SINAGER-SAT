@@ -368,8 +368,8 @@ La API tiene **157 endpoints** v1.2.2 organizados en 6 módulos.
 │   ├── GET/POST /reportes          # Listar/Crear
 │   ├── GET/PUT/DELETE /reportes/{id}
 │   ├── PUT /reportes/{id}/estado   # Cambiar estado
-│   ├── GET /reportes/mis-resumen   # Resumen del usuario
-│   ├── GET /reportes/mis-reportes  # Reportes del usuario
+│   ├── GET /reportes/mis-resumen   # Resumen (filtro por id_usuario opcional)
+│   ├── GET /reportes/mis-reportes  # Reportes (filtro por id_usuario opcional)
 │   ├── GET/POST /estados           # Estados del reporte
 │   └── GET/POST /categorias        # Categorías de afectación
 │
@@ -394,6 +394,19 @@ La API tiene **157 endpoints** v1.2.2 organizados en 6 módulos.
 ## 7. Autenticación y Roles
 
 La API usa JWT (JSON Web Tokens) v1.2.2 con sistema de roles.
+
+### Comportamiento del Token
+
+- **Sin expiración**: Los tokens no expiran (ideal para campo sin señal)
+- **Reutilizable**: Cada login retorna el **mismo token** por usuario
+- **Almacenado**: Se guarda en `usuarios.sesion` para consistencia
+
+```bash
+# Login siempre retorna el mismo token
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"usuario":"sinagersat","contrasena":"12345678"}'
+```
 
 ### Roles del Sistema
 
@@ -536,10 +549,12 @@ curl "$URL/docs"
 DATABASE_URL=postgresql://sinagersat:12345678@127.0.0.1:5432/db_sinagersat
 JWT_SECRET=tu-secreto-seguro-aqui
 JWT_ALGORITHM=HS256
-JWT_EXPIRE_MINUTES=480
+JWT_EXPIRE_MINUTES=0
 ```
 
-**Importante:** Cambiar `JWT_SECRET` en producción.
+**Importante:**
+- `JWT_SECRET`: Cambiar en producción
+- `JWT_EXPIRE_MINUTES=0`: Token sin expiración (recomendado para uso en campo sin señal)
 
 ### Cambiar puerto
 
@@ -595,14 +610,18 @@ cat /tmp/cloudflared.log | tail -20
 grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-### Token expirado
+### Token
+
+Los tokens **no expiran** y se reutilizan por usuario. Al hacer login, siempre retorna el mismo token.
 
 ```bash
-# Hacer login de nuevo para obtener nuevo token
+# Obtener token (siempre retorna el mismo token para el usuario)
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"usuario": "sinagersat", "contrasena": "12345678"}'
 ```
+
+Para "cerrar sesión", eliminar el token del cliente. El token sigue siendo válido en el servidor.
 
 ### Error 422 en endpoints
 
