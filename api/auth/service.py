@@ -30,7 +30,23 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         return None
     if not verify_password(data.contrasena, user["contrasena"]):
         return None
-    token = create_access_token({"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]})
+
+    # Buscar sesión activa existente - reutilizar token
+    sesion = db.execute(
+        text("SELECT token FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true"),
+        {"uid": user["id_usuario"]}
+    ).mappings().first()
+
+    if sesion:
+        token = sesion["token"]
+    else:
+        token = create_access_token({"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]})
+        db.execute(
+            text("INSERT INTO usuarios.sesion (id_usuario, token, activo) VALUES (:uid, :token, true)"),
+            {"uid": user["id_usuario"], "token": token}
+        )
+        db.commit()
+
     return {
         "access_token": token,
         "token_type": "bearer",
