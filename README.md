@@ -1,6 +1,6 @@
 # SINAGERSAT - Base de Datos
 
-Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.3.
+Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.4.
 
 ---
 
@@ -176,7 +176,7 @@ bash deploy/verificar.sh
 
 ---
 
-## API REST (FastAPI) v1.2.3
+## API REST (FastAPI) v1.2.4
 
 ### Iniciar API local
 
@@ -198,7 +198,7 @@ bash start_tunnel.sh
 grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-### Formato de Respuestas (v1.2.3)
+### Formato de Respuestas (v1.2.4)
 
 Todas las respuestas exitosas usan el formato estándar:
 
@@ -229,7 +229,7 @@ Para eliminaciones:
 }
 ```
 
-### Objetos Anidados (v1.2.3)
+### Objetos Anidados (v1.2.4)
 
 Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de usuario:
 
@@ -251,15 +251,16 @@ Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de
 
 Los campos `id_*` originales se mantienen para compatibilidad; los objetos anidados son información complementaria.
 
-### Endpoints (157 totales)
+### Endpoints (159 totales)
 
 | Grupo | Prefijo | Acceso | Operaciones |
 |---|---|---|---|
 | Auth | `/api/v1/auth/` | Público | Login, Register |
 | Shared | `/api/v1/shared/` | Público | CRUD deptos, provs, municipios |
-| EDAN | `/api/v1/edan/` | Token | CRUD EDAN + 17 sub-tablas + 5 catálogos |
-| REA | `/api/v1/rea/` | Token | CRUD reportes, estados, categorías |
+| EDAN | `/api/v1/edan/` | Token | CRUD EDAN + 17 sub-tablas + 5 catálogos + con-foto |
+| REA | `/api/v1/rea/` | Token | CRUD reportes + con-foto, estados, categorías |
 | Usuarios | `/api/v1/usuarios/` | Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
+| Upload | `/api/v1/upload/` | Token | Subir/descargar archivos |
 
 ### Autenticación
 
@@ -288,10 +289,13 @@ curl http://localhost:8000/api/v1/edan/ \
 
 | id | Rol | Jerarquía | Descripción |
 |----|-----|-----------|-------------|
-| 1 | superadministrador | 5 | Acceso total |
-| 2 | admin | 4 | Gestiona usuarios y datos |
-| 3 | encuestador | 2 | Carga formularios |
-| 4 | visor | 1 | Solo lectura (default) |
+| 1 | superadmin | 5 | Acceso total a todos los sistemas |
+| 2 | admin | 4 | Gestiona usuarios y datos de su sistema |
+| 3 | VIDECI Regional | 3 | Carga y edita formularios propios |
+| 4 | UGR Sectores | 2 | Carga y edita formularios propios |
+| 5 | UGR Gobernación | 2 | Carga y edita formularios propios |
+| 6 | UGR Municipio | 2 | Carga y edita formularios propios |
+| 7 | Responsable Local | 1 | Carga y edita formularios propios |
 
 ### Documentación interactiva
 

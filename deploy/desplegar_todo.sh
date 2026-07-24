@@ -25,7 +25,17 @@ API_HOST="0.0.0.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BACKUP="$PROJECT_DIR/database/edan_db_backup.sql"
+
+# Buscar backup (preferir el más reciente)
+BACKUP=""
+for CANDIDATO in \
+    "$PROJECT_DIR/database/backup_2026_07_21.sql" \
+    "$PROJECT_DIR/database/edan_db_backup.sql"; do
+    if [ -f "$CANDIDATO" ]; then
+        BACKUP="$CANDIDATO"
+        break
+    fi
+done
 
 # Colores
 ROJO="\033[0;31m"

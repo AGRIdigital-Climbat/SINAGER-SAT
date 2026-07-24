@@ -32,5 +32,5 @@ venv/
 *.swp
 *.swo
 
-# Archivos subidos (imágenes, documentos)
-uploads/reports/
+# Backup original (se mantiene backup_YYYY_MM_DD.sql)
+database/edan_db_backup.sql

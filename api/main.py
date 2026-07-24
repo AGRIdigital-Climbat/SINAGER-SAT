@@ -64,7 +64,7 @@ app = FastAPI(
         "- **REA**: Reportes de Eventos Adversos (requiere token)\n"
         "- **Usuarios**: Gestión de cuentas, roles y permisos (requiere token)\n"
     ),
-    version="1.2.3",
+    version="1.2.4",
     openapi_tags=TAGS_METADATA,
 )
 
@@ -143,7 +143,7 @@ app.openapi = custom_openapi
 def root():
     return {
         "name": "SINAGERSAT API",
-        "version": "1.2.3",
+        "version": "1.2.4",
         "docs": "/docs",
         "redoc": "/redoc",
     }

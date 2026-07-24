@@ -1,0 +1,18 @@
+[Unit]
+Description=SINAGERSAT Cloudflare Tunnel
+After=network-online.target sinagersat-api.service
+Wants=network-online.target sinagersat-api.service
+
+[Service]
+Type=simple
+User=climbat
+Group=climbat
+ExecStartPre=/bin/bash -c 'until curl -sf http://localhost:8000/ > /dev/null; do sleep 2; done'
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
+StandardOutput=append:/tmp/cloudflared.log
+StandardError=append:/tmp/cloudflared.log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

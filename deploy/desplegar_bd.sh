@@ -43,11 +43,14 @@ ok "PostgreSQL corriendo"
 # --------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Buscar en varias ubicaciones posibles
+# Buscar en varias ubicaciones posibles (preferir el más reciente)
 BACKUP=""
 for CANDIDATO in \
+    "$SCRIPT_DIR/../database/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/../database/edan_db_backup.sql" \
+    "$SCRIPT_DIR/database/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/database/edan_db_backup.sql" \
+    "$SCRIPT_DIR/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/edan_db_backup.sql"; do
     if [ -f "$CANDIDATO" ]; then
         BACKUP="$CANDIDATO"
@@ -56,7 +59,7 @@ for CANDIDATO in \
 done
 
 if [ -z "$BACKUP" ]; then
-    fail "No se encuentra edan_db_backup.sql"
+    fail "No se encuentra archivo de backup"
     echo "  Buscado en:"
     echo "    - $SCRIPT_DIR/../database/"
     echo "    - $SCRIPT_DIR/database/"
