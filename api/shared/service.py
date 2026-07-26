@@ -203,3 +203,215 @@ def delete_municipio(db: Session, id: int):
     result = db.execute(text("DELETE FROM shared.municipio WHERE id = :id"), {"id": id})
     db.commit()
     return result.rowcount > 0
+
+
+# ── GEOJSON (RFC 7946) ──
+
+SQL_GEOJSON_FEATURES = """
+    SELECT json_build_object(
+        'type', 'Feature',
+        'geometry', ST_AsGeoJSON(ST_Transform(m.geom, 4326), 6, 0)::json,
+        'properties', json_build_object(
+            'id', m.id,
+            'codigo_ine', m.codigo_ine,
+            'nombre', m.nombre,
+            'departamento', CASE WHEN d.id IS NOT NULL THEN
+                json_build_object('id', d.id, 'codigo_ine', d.codigo_ine, 'nombre', d.nombre)
+            ELSE NULL END,
+            'provincia', CASE WHEN p.id IS NOT NULL THEN
+                json_build_object('id', p.id, 'codigo_ine', p.codigo_ine, 'nombre', p.nombre)
+            ELSE NULL END,
+            'area_km2', ROUND((ST_Area(m.geom::geography) / 1000000)::numeric, 2)
+        ),
+        'bbox', ST_Extent(ST_Transform(m.geom, 4326))
+    ) as feature
+    FROM shared.municipio m
+    LEFT JOIN shared.departamento d ON m.id_departamento = d.id
+    LEFT JOIN shared.provincia p ON m.id_provincia = p.id
+"""
+
+SQL_GEOJSON_BBOX = """
+    SELECT ST_Extent(ST_Transform(geom, 4326)) as bbox
+    FROM shared.municipio
+"""
+
+SQL_GEOJSON_FEATURE_BBOX = """
+    SELECT ST_Extent(ST_Transform(geom, 4326)) as bbox
+    FROM shared.municipio WHERE id = :id
+"""
+
+
+def get_municipios_geojson(db: Session, id_provincia: int | None = None, id_departamento: int | None = None):
+    where = ""
+    params = {}
+    if id_provincia:
+        where = "WHERE m.id_provincia = :p"
+        params["p"] = id_provincia
+    elif id_departamento:
+        where = "WHERE m.id_departamento = :d"
+        params["d"] = id_departamento
+
+    features_query = f"{SQL_GEOJSON_FEATURES} {where} GROUP BY m.id, d.id, p.id ORDER BY m.id"
+    rows = db.execute(text(features_query), params).mappings().all()
+    features = [dict(r)["feature"] for r in rows]
+
+    bbox_row = db.execute(text(SQL_GEOJSON_BBOX)).mappings().first()
+    bbox = _parse_bbox(bbox_row["bbox"]) if bbox_row and bbox_row["bbox"] else None
+
+    collection_bbox = None
+    if features:
+        all_coords = []
+        for f in features:
+            geom = f.get("geometry", {})
+            coords = geom.get("coordinates", [])
+            _extract_coords(coords, all_coords)
+        if all_coords:
+            lons = [c[0] for c in all_coords]
+            lats = [c[1] for c in all_coords]
+            collection_bbox = [min(lons), min(lats), max(lons), max(lats)]
+
+    return {
+        "type": "FeatureCollection",
+        "name": "municipios_bolivia",
+        "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"}},
+        "features": features,
+        "total": len(features),
+        "bbox": collection_bbox,
+    }
+
+
+def get_municipio_geojson(db: Session, id: int):
+    row = db.execute(
+        text(f"{SQL_GEOJSON_FEATURES} WHERE m.id = :id GROUP BY m.id, d.id, p.id"),
+        {"id": id},
+    ).mappings().first()
+    if not row:
+        return None
+
+    feature = dict(row)["feature"]
+
+    bbox_row = db.execute(text(SQL_GEOJSON_FEATURE_BBOX), {"id": id}).mappings().first()
+    if bbox_row and bbox_row["bbox"]:
+        feature["bbox"] = _parse_bbox(bbox_row["bbox"])
+
+    return feature
+
+
+# ── GEOM/WKT ──
+
+SQL_MUNICIPIO_GEOM = """
+    SELECT m.id, m.codigo_ine, m.nombre,
+           ST_AsText(m.geom) as geom_wkt,
+           ST_SRID(m.geom) as srid,
+           d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
+           p.id as p_id, p.codigo_ine as p_codigo_ine, p.nombre as p_nombre
+    FROM shared.municipio m
+    LEFT JOIN shared.departamento d ON m.id_departamento = d.id
+    LEFT JOIN shared.provincia p ON m.id_provincia = p.id
+"""
+
+
+def _build_municipio_geom(row):
+    data = dict(row)
+    data["departamento"] = {
+        "id": data.pop("d_id"),
+        "codigo_ine": data.pop("d_codigo_ine"),
+        "nombre": data.pop("d_nombre"),
+    } if data.get("d_id") else None
+    data["provincia"] = {
+        "id": data.pop("p_id"),
+        "codigo_ine": data.pop("p_codigo_ine"),
+        "nombre": data.pop("p_nombre"),
+    } if data.get("p_id") else None
+    return data
+
+
+def get_municipios_geom(db: Session, id_provincia: int | None = None, id_departamento: int | None = None):
+    where = ""
+    params = {}
+    if id_provincia:
+        where = "WHERE m.id_provincia = :p"
+        params["p"] = id_provincia
+    elif id_departamento:
+        where = "WHERE m.id_departamento = :d"
+        params["d"] = id_departamento
+
+    rows = db.execute(
+        text(f"{SQL_MUNICIPIO_GEOM} {where} ORDER BY m.id"), params
+    ).mappings().all()
+    return [_build_municipio_geom(r) for r in rows]
+
+
+def get_municipio_geom(db: Session, id: int):
+    row = db.execute(
+        text(f"{SQL_MUNICIPIO_GEOM} WHERE m.id = :id"), {"id": id}
+    ).mappings().first()
+    return _build_municipio_geom(row) if row else None
+
+
+# ── UBICACIÓN (punto-dentro-de-polígono) ──
+
+def obtener_ubicacion(db: Session, lat: float, lon: float):
+    sql = """
+        SELECT
+            m.id, m.codigo_ine, m.nombre,
+            d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
+            p.id as p_id, p.codigo_ine as p_codigo_ine, p.nombre as p_nombre
+        FROM shared.municipio m
+        LEFT JOIN shared.departamento d ON m.id_departamento = d.id
+        LEFT JOIN shared.provincia p ON m.id_provincia = p.id
+        WHERE ST_Contains(m.geom, ST_SetSRID(ST_Point(:lon, :lat), 4326))
+        LIMIT 1
+    """
+    row = db.execute(text(sql), {"lat": lat, "lon": lon}).mappings().first()
+    if not row:
+        return None
+
+    data = dict(row)
+    municipio = {
+        "id": data["id"],
+        "codigo_ine": data["codigo_ine"],
+        "nombre": data["nombre"],
+    }
+    departamento = {
+        "id": data["d_id"],
+        "codigo_ine": data["d_codigo_ine"],
+        "nombre": data["d_nombre"],
+    } if data.get("d_id") else None
+    provincia = {
+        "id": data["p_id"],
+        "codigo_ine": data["p_codigo_ine"],
+        "nombre": data["p_nombre"],
+    } if data.get("p_id") else None
+
+    return {
+        "lat": lat,
+        "lon": lon,
+        "municipio": municipio,
+        "provincia": provincia,
+        "departamento": departamento,
+    }
+
+
+# ── helpers ──
+
+def _parse_bbox(bbox_str: str) -> list[float] | None:
+    if not bbox_str:
+        return None
+    try:
+        clean = bbox_str.replace("BOX(", "").replace(")", "")
+        parts = clean.split(",")
+        ll = parts[0].split()
+        ur = parts[1].split()
+        return [float(ll[0]), float(ll[1]), float(ur[0]), float(ur[1])]
+    except Exception:
+        return None
+
+
+def _extract_coords(geom, result):
+    if isinstance(geom, list) and len(geom) >= 2:
+        if isinstance(geom[0], (int, float)):
+            result.append(geom[:2])
+        else:
+            for item in geom:
+                _extract_coords(item, result)

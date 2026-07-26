@@ -29,6 +29,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Buscar backup (preferir el más reciente)
 BACKUP=""
 for CANDIDATO in \
+    "$PROJECT_DIR/database/backup_2026_07_26.sql" \
     "$PROJECT_DIR/database/backup_2026_07_21.sql" \
     "$PROJECT_DIR/database/edan_db_backup.sql"; do
     if [ -f "$CANDIDATO" ]; then
@@ -144,6 +145,16 @@ if [ "$MODE" != "api" ]; then
         echo "  Instalando PostgreSQL..."
         apt-get install -y -qq postgresql postgresql-client
         ok "PostgreSQL instalado"
+    fi
+
+    # PostGIS (requerido para geometrías de municipios)
+    if dpkg -l | grep -q "postgresql-.*-postgis" 2>/dev/null; then
+        ok "PostGIS ya instalado"
+    else
+        PG_VER=$(psql --version | grep -oP '\d+' | head -1)
+        echo "  Instalando PostGIS..."
+        apt-get install -y -qq "postgresql-$PG_VER-postgis-3" 2>/dev/null || apt-get install -y -qq postgis 2>/dev/null || true
+        ok "PostGIS instalado"
     fi
 
     # Python3 + pip + venv
@@ -685,7 +696,7 @@ if [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ] || [ "$MODE" = "api" ]; then
     echo "    Docs:     http://localhost:$API_PORT/docs"
     echo "    ReDoc:    http://localhost:$API_PORT/redoc"
     echo ""
-    echo "    Endpoints: 157 (auth, shared, edan, rea, usuarios)"
+    echo "    Endpoints: 166 (auth, shared, edan, rea, usuarios, geojson, geom, ubicacion)"
     echo ""
 fi
 

@@ -11,7 +11,7 @@ USER="sinagersat"
 PW="12345678"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKUP="$SCRIPT_DIR/database/edan_db_backup.sql"
+BACKUP="$SCRIPT_DIR/database/backup_2026_07_26.sql"
 SQL_ESQUEMA="$SCRIPT_DIR/database/crear_edan_db.sql"
 SQL_GEOGRAFIA="$SCRIPT_DIR/database/insert_provincias_municipios.sql"
 
@@ -64,6 +64,16 @@ else
     apt-get update -qq
     apt-get install -y -qq postgresql postgresql-client
     ok "PostgreSQL instalado"
+fi
+
+# PostGIS (requerido para geometrías de municipios)
+if dpkg -l | grep -q "postgresql-.*-postgis" 2>/dev/null; then
+    ok "PostGIS ya instalado"
+else
+    PG_VER=$(psql --version | grep -oP '\d+' | head -1)
+    echo "  Instalando PostGIS..."
+    apt-get install -y -qq "postgresql-$PG_VER-postgis-3" 2>/dev/null || apt-get install -y -qq postgis 2>/dev/null || true
+    ok "PostGIS instalado"
 fi
 
 # --------------------------------------------------

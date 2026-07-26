@@ -1,6 +1,6 @@
 # SINAGERSAT - Base de Datos
 
-Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.4.
+Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.5.
 
 ---
 
@@ -158,6 +158,7 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h localhost
 - `docs/DESPLIEGUE_API.md` - Guía de despliegue de la API y acceso externo desde internet
 - `docs/SERVICIOS.md` - Gestión de servicios systemd (API + tunnel)
 - `docs/CONECTAR.md` - Credenciales y formas de conexión a la BD
+- `docs/GEOESPACIALES.md` - Guía de endpoints GeoJSON/Geom/Ubicación y uso con herramientas de mapas
 
 ---
 
@@ -176,7 +177,7 @@ bash deploy/verificar.sh
 
 ---
 
-## API REST (FastAPI) v1.2.4
+## API REST (FastAPI) v1.2.5
 
 ### Iniciar API local
 
@@ -198,7 +199,7 @@ bash start_tunnel.sh
 grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-### Formato de Respuestas (v1.2.4)
+### Formato de Respuestas (v1.2.5)
 
 Todas las respuestas exitosas usan el formato estándar:
 
@@ -229,7 +230,7 @@ Para eliminaciones:
 }
 ```
 
-### Objetos Anidados (v1.2.4)
+### Objetos Anidados (v1.2.5)
 
 Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de usuario:
 
@@ -251,16 +252,60 @@ Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de
 
 Los campos `id_*` originales se mantienen para compatibilidad; los objetos anidados son información complementaria.
 
-### Endpoints (159 totales)
+### Endpoints (166 totales)
 
 | Grupo | Prefijo | Acceso | Operaciones |
 |---|---|---|---|
 | Auth | `/api/v1/auth/` | Público | Login, Register |
 | Shared | `/api/v1/shared/` | Público | CRUD deptos, provs, municipios |
+| GeoJSON | `/api/v1/shared/municipios/geojson` | Público | FeatureCollection GeoJSON (RFC 7946) |
+| GEOM/WKT | `/api/v1/shared/municipios/geom` | Público | Geometrías WKT |
+| Ubicación | `/api/v1/shared/municipios/ubicacion` | Público | Punto-dentro-de-polígono (lat, lon) |
 | EDAN | `/api/v1/edan/` | Token | CRUD EDAN + 17 sub-tablas + 5 catálogos + con-foto |
 | REA | `/api/v1/rea/` | Token | CRUD reportes + con-foto, estados, categorías |
 | Usuarios | `/api/v1/usuarios/` | Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
 | Upload | `/api/v1/upload/` | Token | Subir/descargar archivos |
+
+### Geoespaciales (v1.2.5) — Compatible con herramientas de mapas
+
+La BD incluye PostGIS con geometrías de los 340 municipios (SRID 4326/WGS 84).
+
+#### GeoJSON (RFC 7946) — Leaflet, OpenLayers, Google Maps, Mapbox, QGIS, kepler.gl
+
+```bash
+# Todos los municipios
+curl http://localhost:8000/api/v1/shared/municipios/geojson
+
+# Filtrar por departamento
+curl http://localhost:8000/api/v1/shared/municipios/geojson?id_departamento=2
+
+# Un municipio
+curl http://localhost:8000/api/v1/shared/municipios/20101/geojson
+```
+
+#### WKT (Well-Known Text) — PostGIS, Shapely, SQL directo
+
+```bash
+curl http://localhost:8000/api/v1/shared/municipios/geom
+```
+
+#### Ubicación (punto-dentro-de-polígono) — GPS, geolocalización
+
+```bash
+# ¿En qué municipio está la coordenada?
+curl "http://localhost:8000/api/v1/shared/municipios/ubicacion?lat=-16.4897&lon=-68.1193"
+```
+
+Respuesta:
+```json
+{
+  "lat": -16.4897,
+  "lon": -68.1193,
+  "municipio": {"id": 20101, "codigo_ine": "020101", "nombre": "La Paz"},
+  "provincia": {"id": 201, "codigo_ine": "0201", "nombre": "Murillo"},
+  "departamento": {"id": 2, "codigo_ine": "02", "nombre": "La Paz"}
+}
+```
 
 ### Autenticación
 
