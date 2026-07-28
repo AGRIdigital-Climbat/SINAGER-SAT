@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict BzPcarCZQYUXIr8eVxgfyms1BdQQbCMlXRRccZCyJmnYKTePkpC9FSx9FLmrliX
+\restrict 0Z6F8RWxyeYw4N50pMTti8F9rdVzaSN5UOgE1A90rNTthAWicworBHOPuh6yxSp
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
@@ -19,53 +19,67 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: edan; Type: SCHEMA; Schema: -; Owner: -
+-- Name: edan; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA edan;
 
 
+ALTER SCHEMA edan OWNER TO sinagersat;
+
 --
--- Name: rea; Type: SCHEMA; Schema: -; Owner: -
+-- Name: rea; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA rea;
 
 
+ALTER SCHEMA rea OWNER TO sinagersat;
+
 --
--- Name: recursos; Type: SCHEMA; Schema: -; Owner: -
+-- Name: recursos; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA recursos;
 
 
+ALTER SCHEMA recursos OWNER TO sinagersat;
+
 --
--- Name: rida; Type: SCHEMA; Schema: -; Owner: -
+-- Name: rida; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA rida;
 
 
+ALTER SCHEMA rida OWNER TO sinagersat;
+
 --
--- Name: shared; Type: SCHEMA; Schema: -; Owner: -
+-- Name: shared; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA shared;
 
 
+ALTER SCHEMA shared OWNER TO sinagersat;
+
 --
--- Name: sinb; Type: SCHEMA; Schema: -; Owner: -
+-- Name: sinb; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA sinb;
 
 
+ALTER SCHEMA sinb OWNER TO sinagersat;
+
 --
--- Name: usuarios; Type: SCHEMA; Schema: -; Owner: -
+-- Name: usuarios; Type: SCHEMA; Schema: -; Owner: sinagersat
 --
 
 CREATE SCHEMA usuarios;
 
+
+ALTER SCHEMA usuarios OWNER TO sinagersat;
 
 --
 -- Name: postgis; Type: EXTENSION; Schema: -; Owner: -
@@ -75,7 +89,7 @@ CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION postgis; Type: COMMENT; Schema: -; Owner: -
+-- Name: EXTENSION postgis; Type: COMMENT; Schema: -; Owner: 
 --
 
 COMMENT ON EXTENSION postgis IS 'PostGIS geometry and geography spatial types and functions';
@@ -86,7 +100,7 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: ayuda_humanitaria; Type: TABLE; Schema: edan; Owner: -
+-- Name: ayuda_humanitaria; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.ayuda_humanitaria (
@@ -96,8 +110,10 @@ CREATE TABLE edan.ayuda_humanitaria (
 );
 
 
+ALTER TABLE edan.ayuda_humanitaria OWNER TO postgres;
+
 --
--- Name: catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq
@@ -109,15 +125,17 @@ CREATE SEQUENCE edan.catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq OWNER TO postgres;
+
 --
--- Name: catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq OWNED BY edan.ayuda_humanitaria.id_ayuda_humanitaria;
 
 
 --
--- Name: categoria_proteccion; Type: TABLE; Schema: edan; Owner: -
+-- Name: categoria_proteccion; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.categoria_proteccion (
@@ -127,8 +145,10 @@ CREATE TABLE edan.categoria_proteccion (
 );
 
 
+ALTER TABLE edan.categoria_proteccion OWNER TO postgres;
+
 --
--- Name: catalogo_categoria_proteccion_id_categoria_proteccion_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: catalogo_categoria_proteccion_id_categoria_proteccion_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.catalogo_categoria_proteccion_id_categoria_proteccion_seq
@@ -140,15 +160,17 @@ CREATE SEQUENCE edan.catalogo_categoria_proteccion_id_categoria_proteccion_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.catalogo_categoria_proteccion_id_categoria_proteccion_seq OWNER TO postgres;
+
 --
--- Name: catalogo_categoria_proteccion_id_categoria_proteccion_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: catalogo_categoria_proteccion_id_categoria_proteccion_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.catalogo_categoria_proteccion_id_categoria_proteccion_seq OWNED BY edan.categoria_proteccion.id_categoria_proteccion;
 
 
 --
--- Name: grupo_etario; Type: TABLE; Schema: edan; Owner: -
+-- Name: grupo_etario; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.grupo_etario (
@@ -158,8 +180,10 @@ CREATE TABLE edan.grupo_etario (
 );
 
 
+ALTER TABLE edan.grupo_etario OWNER TO postgres;
+
 --
--- Name: catalogo_grupo_etario_id_grupo_etario_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: catalogo_grupo_etario_id_grupo_etario_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.catalogo_grupo_etario_id_grupo_etario_seq
@@ -171,15 +195,17 @@ CREATE SEQUENCE edan.catalogo_grupo_etario_id_grupo_etario_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.catalogo_grupo_etario_id_grupo_etario_seq OWNER TO postgres;
+
 --
--- Name: catalogo_grupo_etario_id_grupo_etario_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: catalogo_grupo_etario_id_grupo_etario_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.catalogo_grupo_etario_id_grupo_etario_seq OWNED BY edan.grupo_etario.id_grupo_etario;
 
 
 --
--- Name: servicio_basico; Type: TABLE; Schema: edan; Owner: -
+-- Name: servicio_basico; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.servicio_basico (
@@ -189,8 +215,10 @@ CREATE TABLE edan.servicio_basico (
 );
 
 
+ALTER TABLE edan.servicio_basico OWNER TO postgres;
+
 --
--- Name: catalogo_servicio_basico_id_servicio_basico_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: catalogo_servicio_basico_id_servicio_basico_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.catalogo_servicio_basico_id_servicio_basico_seq
@@ -202,15 +230,17 @@ CREATE SEQUENCE edan.catalogo_servicio_basico_id_servicio_basico_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.catalogo_servicio_basico_id_servicio_basico_seq OWNER TO postgres;
+
 --
--- Name: catalogo_servicio_basico_id_servicio_basico_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: catalogo_servicio_basico_id_servicio_basico_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.catalogo_servicio_basico_id_servicio_basico_seq OWNED BY edan.servicio_basico.id_servicio_basico;
 
 
 --
--- Name: tipo_evento; Type: TABLE; Schema: edan; Owner: -
+-- Name: tipo_evento; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.tipo_evento (
@@ -219,8 +249,10 @@ CREATE TABLE edan.tipo_evento (
 );
 
 
+ALTER TABLE edan.tipo_evento OWNER TO postgres;
+
 --
--- Name: catalogo_tipo_evento_id_tipo_evento_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: catalogo_tipo_evento_id_tipo_evento_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.catalogo_tipo_evento_id_tipo_evento_seq
@@ -232,15 +264,17 @@ CREATE SEQUENCE edan.catalogo_tipo_evento_id_tipo_evento_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.catalogo_tipo_evento_id_tipo_evento_seq OWNER TO postgres;
+
 --
--- Name: catalogo_tipo_evento_id_tipo_evento_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: catalogo_tipo_evento_id_tipo_evento_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.catalogo_tipo_evento_id_tipo_evento_seq OWNED BY edan.tipo_evento.id_tipo_evento;
 
 
 --
--- Name: edan; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan (
@@ -269,15 +303,17 @@ CREATE TABLE edan.edan (
 );
 
 
+ALTER TABLE edan.edan OWNER TO postgres;
+
 --
--- Name: TABLE edan; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan IS 'Tabla principal - Evaluación de Daños y Análisis de Necesidades';
 
 
 --
--- Name: edan_agricultura; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_agricultura; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_agricultura (
@@ -291,15 +327,17 @@ CREATE TABLE edan.edan_agricultura (
 );
 
 
+ALTER TABLE edan.edan_agricultura OWNER TO postgres;
+
 --
--- Name: TABLE edan_agricultura; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_agricultura; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_agricultura IS 'Sección 9.1 - Daños y necesidades en agricultura';
 
 
 --
--- Name: edan_agricultura_id_agricultura_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_agricultura_id_agricultura_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_agricultura_id_agricultura_seq
@@ -311,15 +349,17 @@ CREATE SEQUENCE edan.edan_agricultura_id_agricultura_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_agricultura_id_agricultura_seq OWNER TO postgres;
+
 --
--- Name: edan_agricultura_id_agricultura_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_agricultura_id_agricultura_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_agricultura_id_agricultura_seq OWNED BY edan.edan_agricultura.id_agricultura;
 
 
 --
--- Name: edan_ayuda_humanitaria; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_ayuda_humanitaria (
@@ -331,15 +371,17 @@ CREATE TABLE edan.edan_ayuda_humanitaria (
 );
 
 
+ALTER TABLE edan.edan_ayuda_humanitaria OWNER TO postgres;
+
 --
--- Name: TABLE edan_ayuda_humanitaria; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_ayuda_humanitaria; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_ayuda_humanitaria IS 'Sección 11 - Necesidades humanitarias';
 
 
 --
--- Name: edan_ayuda_humanitaria_id_ayuda_edan_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria_id_ayuda_edan_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_ayuda_humanitaria_id_ayuda_edan_seq
@@ -351,15 +393,17 @@ CREATE SEQUENCE edan.edan_ayuda_humanitaria_id_ayuda_edan_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_ayuda_humanitaria_id_ayuda_edan_seq OWNER TO postgres;
+
 --
--- Name: edan_ayuda_humanitaria_id_ayuda_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria_id_ayuda_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_ayuda_humanitaria_id_ayuda_edan_seq OWNED BY edan.edan_ayuda_humanitaria.id_ayuda_edan;
 
 
 --
--- Name: edan_comunidad; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_comunidad; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_comunidad (
@@ -369,15 +413,17 @@ CREATE TABLE edan.edan_comunidad (
 );
 
 
+ALTER TABLE edan.edan_comunidad OWNER TO postgres;
+
 --
--- Name: TABLE edan_comunidad; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_comunidad; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_comunidad IS 'Sección 12 - Comunidades/localidades/barrios afectados';
 
 
 --
--- Name: edan_comunidad_id_comunidad_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_comunidad_id_comunidad_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_comunidad_id_comunidad_seq
@@ -389,15 +435,17 @@ CREATE SEQUENCE edan.edan_comunidad_id_comunidad_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_comunidad_id_comunidad_seq OWNER TO postgres;
+
 --
--- Name: edan_comunidad_id_comunidad_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_comunidad_id_comunidad_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_comunidad_id_comunidad_seq OWNED BY edan.edan_comunidad.id_comunidad;
 
 
 --
--- Name: edan_educacion_afectacion; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_educacion_afectacion; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_educacion_afectacion (
@@ -413,15 +461,17 @@ CREATE TABLE edan.edan_educacion_afectacion (
 );
 
 
+ALTER TABLE edan.edan_educacion_afectacion OWNER TO postgres;
+
 --
--- Name: TABLE edan_educacion_afectacion; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_educacion_afectacion; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_educacion_afectacion IS 'Sección 7.2 - Afectación a alumnos, profesores y admin';
 
 
 --
--- Name: edan_educacion_afectacion_id_educacion_afectacion_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_educacion_afectacion_id_educacion_afectacion_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_educacion_afectacion_id_educacion_afectacion_seq
@@ -433,15 +483,17 @@ CREATE SEQUENCE edan.edan_educacion_afectacion_id_educacion_afectacion_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_educacion_afectacion_id_educacion_afectacion_seq OWNER TO postgres;
+
 --
--- Name: edan_educacion_afectacion_id_educacion_afectacion_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_educacion_afectacion_id_educacion_afectacion_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_educacion_afectacion_id_educacion_afectacion_seq OWNED BY edan.edan_educacion_afectacion.id_educacion_afectacion;
 
 
 --
--- Name: edan_educacion_dano; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_educacion_dano; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_educacion_dano (
@@ -458,15 +510,17 @@ CREATE TABLE edan.edan_educacion_dano (
 );
 
 
+ALTER TABLE edan.edan_educacion_dano OWNER TO postgres;
+
 --
--- Name: TABLE edan_educacion_dano; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_educacion_dano; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_educacion_dano IS 'Sección 7.1 - Daños en unidades educativas';
 
 
 --
--- Name: edan_educacion_dano_id_educacion_dano_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_educacion_dano_id_educacion_dano_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_educacion_dano_id_educacion_dano_seq
@@ -478,15 +532,17 @@ CREATE SEQUENCE edan.edan_educacion_dano_id_educacion_dano_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_educacion_dano_id_educacion_dano_seq OWNER TO postgres;
+
 --
--- Name: edan_educacion_dano_id_educacion_dano_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_educacion_dano_id_educacion_dano_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_educacion_dano_id_educacion_dano_seq OWNED BY edan.edan_educacion_dano.id_educacion_dano;
 
 
 --
--- Name: edan_id_edan_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_id_edan_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_id_edan_seq
@@ -497,15 +553,17 @@ CREATE SEQUENCE edan.edan_id_edan_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_id_edan_seq OWNER TO postgres;
+
 --
--- Name: edan_id_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_id_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_id_edan_seq OWNED BY edan.edan.id_edan;
 
 
 --
--- Name: edan_infraestructura_productiva; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_infraestructura_productiva; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_infraestructura_productiva (
@@ -518,15 +576,17 @@ CREATE TABLE edan.edan_infraestructura_productiva (
 );
 
 
+ALTER TABLE edan.edan_infraestructura_productiva OWNER TO postgres;
+
 --
--- Name: TABLE edan_infraestructura_productiva; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_infraestructura_productiva; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_infraestructura_productiva IS 'Sección 9.3 - Daño en infraestructura productiva';
 
 
 --
--- Name: edan_infraestructura_productiva_id_infra_productiva_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_infraestructura_productiva_id_infra_productiva_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_infraestructura_productiva_id_infra_productiva_seq
@@ -538,15 +598,17 @@ CREATE SEQUENCE edan.edan_infraestructura_productiva_id_infra_productiva_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_infraestructura_productiva_id_infra_productiva_seq OWNER TO postgres;
+
 --
--- Name: edan_infraestructura_productiva_id_infra_productiva_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_infraestructura_productiva_id_infra_productiva_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_infraestructura_productiva_id_infra_productiva_seq OWNED BY edan.edan_infraestructura_productiva.id_infra_productiva;
 
 
 --
--- Name: edan_infraestructura_publica; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_infraestructura_publica; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_infraestructura_publica (
@@ -560,15 +622,17 @@ CREATE TABLE edan.edan_infraestructura_publica (
 );
 
 
+ALTER TABLE edan.edan_infraestructura_publica OWNER TO postgres;
+
 --
--- Name: TABLE edan_infraestructura_publica; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_infraestructura_publica; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_infraestructura_publica IS 'Sección 5.2 - Daños en infraestructura pública';
 
 
 --
--- Name: edan_infraestructura_publica_id_infraestructura_publica_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_infraestructura_publica_id_infraestructura_publica_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_infraestructura_publica_id_infraestructura_publica_seq
@@ -580,15 +644,17 @@ CREATE SEQUENCE edan.edan_infraestructura_publica_id_infraestructura_publica_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_infraestructura_publica_id_infraestructura_publica_seq OWNER TO postgres;
+
 --
--- Name: edan_infraestructura_publica_id_infraestructura_publica_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_infraestructura_publica_id_infraestructura_publica_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_infraestructura_publica_id_infraestructura_publica_seq OWNED BY edan.edan_infraestructura_publica.id_infraestructura_publica;
 
 
 --
--- Name: edan_infraestructura_vial; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_infraestructura_vial; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_infraestructura_vial (
@@ -605,15 +671,17 @@ CREATE TABLE edan.edan_infraestructura_vial (
 );
 
 
+ALTER TABLE edan.edan_infraestructura_vial OWNER TO postgres;
+
 --
--- Name: TABLE edan_infraestructura_vial; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_infraestructura_vial; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_infraestructura_vial IS 'Sección 5.1 - Daños en infraestructura vial';
 
 
 --
--- Name: edan_infraestructura_vial_id_infraestructura_vial_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_infraestructura_vial_id_infraestructura_vial_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_infraestructura_vial_id_infraestructura_vial_seq
@@ -625,15 +693,17 @@ CREATE SEQUENCE edan.edan_infraestructura_vial_id_infraestructura_vial_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_infraestructura_vial_id_infraestructura_vial_seq OWNER TO postgres;
+
 --
--- Name: edan_infraestructura_vial_id_infraestructura_vial_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_infraestructura_vial_id_infraestructura_vial_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_infraestructura_vial_id_infraestructura_vial_seq OWNED BY edan.edan_infraestructura_vial.id_infraestructura_vial;
 
 
 --
--- Name: edan_pecuaria; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_pecuaria; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_pecuaria (
@@ -648,15 +718,17 @@ CREATE TABLE edan.edan_pecuaria (
 );
 
 
+ALTER TABLE edan.edan_pecuaria OWNER TO postgres;
+
 --
--- Name: TABLE edan_pecuaria; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_pecuaria; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_pecuaria IS 'Sección 9.2 - Daños y necesidades pecuarias';
 
 
 --
--- Name: edan_pecuaria_id_pecuaria_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_pecuaria_id_pecuaria_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_pecuaria_id_pecuaria_seq
@@ -668,15 +740,17 @@ CREATE SEQUENCE edan.edan_pecuaria_id_pecuaria_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_pecuaria_id_pecuaria_seq OWNER TO postgres;
+
 --
--- Name: edan_pecuaria_id_pecuaria_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_pecuaria_id_pecuaria_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_pecuaria_id_pecuaria_seq OWNED BY edan.edan_pecuaria.id_pecuaria;
 
 
 --
--- Name: edan_poblacion_grupo; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_poblacion_grupo (
@@ -690,15 +764,17 @@ CREATE TABLE edan.edan_poblacion_grupo (
 );
 
 
+ALTER TABLE edan.edan_poblacion_grupo OWNER TO postgres;
+
 --
--- Name: TABLE edan_poblacion_grupo; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_poblacion_grupo; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_poblacion_grupo IS 'Sección 2 - Población por grupo etario';
 
 
 --
--- Name: edan_poblacion_grupo_id_poblacion_grupo_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo_id_poblacion_grupo_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_poblacion_grupo_id_poblacion_grupo_seq
@@ -710,15 +786,17 @@ CREATE SEQUENCE edan.edan_poblacion_grupo_id_poblacion_grupo_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_poblacion_grupo_id_poblacion_grupo_seq OWNER TO postgres;
+
 --
--- Name: edan_poblacion_grupo_id_poblacion_grupo_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo_id_poblacion_grupo_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_poblacion_grupo_id_poblacion_grupo_seq OWNED BY edan.edan_poblacion_grupo.id_poblacion_grupo;
 
 
 --
--- Name: edan_primera_respuesta; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_primera_respuesta; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_primera_respuesta (
@@ -736,15 +814,17 @@ CREATE TABLE edan.edan_primera_respuesta (
 );
 
 
+ALTER TABLE edan.edan_primera_respuesta OWNER TO postgres;
+
 --
--- Name: TABLE edan_primera_respuesta; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_primera_respuesta; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_primera_respuesta IS 'Sección 3.3 - Necesidades en primera respuesta';
 
 
 --
--- Name: edan_primera_respuesta_id_primera_respuesta_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_primera_respuesta_id_primera_respuesta_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_primera_respuesta_id_primera_respuesta_seq
@@ -756,15 +836,17 @@ CREATE SEQUENCE edan.edan_primera_respuesta_id_primera_respuesta_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_primera_respuesta_id_primera_respuesta_seq OWNER TO postgres;
+
 --
--- Name: edan_primera_respuesta_id_primera_respuesta_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_primera_respuesta_id_primera_respuesta_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_primera_respuesta_id_primera_respuesta_seq OWNED BY edan.edan_primera_respuesta.id_primera_respuesta;
 
 
 --
--- Name: edan_proteccion; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_proteccion; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_proteccion (
@@ -780,15 +862,17 @@ CREATE TABLE edan.edan_proteccion (
 );
 
 
+ALTER TABLE edan.edan_proteccion OWNER TO postgres;
+
 --
--- Name: TABLE edan_proteccion; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_proteccion; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_proteccion IS 'Sección 10 - Necesidades de protección';
 
 
 --
--- Name: edan_proteccion_id_proteccion_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_proteccion_id_proteccion_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_proteccion_id_proteccion_seq
@@ -800,15 +884,17 @@ CREATE SEQUENCE edan.edan_proteccion_id_proteccion_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_proteccion_id_proteccion_seq OWNER TO postgres;
+
 --
--- Name: edan_proteccion_id_proteccion_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_proteccion_id_proteccion_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_proteccion_id_proteccion_seq OWNED BY edan.edan_proteccion.id_proteccion;
 
 
 --
--- Name: edan_salud_establecimiento; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_salud_establecimiento; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_salud_establecimiento (
@@ -827,15 +913,17 @@ CREATE TABLE edan.edan_salud_establecimiento (
 );
 
 
+ALTER TABLE edan.edan_salud_establecimiento OWNER TO postgres;
+
 --
--- Name: TABLE edan_salud_establecimiento; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_salud_establecimiento; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_salud_establecimiento IS 'Sección 4.1 - Daños en servicios de salud';
 
 
 --
--- Name: edan_salud_establecimiento_id_salud_establecimiento_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_salud_establecimiento_id_salud_establecimiento_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_salud_establecimiento_id_salud_establecimiento_seq
@@ -847,15 +935,17 @@ CREATE SEQUENCE edan.edan_salud_establecimiento_id_salud_establecimiento_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_salud_establecimiento_id_salud_establecimiento_seq OWNER TO postgres;
+
 --
--- Name: edan_salud_establecimiento_id_salud_establecimiento_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_salud_establecimiento_id_salud_establecimiento_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_salud_establecimiento_id_salud_establecimiento_seq OWNED BY edan.edan_salud_establecimiento.id_salud_establecimiento;
 
 
 --
--- Name: edan_salud_necesidades; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_salud_necesidades; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_salud_necesidades (
@@ -867,15 +957,17 @@ CREATE TABLE edan.edan_salud_necesidades (
 );
 
 
+ALTER TABLE edan.edan_salud_necesidades OWNER TO postgres;
+
 --
--- Name: TABLE edan_salud_necesidades; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_salud_necesidades; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_salud_necesidades IS 'Sección 4.2 - Necesidades en salud';
 
 
 --
--- Name: edan_salud_necesidades_id_salud_necesidad_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_salud_necesidades_id_salud_necesidad_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_salud_necesidades_id_salud_necesidad_seq
@@ -887,15 +979,17 @@ CREATE SEQUENCE edan.edan_salud_necesidades_id_salud_necesidad_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_salud_necesidades_id_salud_necesidad_seq OWNER TO postgres;
+
 --
--- Name: edan_salud_necesidades_id_salud_necesidad_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_salud_necesidades_id_salud_necesidad_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_salud_necesidades_id_salud_necesidad_seq OWNED BY edan.edan_salud_necesidades.id_salud_necesidad;
 
 
 --
--- Name: edan_servicio_basico; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_servicio_basico; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_servicio_basico (
@@ -909,15 +1003,17 @@ CREATE TABLE edan.edan_servicio_basico (
 );
 
 
+ALTER TABLE edan.edan_servicio_basico OWNER TO postgres;
+
 --
--- Name: TABLE edan_servicio_basico; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_servicio_basico; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_servicio_basico IS 'Sección 6 - Daño en servicios básicos';
 
 
 --
--- Name: edan_servicio_basico_id_servicio_basico_edan_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_servicio_basico_id_servicio_basico_edan_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_servicio_basico_id_servicio_basico_edan_seq
@@ -929,15 +1025,17 @@ CREATE SEQUENCE edan.edan_servicio_basico_id_servicio_basico_edan_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_servicio_basico_id_servicio_basico_edan_seq OWNER TO postgres;
+
 --
--- Name: edan_servicio_basico_id_servicio_basico_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_servicio_basico_id_servicio_basico_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_servicio_basico_id_servicio_basico_edan_seq OWNED BY edan.edan_servicio_basico.id_servicio_basico_edan;
 
 
 --
--- Name: edan_tipo_evento; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_tipo_evento; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_tipo_evento (
@@ -947,15 +1045,17 @@ CREATE TABLE edan.edan_tipo_evento (
 );
 
 
+ALTER TABLE edan.edan_tipo_evento OWNER TO postgres;
+
 --
--- Name: TABLE edan_tipo_evento; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_tipo_evento; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_tipo_evento IS 'Sección 3.1 - Tipo de evento adverso (puente)';
 
 
 --
--- Name: edan_tipo_evento_id_tipo_evento_edan_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_tipo_evento_id_tipo_evento_edan_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_tipo_evento_id_tipo_evento_edan_seq
@@ -967,15 +1067,17 @@ CREATE SEQUENCE edan.edan_tipo_evento_id_tipo_evento_edan_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_tipo_evento_id_tipo_evento_edan_seq OWNER TO postgres;
+
 --
--- Name: edan_tipo_evento_id_tipo_evento_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_tipo_evento_id_tipo_evento_edan_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_tipo_evento_id_tipo_evento_edan_seq OWNED BY edan.edan_tipo_evento.id_tipo_evento_edan;
 
 
 --
--- Name: edan_vivienda; Type: TABLE; Schema: edan; Owner: -
+-- Name: edan_vivienda; Type: TABLE; Schema: edan; Owner: postgres
 --
 
 CREATE TABLE edan.edan_vivienda (
@@ -989,15 +1091,17 @@ CREATE TABLE edan.edan_vivienda (
 );
 
 
+ALTER TABLE edan.edan_vivienda OWNER TO postgres;
+
 --
--- Name: TABLE edan_vivienda; Type: COMMENT; Schema: edan; Owner: -
+-- Name: TABLE edan_vivienda; Type: COMMENT; Schema: edan; Owner: postgres
 --
 
 COMMENT ON TABLE edan.edan_vivienda IS 'Sección 8 - Daños en vivienda';
 
 
 --
--- Name: edan_vivienda_id_vivienda_seq; Type: SEQUENCE; Schema: edan; Owner: -
+-- Name: edan_vivienda_id_vivienda_seq; Type: SEQUENCE; Schema: edan; Owner: postgres
 --
 
 CREATE SEQUENCE edan.edan_vivienda_id_vivienda_seq
@@ -1009,27 +1113,31 @@ CREATE SEQUENCE edan.edan_vivienda_id_vivienda_seq
     CACHE 1;
 
 
+ALTER SEQUENCE edan.edan_vivienda_id_vivienda_seq OWNER TO postgres;
+
 --
--- Name: edan_vivienda_id_vivienda_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: -
+-- Name: edan_vivienda_id_vivienda_seq; Type: SEQUENCE OWNED BY; Schema: edan; Owner: postgres
 --
 
 ALTER SEQUENCE edan.edan_vivienda_id_vivienda_seq OWNED BY edan.edan_vivienda.id_vivienda;
 
 
 --
--- Name: afectacion_categoria; Type: TABLE; Schema: rea; Owner: -
+-- Name: afectacion_categoria; Type: TABLE; Schema: rea; Owner: sinagersat
 --
 
 CREATE TABLE rea.afectacion_categoria (
     id_categoria integer NOT NULL,
-    nombre character varying(100) NOT NULL,
-    descripcion character varying(200),
-    orden integer NOT NULL
+    nombre character varying(200) NOT NULL,
+    descripcion text,
+    orden integer DEFAULT 0 NOT NULL
 );
 
 
+ALTER TABLE rea.afectacion_categoria OWNER TO sinagersat;
+
 --
--- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE; Schema: rea; Owner: -
+-- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE; Schema: rea; Owner: sinagersat
 --
 
 CREATE SEQUENCE rea.afectacion_categoria_id_categoria_seq
@@ -1041,27 +1149,31 @@ CREATE SEQUENCE rea.afectacion_categoria_id_categoria_seq
     CACHE 1;
 
 
+ALTER SEQUENCE rea.afectacion_categoria_id_categoria_seq OWNER TO sinagersat;
+
 --
--- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: -
+-- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: sinagersat
 --
 
 ALTER SEQUENCE rea.afectacion_categoria_id_categoria_seq OWNED BY rea.afectacion_categoria.id_categoria;
 
 
 --
--- Name: estado_reporte; Type: TABLE; Schema: rea; Owner: -
+-- Name: estado_reporte; Type: TABLE; Schema: rea; Owner: sinagersat
 --
 
 CREATE TABLE rea.estado_reporte (
     id_estado integer NOT NULL,
-    nombre character varying(50) NOT NULL,
-    descripcion character varying(200),
-    orden integer NOT NULL
+    nombre character varying(100) NOT NULL,
+    descripcion text,
+    orden integer DEFAULT 0 NOT NULL
 );
 
 
+ALTER TABLE rea.estado_reporte OWNER TO sinagersat;
+
 --
--- Name: estado_reporte_id_estado_seq; Type: SEQUENCE; Schema: rea; Owner: -
+-- Name: estado_reporte_id_estado_seq; Type: SEQUENCE; Schema: rea; Owner: sinagersat
 --
 
 CREATE SEQUENCE rea.estado_reporte_id_estado_seq
@@ -1073,48 +1185,54 @@ CREATE SEQUENCE rea.estado_reporte_id_estado_seq
     CACHE 1;
 
 
+ALTER SEQUENCE rea.estado_reporte_id_estado_seq OWNER TO sinagersat;
+
 --
--- Name: estado_reporte_id_estado_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: -
+-- Name: estado_reporte_id_estado_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: sinagersat
 --
 
 ALTER SEQUENCE rea.estado_reporte_id_estado_seq OWNED BY rea.estado_reporte.id_estado;
 
 
 --
--- Name: reporte_afectacion; Type: TABLE; Schema: rea; Owner: -
+-- Name: reporte_afectacion; Type: TABLE; Schema: rea; Owner: sinagersat
 --
 
 CREATE TABLE rea.reporte_afectacion (
-    id_reporte bigint NOT NULL,
+    id_reporte integer NOT NULL,
     id_categoria integer NOT NULL
 );
 
 
+ALTER TABLE rea.reporte_afectacion OWNER TO sinagersat;
+
 --
--- Name: reporte_evento; Type: TABLE; Schema: rea; Owner: -
+-- Name: reporte_evento; Type: TABLE; Schema: rea; Owner: sinagersat
 --
 
 CREATE TABLE rea.reporte_evento (
-    id_reporte bigint NOT NULL,
+    id_reporte integer NOT NULL,
     id_usuario integer NOT NULL,
     id_departamento integer NOT NULL,
     id_provincia integer NOT NULL,
     id_municipio integer NOT NULL,
     comunidad character varying(200) NOT NULL,
-    fecha_evento date NOT NULL,
-    hora_evento time without time zone,
-    fecha_reporte timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    fecha_evento character varying(20) NOT NULL,
+    hora_evento character varying(10),
+    fecha_reporte timestamp without time zone DEFAULT now(),
     id_tipo_evento integer NOT NULL,
-    coordenada_lat numeric(10,8),
-    coordenada_lon numeric(11,8),
+    coordenada_lat numeric(10,7),
+    coordenada_lon numeric(10,7),
     fotografia text,
     descripcion text,
-    id_estado integer NOT NULL
+    id_estado integer DEFAULT 1 NOT NULL
 );
 
 
+ALTER TABLE rea.reporte_evento OWNER TO sinagersat;
+
 --
--- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE; Schema: rea; Owner: -
+-- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE; Schema: rea; Owner: sinagersat
 --
 
 CREATE SEQUENCE rea.reporte_evento_id_reporte_seq
@@ -1126,15 +1244,17 @@ CREATE SEQUENCE rea.reporte_evento_id_reporte_seq
     CACHE 1;
 
 
+ALTER SEQUENCE rea.reporte_evento_id_reporte_seq OWNER TO sinagersat;
+
 --
--- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: -
+-- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE OWNED BY; Schema: rea; Owner: sinagersat
 --
 
 ALTER SEQUENCE rea.reporte_evento_id_reporte_seq OWNED BY rea.reporte_evento.id_reporte;
 
 
 --
--- Name: departamento; Type: TABLE; Schema: shared; Owner: -
+-- Name: departamento; Type: TABLE; Schema: shared; Owner: postgres
 --
 
 CREATE TABLE shared.departamento (
@@ -1144,15 +1264,17 @@ CREATE TABLE shared.departamento (
 );
 
 
+ALTER TABLE shared.departamento OWNER TO postgres;
+
 --
--- Name: TABLE departamento; Type: COMMENT; Schema: shared; Owner: -
+-- Name: TABLE departamento; Type: COMMENT; Schema: shared; Owner: postgres
 --
 
 COMMENT ON TABLE shared.departamento IS 'Catálogo de 9 departamentos de Bolivia (PK: id INTEGER, UNIQUE: codigo_ine)';
 
 
 --
--- Name: municipio; Type: TABLE; Schema: shared; Owner: -
+-- Name: municipio; Type: TABLE; Schema: shared; Owner: postgres
 --
 
 CREATE TABLE shared.municipio (
@@ -1165,15 +1287,17 @@ CREATE TABLE shared.municipio (
 );
 
 
+ALTER TABLE shared.municipio OWNER TO postgres;
+
 --
--- Name: TABLE municipio; Type: COMMENT; Schema: shared; Owner: -
+-- Name: TABLE municipio; Type: COMMENT; Schema: shared; Owner: postgres
 --
 
 COMMENT ON TABLE shared.municipio IS 'Catálogo de municipios por provincia (PK: id INTEGER, UNIQUE: codigo_ine)';
 
 
 --
--- Name: provincia; Type: TABLE; Schema: shared; Owner: -
+-- Name: provincia; Type: TABLE; Schema: shared; Owner: postgres
 --
 
 CREATE TABLE shared.provincia (
@@ -1184,15 +1308,17 @@ CREATE TABLE shared.provincia (
 );
 
 
+ALTER TABLE shared.provincia OWNER TO postgres;
+
 --
--- Name: TABLE provincia; Type: COMMENT; Schema: shared; Owner: -
+-- Name: TABLE provincia; Type: COMMENT; Schema: shared; Owner: postgres
 --
 
 COMMENT ON TABLE shared.provincia IS 'Catálogo de provincias por departamento (PK: id INTEGER, UNIQUE: codigo_ine)';
 
 
 --
--- Name: aplicacion; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: aplicacion; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.aplicacion (
@@ -1204,8 +1330,10 @@ CREATE TABLE usuarios.aplicacion (
 );
 
 
+ALTER TABLE usuarios.aplicacion OWNER TO sinagersat;
+
 --
--- Name: aplicacion_id_aplicacion_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: aplicacion_id_aplicacion_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.aplicacion_id_aplicacion_seq
@@ -1217,15 +1345,17 @@ CREATE SEQUENCE usuarios.aplicacion_id_aplicacion_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.aplicacion_id_aplicacion_seq OWNER TO sinagersat;
+
 --
--- Name: aplicacion_id_aplicacion_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: aplicacion_id_aplicacion_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.aplicacion_id_aplicacion_seq OWNED BY usuarios.aplicacion.id_aplicacion;
 
 
 --
--- Name: auditoria; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: auditoria; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.auditoria (
@@ -1239,8 +1369,10 @@ CREATE TABLE usuarios.auditoria (
 );
 
 
+ALTER TABLE usuarios.auditoria OWNER TO sinagersat;
+
 --
--- Name: auditoria_id_auditoria_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: auditoria_id_auditoria_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.auditoria_id_auditoria_seq
@@ -1251,15 +1383,17 @@ CREATE SEQUENCE usuarios.auditoria_id_auditoria_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.auditoria_id_auditoria_seq OWNER TO sinagersat;
+
 --
--- Name: auditoria_id_auditoria_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: auditoria_id_auditoria_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.auditoria_id_auditoria_seq OWNED BY usuarios.auditoria.id_auditoria;
 
 
 --
--- Name: permiso_aplicacion; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.permiso_aplicacion (
@@ -1269,8 +1403,10 @@ CREATE TABLE usuarios.permiso_aplicacion (
 );
 
 
+ALTER TABLE usuarios.permiso_aplicacion OWNER TO sinagersat;
+
 --
--- Name: permiso_aplicacion_id_permiso_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion_id_permiso_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.permiso_aplicacion_id_permiso_seq
@@ -1282,15 +1418,17 @@ CREATE SEQUENCE usuarios.permiso_aplicacion_id_permiso_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.permiso_aplicacion_id_permiso_seq OWNER TO sinagersat;
+
 --
--- Name: permiso_aplicacion_id_permiso_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion_id_permiso_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.permiso_aplicacion_id_permiso_seq OWNED BY usuarios.permiso_aplicacion.id_permiso;
 
 
 --
--- Name: reset_contrasena; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: reset_contrasena; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.reset_contrasena (
@@ -1304,8 +1442,10 @@ CREATE TABLE usuarios.reset_contrasena (
 );
 
 
+ALTER TABLE usuarios.reset_contrasena OWNER TO sinagersat;
+
 --
--- Name: reset_contrasena_id_reset_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: reset_contrasena_id_reset_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.reset_contrasena_id_reset_seq
@@ -1317,15 +1457,17 @@ CREATE SEQUENCE usuarios.reset_contrasena_id_reset_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.reset_contrasena_id_reset_seq OWNER TO sinagersat;
+
 --
--- Name: reset_contrasena_id_reset_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: reset_contrasena_id_reset_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.reset_contrasena_id_reset_seq OWNED BY usuarios.reset_contrasena.id_reset;
 
 
 --
--- Name: rol; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: rol; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.rol (
@@ -1336,8 +1478,10 @@ CREATE TABLE usuarios.rol (
 );
 
 
+ALTER TABLE usuarios.rol OWNER TO sinagersat;
+
 --
--- Name: rol_id_rol_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: rol_id_rol_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.rol_id_rol_seq
@@ -1349,15 +1493,17 @@ CREATE SEQUENCE usuarios.rol_id_rol_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.rol_id_rol_seq OWNER TO sinagersat;
+
 --
--- Name: rol_id_rol_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: rol_id_rol_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.rol_id_rol_seq OWNED BY usuarios.rol.id_rol;
 
 
 --
--- Name: sesion; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: sesion; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.sesion (
@@ -1371,8 +1517,10 @@ CREATE TABLE usuarios.sesion (
 );
 
 
+ALTER TABLE usuarios.sesion OWNER TO sinagersat;
+
 --
--- Name: sesion_id_sesion_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: sesion_id_sesion_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.sesion_id_sesion_seq
@@ -1384,15 +1532,17 @@ CREATE SEQUENCE usuarios.sesion_id_sesion_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.sesion_id_sesion_seq OWNER TO sinagersat;
+
 --
--- Name: sesion_id_sesion_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: sesion_id_sesion_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.sesion_id_sesion_seq OWNED BY usuarios.sesion.id_sesion;
 
 
 --
--- Name: usuario; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: usuario; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.usuario (
@@ -1411,15 +1561,10 @@ CREATE TABLE usuarios.usuario (
 );
 
 
---
--- Name: COLUMN usuario.id_rol; Type: COMMENT; Schema: usuarios; Owner: -
---
-
-COMMENT ON COLUMN usuarios.usuario.id_rol IS 'Rol principal del usuario (FK a usuarios.rol)';
-
+ALTER TABLE usuarios.usuario OWNER TO sinagersat;
 
 --
--- Name: usuario_id_usuario_seq; Type: SEQUENCE; Schema: usuarios; Owner: -
+-- Name: usuario_id_usuario_seq; Type: SEQUENCE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE SEQUENCE usuarios.usuario_id_usuario_seq
@@ -1431,15 +1576,17 @@ CREATE SEQUENCE usuarios.usuario_id_usuario_seq
     CACHE 1;
 
 
+ALTER SEQUENCE usuarios.usuario_id_usuario_seq OWNER TO sinagersat;
+
 --
--- Name: usuario_id_usuario_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: -
+-- Name: usuario_id_usuario_seq; Type: SEQUENCE OWNED BY; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER SEQUENCE usuarios.usuario_id_usuario_seq OWNED BY usuarios.usuario.id_usuario;
 
 
 --
--- Name: usuario_rol; Type: TABLE; Schema: usuarios; Owner: -
+-- Name: usuario_rol; Type: TABLE; Schema: usuarios; Owner: sinagersat
 --
 
 CREATE TABLE usuarios.usuario_rol (
@@ -1448,239 +1595,241 @@ CREATE TABLE usuarios.usuario_rol (
 );
 
 
+ALTER TABLE usuarios.usuario_rol OWNER TO sinagersat;
+
 --
--- Name: ayuda_humanitaria id_ayuda_humanitaria; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: ayuda_humanitaria id_ayuda_humanitaria; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.ayuda_humanitaria ALTER COLUMN id_ayuda_humanitaria SET DEFAULT nextval('edan.catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq'::regclass);
 
 
 --
--- Name: categoria_proteccion id_categoria_proteccion; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: categoria_proteccion id_categoria_proteccion; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.categoria_proteccion ALTER COLUMN id_categoria_proteccion SET DEFAULT nextval('edan.catalogo_categoria_proteccion_id_categoria_proteccion_seq'::regclass);
 
 
 --
--- Name: edan id_edan; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan id_edan; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan ALTER COLUMN id_edan SET DEFAULT nextval('edan.edan_id_edan_seq'::regclass);
 
 
 --
--- Name: edan_agricultura id_agricultura; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_agricultura id_agricultura; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_agricultura ALTER COLUMN id_agricultura SET DEFAULT nextval('edan.edan_agricultura_id_agricultura_seq'::regclass);
 
 
 --
--- Name: edan_ayuda_humanitaria id_ayuda_edan; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria id_ayuda_edan; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_ayuda_humanitaria ALTER COLUMN id_ayuda_edan SET DEFAULT nextval('edan.edan_ayuda_humanitaria_id_ayuda_edan_seq'::regclass);
 
 
 --
--- Name: edan_comunidad id_comunidad; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_comunidad id_comunidad; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_comunidad ALTER COLUMN id_comunidad SET DEFAULT nextval('edan.edan_comunidad_id_comunidad_seq'::regclass);
 
 
 --
--- Name: edan_educacion_afectacion id_educacion_afectacion; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_educacion_afectacion id_educacion_afectacion; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_educacion_afectacion ALTER COLUMN id_educacion_afectacion SET DEFAULT nextval('edan.edan_educacion_afectacion_id_educacion_afectacion_seq'::regclass);
 
 
 --
--- Name: edan_educacion_dano id_educacion_dano; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_educacion_dano id_educacion_dano; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_educacion_dano ALTER COLUMN id_educacion_dano SET DEFAULT nextval('edan.edan_educacion_dano_id_educacion_dano_seq'::regclass);
 
 
 --
--- Name: edan_infraestructura_productiva id_infra_productiva; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_infraestructura_productiva id_infra_productiva; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_infraestructura_productiva ALTER COLUMN id_infra_productiva SET DEFAULT nextval('edan.edan_infraestructura_productiva_id_infra_productiva_seq'::regclass);
 
 
 --
--- Name: edan_infraestructura_publica id_infraestructura_publica; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_infraestructura_publica id_infraestructura_publica; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_infraestructura_publica ALTER COLUMN id_infraestructura_publica SET DEFAULT nextval('edan.edan_infraestructura_publica_id_infraestructura_publica_seq'::regclass);
 
 
 --
--- Name: edan_infraestructura_vial id_infraestructura_vial; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_infraestructura_vial id_infraestructura_vial; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_infraestructura_vial ALTER COLUMN id_infraestructura_vial SET DEFAULT nextval('edan.edan_infraestructura_vial_id_infraestructura_vial_seq'::regclass);
 
 
 --
--- Name: edan_pecuaria id_pecuaria; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_pecuaria id_pecuaria; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_pecuaria ALTER COLUMN id_pecuaria SET DEFAULT nextval('edan.edan_pecuaria_id_pecuaria_seq'::regclass);
 
 
 --
--- Name: edan_poblacion_grupo id_poblacion_grupo; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo id_poblacion_grupo; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_poblacion_grupo ALTER COLUMN id_poblacion_grupo SET DEFAULT nextval('edan.edan_poblacion_grupo_id_poblacion_grupo_seq'::regclass);
 
 
 --
--- Name: edan_primera_respuesta id_primera_respuesta; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_primera_respuesta id_primera_respuesta; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_primera_respuesta ALTER COLUMN id_primera_respuesta SET DEFAULT nextval('edan.edan_primera_respuesta_id_primera_respuesta_seq'::regclass);
 
 
 --
--- Name: edan_proteccion id_proteccion; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_proteccion id_proteccion; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_proteccion ALTER COLUMN id_proteccion SET DEFAULT nextval('edan.edan_proteccion_id_proteccion_seq'::regclass);
 
 
 --
--- Name: edan_salud_establecimiento id_salud_establecimiento; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_salud_establecimiento id_salud_establecimiento; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_salud_establecimiento ALTER COLUMN id_salud_establecimiento SET DEFAULT nextval('edan.edan_salud_establecimiento_id_salud_establecimiento_seq'::regclass);
 
 
 --
--- Name: edan_salud_necesidades id_salud_necesidad; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_salud_necesidades id_salud_necesidad; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_salud_necesidades ALTER COLUMN id_salud_necesidad SET DEFAULT nextval('edan.edan_salud_necesidades_id_salud_necesidad_seq'::regclass);
 
 
 --
--- Name: edan_servicio_basico id_servicio_basico_edan; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_servicio_basico id_servicio_basico_edan; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_servicio_basico ALTER COLUMN id_servicio_basico_edan SET DEFAULT nextval('edan.edan_servicio_basico_id_servicio_basico_edan_seq'::regclass);
 
 
 --
--- Name: edan_tipo_evento id_tipo_evento_edan; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_tipo_evento id_tipo_evento_edan; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_tipo_evento ALTER COLUMN id_tipo_evento_edan SET DEFAULT nextval('edan.edan_tipo_evento_id_tipo_evento_edan_seq'::regclass);
 
 
 --
--- Name: edan_vivienda id_vivienda; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: edan_vivienda id_vivienda; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_vivienda ALTER COLUMN id_vivienda SET DEFAULT nextval('edan.edan_vivienda_id_vivienda_seq'::regclass);
 
 
 --
--- Name: grupo_etario id_grupo_etario; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: grupo_etario id_grupo_etario; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.grupo_etario ALTER COLUMN id_grupo_etario SET DEFAULT nextval('edan.catalogo_grupo_etario_id_grupo_etario_seq'::regclass);
 
 
 --
--- Name: servicio_basico id_servicio_basico; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: servicio_basico id_servicio_basico; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.servicio_basico ALTER COLUMN id_servicio_basico SET DEFAULT nextval('edan.catalogo_servicio_basico_id_servicio_basico_seq'::regclass);
 
 
 --
--- Name: tipo_evento id_tipo_evento; Type: DEFAULT; Schema: edan; Owner: -
+-- Name: tipo_evento id_tipo_evento; Type: DEFAULT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.tipo_evento ALTER COLUMN id_tipo_evento SET DEFAULT nextval('edan.catalogo_tipo_evento_id_tipo_evento_seq'::regclass);
 
 
 --
--- Name: afectacion_categoria id_categoria; Type: DEFAULT; Schema: rea; Owner: -
+-- Name: afectacion_categoria id_categoria; Type: DEFAULT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.afectacion_categoria ALTER COLUMN id_categoria SET DEFAULT nextval('rea.afectacion_categoria_id_categoria_seq'::regclass);
 
 
 --
--- Name: estado_reporte id_estado; Type: DEFAULT; Schema: rea; Owner: -
+-- Name: estado_reporte id_estado; Type: DEFAULT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.estado_reporte ALTER COLUMN id_estado SET DEFAULT nextval('rea.estado_reporte_id_estado_seq'::regclass);
 
 
 --
--- Name: reporte_evento id_reporte; Type: DEFAULT; Schema: rea; Owner: -
+-- Name: reporte_evento id_reporte; Type: DEFAULT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento ALTER COLUMN id_reporte SET DEFAULT nextval('rea.reporte_evento_id_reporte_seq'::regclass);
 
 
 --
--- Name: aplicacion id_aplicacion; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: aplicacion id_aplicacion; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.aplicacion ALTER COLUMN id_aplicacion SET DEFAULT nextval('usuarios.aplicacion_id_aplicacion_seq'::regclass);
 
 
 --
--- Name: auditoria id_auditoria; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: auditoria id_auditoria; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.auditoria ALTER COLUMN id_auditoria SET DEFAULT nextval('usuarios.auditoria_id_auditoria_seq'::regclass);
 
 
 --
--- Name: permiso_aplicacion id_permiso; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion id_permiso; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.permiso_aplicacion ALTER COLUMN id_permiso SET DEFAULT nextval('usuarios.permiso_aplicacion_id_permiso_seq'::regclass);
 
 
 --
--- Name: reset_contrasena id_reset; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: reset_contrasena id_reset; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.reset_contrasena ALTER COLUMN id_reset SET DEFAULT nextval('usuarios.reset_contrasena_id_reset_seq'::regclass);
 
 
 --
--- Name: rol id_rol; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: rol id_rol; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.rol ALTER COLUMN id_rol SET DEFAULT nextval('usuarios.rol_id_rol_seq'::regclass);
 
 
 --
--- Name: sesion id_sesion; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: sesion id_sesion; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.sesion ALTER COLUMN id_sesion SET DEFAULT nextval('usuarios.sesion_id_sesion_seq'::regclass);
 
 
 --
--- Name: usuario id_usuario; Type: DEFAULT; Schema: usuarios; Owner: -
+-- Name: usuario id_usuario; Type: DEFAULT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.usuario ALTER COLUMN id_usuario SET DEFAULT nextval('usuarios.usuario_id_usuario_seq'::regclass);
 
 
 --
--- Data for Name: ayuda_humanitaria; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: ayuda_humanitaria; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.ayuda_humanitaria (id_ayuda_humanitaria, nombre, orden) FROM stdin;
@@ -1697,7 +1846,7 @@ COPY edan.ayuda_humanitaria (id_ayuda_humanitaria, nombre, orden) FROM stdin;
 
 
 --
--- Data for Name: categoria_proteccion; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: categoria_proteccion; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.categoria_proteccion (id_categoria_proteccion, nombre, orden) FROM stdin;
@@ -1712,15 +1861,16 @@ COPY edan.categoria_proteccion (id_categoria_proteccion, nombre, orden) FROM std
 
 
 --
--- Data for Name: edan; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan (id_edan, codigo_edan, id_departamento, id_municipio, nombre_alcalde, telefono_alcalde, fecha_llenado, fecha_evento, hora_evento, localidades_afectadas, total_poblacion_afectada, total_familias_afectadas, total_familias_damnificadas, nombre_responsable, cargo_responsable, telefono_responsable, email_responsable, usuario_registro, fecha_registro, fecha_actualizacion, id_reporte_rea, fotografia) FROM stdin;
+1	EDAN-TEST-001	2	20101	Test Alcalde	70000000	2026-07-20	2026-07-20	\N	5	1000	0	0	Test Responsable	Director	71111111	test@test.com	\N	2026-07-20 14:31:34.271587	2026-07-20 14:31:34.271587	\N	/uploads/reports/general/upload_1784572294_0739aaa1.png
 \.
 
 
 --
--- Data for Name: edan_agricultura; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_agricultura; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_agricultura (id_agricultura, id_edan, tipo_cultivo, hectareas_afectadas, hectareas_perdidas, necesidades_inmediatas, observaciones) FROM stdin;
@@ -1728,7 +1878,7 @@ COPY edan.edan_agricultura (id_agricultura, id_edan, tipo_cultivo, hectareas_afe
 
 
 --
--- Data for Name: edan_ayuda_humanitaria; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_ayuda_humanitaria; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_ayuda_humanitaria (id_ayuda_edan, id_edan, id_ayuda_humanitaria, requiere, observaciones) FROM stdin;
@@ -1736,7 +1886,7 @@ COPY edan.edan_ayuda_humanitaria (id_ayuda_edan, id_edan, id_ayuda_humanitaria, 
 
 
 --
--- Data for Name: edan_comunidad; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_comunidad; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_comunidad (id_comunidad, id_edan, nombre_comunidad) FROM stdin;
@@ -1744,7 +1894,7 @@ COPY edan.edan_comunidad (id_comunidad, id_edan, nombre_comunidad) FROM stdin;
 
 
 --
--- Data for Name: edan_educacion_afectacion; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_educacion_afectacion; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_educacion_afectacion (id_educacion_afectacion, id_edan, id_educacion_dano, nombre_establecimiento, estudiantes_afectados, profesores_afectados, administrativos_afectados, total_afectados, observaciones) FROM stdin;
@@ -1752,7 +1902,7 @@ COPY edan.edan_educacion_afectacion (id_educacion_afectacion, id_edan, id_educac
 
 
 --
--- Data for Name: edan_educacion_dano; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_educacion_dano; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_educacion_dano (id_educacion_dano, id_edan, nombre_establecimiento, comunidad, dano_parcial, dano_total, suspension_clases, perdida_material, funciona_albergue, observaciones) FROM stdin;
@@ -1760,7 +1910,7 @@ COPY edan.edan_educacion_dano (id_educacion_dano, id_edan, nombre_establecimient
 
 
 --
--- Data for Name: edan_infraestructura_productiva; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_infraestructura_productiva; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_infraestructura_productiva (id_infra_productiva, id_edan, tipo, dano_parcial, dano_total, observaciones) FROM stdin;
@@ -1768,7 +1918,7 @@ COPY edan.edan_infraestructura_productiva (id_infra_productiva, id_edan, tipo, d
 
 
 --
--- Data for Name: edan_infraestructura_publica; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_infraestructura_publica; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_infraestructura_publica (id_infraestructura_publica, id_edan, localidad_comunidad, tipo_estructura, dano_parcial, dano_total, observaciones) FROM stdin;
@@ -1776,7 +1926,7 @@ COPY edan.edan_infraestructura_publica (id_infraestructura_publica, id_edan, loc
 
 
 --
--- Data for Name: edan_infraestructura_vial; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_infraestructura_vial; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_infraestructura_vial (id_infraestructura_vial, id_edan, via_acceso_puentes, tramo, localidad_origen, localidad_destino, dano_parcial_km, dano_total_km, necesidades_inmediatas, observaciones) FROM stdin;
@@ -1784,7 +1934,7 @@ COPY edan.edan_infraestructura_vial (id_infraestructura_vial, id_edan, via_acces
 
 
 --
--- Data for Name: edan_pecuaria; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_pecuaria; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_pecuaria (id_pecuaria, id_edan, tipo_especie, raza, animales_afectados, animales_muertos, necesidades_inmediatas, observaciones) FROM stdin;
@@ -1792,7 +1942,7 @@ COPY edan.edan_pecuaria (id_pecuaria, id_edan, tipo_especie, raza, animales_afec
 
 
 --
--- Data for Name: edan_poblacion_grupo; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_poblacion_grupo; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_poblacion_grupo (id_poblacion_grupo, id_edan, id_grupo_etario, fallecidos, heridos, desaparecidos, observaciones) FROM stdin;
@@ -1800,7 +1950,7 @@ COPY edan.edan_poblacion_grupo (id_poblacion_grupo, id_edan, id_grupo_etario, fa
 
 
 --
--- Data for Name: edan_primera_respuesta; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_primera_respuesta; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_primera_respuesta (id_primera_respuesta, id_edan, busqueda_requerimiento, busqueda_observaciones, salvamento_requerimiento, salvamento_observaciones, evacuacion_requerimiento, evacuacion_observaciones, otros_requerimiento, otros_observaciones, observaciones_generales) FROM stdin;
@@ -1808,7 +1958,7 @@ COPY edan.edan_primera_respuesta (id_primera_respuesta, id_edan, busqueda_requer
 
 
 --
--- Data for Name: edan_proteccion; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_proteccion; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_proteccion (id_proteccion, id_edan, id_categoria_proteccion, mujeres, hombres, total, apoyo_psicosocial, reposicion_documentos, observaciones) FROM stdin;
@@ -1816,7 +1966,7 @@ COPY edan.edan_proteccion (id_proteccion, id_edan, id_categoria_proteccion, muje
 
 
 --
--- Data for Name: edan_salud_establecimiento; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_salud_establecimiento; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_salud_establecimiento (id_salud_establecimiento, id_edan, nombre_establecimiento, localidad_comunidad, nivel_atencion, dano_parcial, dano_total, personal_medicos, personal_enfermeras, personal_otros, observaciones) FROM stdin;
@@ -1824,7 +1974,7 @@ COPY edan.edan_salud_establecimiento (id_salud_establecimiento, id_edan, nombre_
 
 
 --
--- Data for Name: edan_salud_necesidades; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_salud_necesidades; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_salud_necesidades (id_salud_necesidad, id_edan, botiquin_personas, otras_necesidades, observaciones) FROM stdin;
@@ -1832,7 +1982,7 @@ COPY edan.edan_salud_necesidades (id_salud_necesidad, id_edan, botiquin_personas
 
 
 --
--- Data for Name: edan_servicio_basico; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_servicio_basico; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_servicio_basico (id_servicio_basico_edan, id_edan, id_servicio_basico, dano_parcial, dano_total, necesidades_inmediatas, observaciones) FROM stdin;
@@ -1840,7 +1990,7 @@ COPY edan.edan_servicio_basico (id_servicio_basico_edan, id_edan, id_servicio_ba
 
 
 --
--- Data for Name: edan_tipo_evento; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_tipo_evento; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_tipo_evento (id_tipo_evento_edan, id_edan, id_tipo_evento) FROM stdin;
@@ -1848,7 +1998,7 @@ COPY edan.edan_tipo_evento (id_tipo_evento_edan, id_edan, id_tipo_evento) FROM s
 
 
 --
--- Data for Name: edan_vivienda; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: edan_vivienda; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.edan_vivienda (id_vivienda, id_edan, comunidad, viviendas_dano_parcial, viviendas_dano_total, necesidades_inmediatas, observaciones) FROM stdin;
@@ -1856,7 +2006,7 @@ COPY edan.edan_vivienda (id_vivienda, id_edan, comunidad, viviendas_dano_parcial
 
 
 --
--- Data for Name: grupo_etario; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: grupo_etario; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.grupo_etario (id_grupo_etario, nombre, orden) FROM stdin;
@@ -1868,7 +2018,7 @@ COPY edan.grupo_etario (id_grupo_etario, nombre, orden) FROM stdin;
 
 
 --
--- Data for Name: servicio_basico; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: servicio_basico; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.servicio_basico (id_servicio_basico, nombre, orden) FROM stdin;
@@ -1881,7 +2031,7 @@ COPY edan.servicio_basico (id_servicio_basico, nombre, orden) FROM stdin;
 
 
 --
--- Data for Name: tipo_evento; Type: TABLE DATA; Schema: edan; Owner: -
+-- Data for Name: tipo_evento; Type: TABLE DATA; Schema: edan; Owner: postgres
 --
 
 COPY edan.tipo_evento (id_tipo_evento, nombre) FROM stdin;
@@ -1897,7 +2047,7 @@ COPY edan.tipo_evento (id_tipo_evento, nombre) FROM stdin;
 
 
 --
--- Data for Name: spatial_ref_sys; Type: TABLE DATA; Schema: public; Owner: -
+-- Data for Name: spatial_ref_sys; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM stdin;
@@ -1905,67 +2055,83 @@ COPY public.spatial_ref_sys (srid, auth_name, auth_srid, srtext, proj4text) FROM
 
 
 --
--- Data for Name: afectacion_categoria; Type: TABLE DATA; Schema: rea; Owner: -
+-- Data for Name: afectacion_categoria; Type: TABLE DATA; Schema: rea; Owner: sinagersat
 --
 
 COPY rea.afectacion_categoria (id_categoria, nombre, descripcion, orden) FROM stdin;
-1	Población	Afectación a personas y comunidades	1
-2	Salud	Afectación a establecimientos de salud y servicios	2
-3	Infraestructura	Daños en infraestructura pública y vial	3
-4	Servicios básicos	Interrupción de servicios esenciales	4
-5	Educación	Afectación a unidades educativas	5
-6	Vivienda	Daños en viviendas particulares	6
-7	Agropecuario	Pérdidas en agricultura y ganadería	7
-8	Víctimas fatales	Personas fallecidas	1
-9	Heridos	Personas con lesiones	2
-10	Desplazados	Personas desplazadas de sus hogares	3
-11	Viviendas dañadas	Viviendas con daño total o parcial	4
-12	Infraestructura dañada	Infraestructura pública afectada	5
-13	Servicios básicos interrumpidos	Agua, luz, alcantarillado	6
-14	Pérdida de cultivos	Áreas agrícolas afectadas	7
-15	Pérdida ganadera	Animales muertos o perdidos	8
+1	Víctimas fatales	Personas fallecidas	1
+2	Heridos	Personas con lesiones	2
+3	Desplazados	Personas desplazadas de sus hogares	3
+4	Viviendas dañadas	Viviendas con daño total o parcial	4
+5	Infraestructura dañada	Infraestructura pública afectada	5
+6	Servicios básicos interrumpidos	Agua, luz, alcantarillado	6
+7	Pérdida de cultivos	Áreas agrícolas afectadas	7
+8	Pérdida ganadera	Animales muertos o perdidos	8
 \.
 
 
 --
--- Data for Name: estado_reporte; Type: TABLE DATA; Schema: rea; Owner: -
+-- Data for Name: estado_reporte; Type: TABLE DATA; Schema: rea; Owner: sinagersat
 --
 
 COPY rea.estado_reporte (id_estado, nombre, descripcion, orden) FROM stdin;
-2	Revisado	Revisado por UGR, pendiente de acción	2
-3	Atendido	Acción tomada, en proceso	3
-4	Cerrado	Resuelto y documentado	4
-5	Rechazado	No procede o dato falso	5
-1	Enviado	Reporte nuevo, sin revisar	1
-6	Pendiente	Reporte registrado, pendiente de revisión	1
-7	En revisión	Siendo revisado por un administrador	2
-8	Aprobado	Reporte verificado y aprobado	3
-9	Rechazado	Reporte rechazado	4
-10	Cerrado	Caso cerrado o resuelto	5
+2	En revisión	Siendo revisado por un administrador	2
+3	Aprobado	Reporte verificado y aprobado	3
+4	Rechazado	Reporte rechazado	4
+5	Cerrado	Caso cerrado o resuelto	5
+1	Enviado	Reporte registrado, pendiente de revisión	1
 \.
 
 
 --
--- Data for Name: reporte_afectacion; Type: TABLE DATA; Schema: rea; Owner: -
+-- Data for Name: reporte_afectacion; Type: TABLE DATA; Schema: rea; Owner: sinagersat
 --
 
 COPY rea.reporte_afectacion (id_reporte, id_categoria) FROM stdin;
-8	1
-8	5
+17	5
+17	3
+38	7
+41	5
+41	7
+41	8
+42	4
+43	5
+44	7
+45	3
+45	1
+46	4
+47	4
+47	3
+47	7
+48	2
+48	5
+48	6
 \.
 
 
 --
--- Data for Name: reporte_evento; Type: TABLE DATA; Schema: rea; Owner: -
+-- Data for Name: reporte_evento; Type: TABLE DATA; Schema: rea; Owner: sinagersat
 --
 
 COPY rea.reporte_evento (id_reporte, id_usuario, id_departamento, id_provincia, id_municipio, comunidad, fecha_evento, hora_evento, fecha_reporte, id_tipo_evento, coordenada_lat, coordenada_lon, fotografia, descripcion, id_estado) FROM stdin;
-8	17	2	201	20101	La Paz	2026-07-19	06:00:00	2026-07-19 18:41:28.514627	3	-16.50954110	-68.10560650	/uploads/reports/020101/La_Paz_020101_1784500887.jpg	Inundación	1
+38	7	2	205	20501	Timusi	2026-07-19	05:00	2026-07-20 18:46:03.348604	4	-16.5047898	-68.1329718	/uploads/reports/020501/Timusi_020501_1784587563.jpg	Helada intensa que dañó cultivos de maiz, haba y papa	1
+16	3	2	201	20101	La Paz	2026-07-20	15:00	2026-07-20 15:07:38.578705	5	-16.5046930	-68.1329233	/uploads/reports/020101/La_Paz_020101_1784574458.jpg	Afecto el cultivo de uva	1
+17	3	2	201	20101	La Paz	2026-07-18	06:00	2026-07-20 15:52:20.366799	3	-16.5049728	-68.1329686	/uploads/reports/020101/La_Paz_020101_1784577140.jpg	sucedió un deslizamiento en el cerr	2
+33	6	2	202	20202	Ancoraimes	2026-07-20	07:00	2026-07-20 18:30:49.334891	5	-16.5044057	-68.1329180	/uploads/reports/020202/Ancoraimes_020202_1784586649.jpg	Prueba	1
+40	6	2	202	20202	Ancoraimes	2026-07-20	07:00	2026-07-20 19:25:35.835421	2	-16.5015217	-68.1348670	/uploads/reports/020202/Ancoraimes_020202_1784589935.jpg	Se llevó un puente	1
+41	7	2	205	20501	Timusi	2026-07-18	08:00	2026-07-20 20:04:27.328824	8	-16.4966762	-68.1367455	/uploads/reports/020501/Timusi_020501_1784592267.jpg	Inundaciones por mucha lluvia	1
+42	6	2	202	20202	Ancoraimes	2026-07-20	15:00	2026-07-20 20:53:00.969885	7	-16.5095387	-68.1056144	/uploads/reports/020202/Ancoraimes_020202_1784595180.jpg	El cerro	1
+43	7	2	205	20501	Timusi	2026-07-20	15:00	2026-07-20 21:22:35.833805	5	-16.5129617	-68.1196009	/uploads/reports/020501/Timusi_020501_1784596955.jpg	1cm de diámetro por una hora de duración	1
+44	3	2	201	20101	La Paz	2026-07-21	07:00	2026-07-21 07:44:48.807722	4	-16.5095560	-68.1056279	/uploads/reports/020101/La_Paz_020101_1784634288.jpg	Mucho frío	1
+45	3	2	201	20101	La Paz	2026-07-21	06:00	2026-07-21 08:13:50.74149	3	-16.5095416	-68.1056097	/uploads/reports/020101/La_Paz_020101_1784636030.jpg	Llovió mucho y se deslizó la cabecera	1
+46	3	2	201	20101	La Paz	2026-07-21	08:00	2026-07-21 12:22:53.408099	2	-16.5049374	-68.1330318	/uploads/reports/020101/La_Paz_020101_1784650973.jpg	Perjudicó a 4 familias inundando sus viviendas	1
+47	3	2	201	20101	La Paz	2026-07-18	13:00	2026-07-21 14:30:11.924517	7	-16.5115995	-68.1232896	/uploads/reports/020101/La_Paz_020101_1784658611.jpg	Incendio en el área protegida cordillera de Sama	1
+48	16	2	201	20101	Murillo	2026-07-26	17:00	2026-07-27 12:35:30.967826	3	\N	\N	/uploads/reports/020101/Murillo_020101_1785170131.jpg	se registró deslizamiento en inmediaciones de la avenida buenos aires de la ciudad de la paz	1
 \.
 
 
 --
--- Data for Name: departamento; Type: TABLE DATA; Schema: shared; Owner: -
+-- Data for Name: departamento; Type: TABLE DATA; Schema: shared; Owner: postgres
 --
 
 COPY shared.departamento (id, codigo_ine, nombre) FROM stdin;
@@ -1982,7 +2148,7 @@ COPY shared.departamento (id, codigo_ine, nombre) FROM stdin;
 
 
 --
--- Data for Name: municipio; Type: TABLE DATA; Schema: shared; Owner: -
+-- Data for Name: municipio; Type: TABLE DATA; Schema: shared; Owner: postgres
 --
 
 COPY shared.municipio (id, codigo_ine, id_departamento, id_provincia, nombre, geom) FROM stdin;
@@ -2330,7 +2496,7 @@ COPY shared.municipio (id, codigo_ine, id_departamento, id_provincia, nombre, ge
 
 
 --
--- Data for Name: provincia; Type: TABLE DATA; Schema: shared; Owner: -
+-- Data for Name: provincia; Type: TABLE DATA; Schema: shared; Owner: postgres
 --
 
 COPY shared.provincia (id, codigo_ine, id_departamento, nombre) FROM stdin;
@@ -2450,7 +2616,7 @@ COPY shared.provincia (id, codigo_ine, id_departamento, nombre) FROM stdin;
 
 
 --
--- Data for Name: aplicacion; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: aplicacion; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.aplicacion (id_aplicacion, codigo, nombre, descripcion, activo) FROM stdin;
@@ -2461,7 +2627,7 @@ COPY usuarios.aplicacion (id_aplicacion, codigo, nombre, descripcion, activo) FR
 
 
 --
--- Data for Name: auditoria; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: auditoria; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.auditoria (id_auditoria, id_usuario, id_aplicacion, accion, detalle, ip_origen, fecha) FROM stdin;
@@ -2469,7 +2635,7 @@ COPY usuarios.auditoria (id_auditoria, id_usuario, id_aplicacion, accion, detall
 
 
 --
--- Data for Name: permiso_aplicacion; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: permiso_aplicacion; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.permiso_aplicacion (id_permiso, id_rol, id_aplicacion) FROM stdin;
@@ -2481,11 +2647,14 @@ COPY usuarios.permiso_aplicacion (id_permiso, id_rol, id_aplicacion) FROM stdin;
 6	2	3
 7	3	1
 8	4	1
+9	5	1
+10	6	1
+11	7	1
 \.
 
 
 --
--- Data for Name: reset_contrasena; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: reset_contrasena; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.reset_contrasena (id_reset, id_usuario, token, usado, fecha_solicitud, fecha_expiracion, ip_origen) FROM stdin;
@@ -2493,38 +2662,67 @@ COPY usuarios.reset_contrasena (id_reset, id_usuario, token, usado, fecha_solici
 
 
 --
--- Data for Name: rol; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: rol; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.rol (id_rol, nombre, descripcion, jerarquia) FROM stdin;
+1	superadmin	Acceso total a todos los sistemas y gestion de usuarios	5
 2	admin	Gestiona usuarios y datos de su sistema	4
-3	encuestador	Carga y edita formularios propios	2
-4	visor	Solo lectura en todos los modulos	1
-1	superadministrador	Acceso total a todos los sistemas y gestion de usuarios	5
+5	UGR Gobernación	Carga y edita formularios propios	2
+3	VIDECI Regional	Carga y edita formularios propios	3
+4	UGR Sectores	Carga y edita formularios propios	2
+6	UGR Municipio	Carga y edita formularios propios	2
+7	Responsable Local	Carga y edita formularios propios	1
 \.
 
 
 --
--- Data for Name: sesion; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: sesion; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.sesion (id_sesion, id_usuario, token, fecha_inicio, fecha_expiracion, ip_origen, activo) FROM stdin;
-4	17	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNyIsInVzdWFyaW8iOiI3MDUxMjk2IiwiaWRfcm9sIjo0fQ.5hT_71H0aQhhDEzX8zKV4-Rvrp3QzyLAIkAGBc7H9y8	2026-07-20 07:27:48.584729	2099-12-31 00:00:00	\N	t
+1	2	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwidXN1YXJpbyI6ImFkbWluIiwiaWRfcm9sIjoxfQ.pnvp0q71s-57y0zgKuSX_1atXb-BHWWkV8UNDWmOc7I	2026-07-20 10:41:29.248015	2099-12-31 00:00:00	\N	t
+2	3	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwidXN1YXJpbyI6IjcwNTEyOTYiLCJpZF9yb2wiOjR9.LHhk77HVIUmi-3aG4wCqe2sngQNOlcMK5Zg4jqUngtg	2026-07-20 11:11:53.262003	2099-12-31 00:00:00	\N	t
+3	4	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwidXN1YXJpbyI6Ijg0NjI0NjQiLCJpZF9yb2wiOjR9.0t5Mdrei2rM89PUT9_1dy451CPlYmB9l1kmvvuI8jp8	2026-07-20 11:18:53.734185	2099-12-31 00:00:00	\N	t
+4	5	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1IiwidXN1YXJpbyI6Ijg0NjI0NTQiLCJpZF9yb2wiOjd9.bOJ8Y6hCqkyT3l7gTsdmflgHSLmMQwXcuCcJ9DCLcJs	2026-07-20 18:12:20.833947	2099-12-31 00:00:00	\N	t
+5	6	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2IiwidXN1YXJpbyI6IjYzNzQ4NCIsImlkX3JvbCI6N30.E5EYVz6ELgfLa_6Zhv4kmwLacm_I5hEtnAPCxmqgQP0	2026-07-20 18:29:59.092661	2099-12-31 00:00:00	\N	t
+6	7	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3IiwidXN1YXJpbyI6IjMzOTQ4NDciLCJpZF9yb2wiOjd9.WwNiYwfTR7Y5YuXO5sbD0n9YBWAgakEOBjR7ul5vN0w	2026-07-20 18:41:55.452421	2099-12-31 00:00:00	\N	t
+7	8	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4IiwidXN1YXJpbyI6IjM0NTg5NTEiLCJpZF9yb2wiOjd9.qTRv13EMRLb9tuBpFoTuj3LSxMU60IbH0F1gPCZE5Wk	2026-07-21 15:46:41.107295	2099-12-31 00:00:00	\N	t
+8	9	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5IiwidXN1YXJpbyI6IjQ5Nzc1NjkiLCJpZF9yb2wiOjd9.goaRle-etgx9aVNBWLX3V3pOY11jVLAUgTM_LqPlTWE	2026-07-21 15:51:34.944729	2099-12-31 00:00:00	\N	t
+9	10	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMCIsInVzdWFyaW8iOiJVR1IiLCJpZF9yb2wiOjZ9.TP2CrnfrgALmPAXOXzFQ3JL412OJOi-rkwbECh1RFro	2026-07-21 17:19:38.905704	2099-12-31 00:00:00	\N	t
+10	11	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMSIsInVzdWFyaW8iOiI2NzY1NDExIiwiaWRfcm9sIjo3fQ.DtsyLDeOsqRo7owneF5Ht7Y7JXLRx9mwSwTyngWe20Q	2026-07-27 08:59:01.484767	2099-12-31 00:00:00	\N	t
+11	12	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMiIsInVzdWFyaW8iOiIzNDEyODQ3IiwiaWRfcm9sIjo3fQ.vz2KU0igpYNpB4E0OQhBt6lqHbYD3kRGRRHcGLJ-urs	2026-07-27 08:59:07.359947	2099-12-31 00:00:00	\N	t
+12	13	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMyIsInVzdWFyaW8iOiI3NjMxNDI1IiwiaWRfcm9sIjo3fQ.SjIa1HUHmQaHHzBqdlkIqXr56IcR5vyBqMs1y9_M6xI	2026-07-27 09:16:09.742604	2099-12-31 00:00:00	\N	t
+13	14	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNCIsInVzdWFyaW8iOiIzMzg5ODg4IiwiaWRfcm9sIjo3fQ.nXiWI79EAuGNTahl2QiEJA0uTx8EhkmjMNpDx0mw6vo	2026-07-27 09:21:59.140401	2099-12-31 00:00:00	\N	t
+14	15	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNSIsInVzdWFyaW8iOiI2MTIyOTA2IiwiaWRfcm9sIjo3fQ.j3qZT8acMR8iT_V8ZTFo2Vp-PtS3h2cZVy6kThINfTo	2026-07-27 10:34:50.597777	2099-12-31 00:00:00	\N	t
+15	16	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNiIsInVzdWFyaW8iOiI0ODc2MzY5IiwiaWRfcm9sIjo3fQ.1ECNEZi67-6OQSIdaKk8XUqmaYr_0XWa-N1iIiZ9ZHY	2026-07-27 11:50:26.721147	2099-12-31 00:00:00	\N	t
 \.
 
 
 --
--- Data for Name: usuario; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: usuario; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.usuario (id_usuario, usuario, contrasena, nombre, celular, carnet, comunidad, id_departamento, id_provincia, id_municipio, activo, id_rol) FROM stdin;
-1	sinagersat	$2b$12$KGlGnFFCkH/ksNvNFObAwOaAEhJ8sczTcMSed1IT9hiIIXHBTyMp6	sinagersat	70000000	0000000	SINAGERSAT	2	201	20101	t	1
-17	7051296	$2b$12$.gOz5dH.SC8rHxUqRw9rvOOPM0pdWnxTch.wfJMmM/fdsxOe42iLC	Luis Miguel	63213122	7051296	La Paz	2	201	20101	t	4
+7	3394847	$2b$12$FgeXqwHRarzvr1fy5Xw3gOoWJufOdJjo21eFLwwSXnr4W5w6icdt2	Elio Rea Pr	71901783	3394847	Timusi	2	205	20501	t	7
+2	admin	$2b$12$5vzrAM3vMMCNcKVms3H9oeWhwdFJtIYYNAPUw8YezJsyxMtdRBtle	Administrador	\N	\N	\N	\N	\N	\N	t	1
+5	8462454	$2b$12$BdurrFMZFGEQGn5mTd4iwebYQ1Ba.TjvheicAVhREThEam2vFeSSy	Adrian Manuel Baldiviezo Laura	67109355	8462454	La Paz	2	201	20103	t	7
+6	637484	$2b$12$.Hh76T/Coq43WVgDvjAGx.1kDPPQJtZWinXfCGNFj9cnxkADY8Lpe	Jdifjf	123456	637484	Ancoraimes	2	202	20202	f	7
+8	3458951	$2b$12$zHPZF.MxhwKUG1.PGTZME.eg5fMEapEx2n034eDMZuhd8PXpOc/HC	Issac	67011024	3458951	Elntrata	2	201	20105	t	7
+9	4977569	$2b$12$C0Wwb0Pyr0lFEvAMF6nfDONiruVznULQrLiWzd7Lkk80b0tNqO67S	Santos Luis Quispe Choque	76257572	4977569	La Paz	2	201	20101	t	7
+3	7051296	$2b$12$Qmqxf2mS5es8RWYa2z.pjesD4iJMV0J2cvS6kc/hUedxf5rnzYf8e	Luis Miguel Quenta	63213122	7051296	La Paz	2	201	20101	t	7
+11	6765411	$2b$12$wkSsoOxqrAjrucl1LN1cXeX3V25T2YTBvNNFMRcP/oGILuxAyLn0S	Arsenio	71237994	6765411	Mecapaca	2	201	20101	t	7
+12	3412847	$2b$12$8PkMyg0xSDndj/14HhcJfu1IGyy.CynPhKCcYP3nlHgZCgeO65Aii	Rigoberto Huañapaco Alcon	72060668	3412847	La Paz	2	201	20101	t	7
+10	UGR	$2b$12$oDg5GPGhVdHK8rTHY0/Go.ya.uJHFJL1os5vIaVho5WF13I5agteS	uGR	71901783	2115	La Paz	2	201	20101	t	6
+13	7631425	$2b$12$47RTireXcJWGwAzo4zqnMOd4YG4JJ1VSxaQ0i0bqw4MuP52wTbgiS	Rommel Pablo	71507488	7631425	San Roque	2	201	20105	t	7
+14	3389888	$2b$12$BsCDVfLkwvgiPyojTkTr9Omj3VYpJW5sXZMEHACE8r9tVAjStrzxm	Erick Arias	79664320	3389888		2	201	20101	t	7
+15	6122906	$2b$12$saTWvSKC3.SZiYx9HZnJROKvo4UkigwYezrTDjE4eIuBhMo67KbmC	Grover Monasterios	72189942	6122906	Las Lomas	2	201	20101	t	7
+16	4876369	$2b$12$xvbr62TaaAKX6AW5uO87Xe/uWKDOn.gBYeqqg8vSEiEUKt7XeupI2	Marcelo Cazas	73717636	4876369	Murillo	2	201	20101	t	7
 \.
 
 
 --
--- Data for Name: usuario_rol; Type: TABLE DATA; Schema: usuarios; Owner: -
+-- Data for Name: usuario_rol; Type: TABLE DATA; Schema: usuarios; Owner: sinagersat
 --
 
 COPY usuarios.usuario_rol (id_usuario, id_rol) FROM stdin;
@@ -2532,238 +2730,238 @@ COPY usuarios.usuario_rol (id_usuario, id_rol) FROM stdin;
 
 
 --
--- Name: catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.catalogo_ayuda_humanitaria_id_ayuda_humanitaria_seq', 1, false);
 
 
 --
--- Name: catalogo_categoria_proteccion_id_categoria_proteccion_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: catalogo_categoria_proteccion_id_categoria_proteccion_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.catalogo_categoria_proteccion_id_categoria_proteccion_seq', 7, true);
 
 
 --
--- Name: catalogo_grupo_etario_id_grupo_etario_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: catalogo_grupo_etario_id_grupo_etario_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.catalogo_grupo_etario_id_grupo_etario_seq', 4, true);
 
 
 --
--- Name: catalogo_servicio_basico_id_servicio_basico_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: catalogo_servicio_basico_id_servicio_basico_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.catalogo_servicio_basico_id_servicio_basico_seq', 5, true);
 
 
 --
--- Name: catalogo_tipo_evento_id_tipo_evento_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: catalogo_tipo_evento_id_tipo_evento_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.catalogo_tipo_evento_id_tipo_evento_seq', 8, true);
 
 
 --
--- Name: edan_agricultura_id_agricultura_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_agricultura_id_agricultura_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_agricultura_id_agricultura_seq', 1, false);
 
 
 --
--- Name: edan_ayuda_humanitaria_id_ayuda_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria_id_ayuda_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_ayuda_humanitaria_id_ayuda_edan_seq', 1, false);
 
 
 --
--- Name: edan_comunidad_id_comunidad_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_comunidad_id_comunidad_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_comunidad_id_comunidad_seq', 1, false);
 
 
 --
--- Name: edan_educacion_afectacion_id_educacion_afectacion_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_educacion_afectacion_id_educacion_afectacion_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_educacion_afectacion_id_educacion_afectacion_seq', 1, false);
 
 
 --
--- Name: edan_educacion_dano_id_educacion_dano_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_educacion_dano_id_educacion_dano_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_educacion_dano_id_educacion_dano_seq', 1, false);
 
 
 --
--- Name: edan_id_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_id_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
-SELECT pg_catalog.setval('edan.edan_id_edan_seq', 1, false);
+SELECT pg_catalog.setval('edan.edan_id_edan_seq', 1, true);
 
 
 --
--- Name: edan_infraestructura_productiva_id_infra_productiva_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_infraestructura_productiva_id_infra_productiva_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_infraestructura_productiva_id_infra_productiva_seq', 1, false);
 
 
 --
--- Name: edan_infraestructura_publica_id_infraestructura_publica_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_infraestructura_publica_id_infraestructura_publica_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_infraestructura_publica_id_infraestructura_publica_seq', 1, false);
 
 
 --
--- Name: edan_infraestructura_vial_id_infraestructura_vial_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_infraestructura_vial_id_infraestructura_vial_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_infraestructura_vial_id_infraestructura_vial_seq', 1, false);
 
 
 --
--- Name: edan_pecuaria_id_pecuaria_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_pecuaria_id_pecuaria_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_pecuaria_id_pecuaria_seq', 1, false);
 
 
 --
--- Name: edan_poblacion_grupo_id_poblacion_grupo_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo_id_poblacion_grupo_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_poblacion_grupo_id_poblacion_grupo_seq', 1, false);
 
 
 --
--- Name: edan_primera_respuesta_id_primera_respuesta_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_primera_respuesta_id_primera_respuesta_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_primera_respuesta_id_primera_respuesta_seq', 1, false);
 
 
 --
--- Name: edan_proteccion_id_proteccion_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_proteccion_id_proteccion_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_proteccion_id_proteccion_seq', 1, false);
 
 
 --
--- Name: edan_salud_establecimiento_id_salud_establecimiento_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_salud_establecimiento_id_salud_establecimiento_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_salud_establecimiento_id_salud_establecimiento_seq', 1, false);
 
 
 --
--- Name: edan_salud_necesidades_id_salud_necesidad_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_salud_necesidades_id_salud_necesidad_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_salud_necesidades_id_salud_necesidad_seq', 1, false);
 
 
 --
--- Name: edan_servicio_basico_id_servicio_basico_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_servicio_basico_id_servicio_basico_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_servicio_basico_id_servicio_basico_edan_seq', 1, false);
 
 
 --
--- Name: edan_tipo_evento_id_tipo_evento_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_tipo_evento_id_tipo_evento_edan_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_tipo_evento_id_tipo_evento_edan_seq', 1, false);
 
 
 --
--- Name: edan_vivienda_id_vivienda_seq; Type: SEQUENCE SET; Schema: edan; Owner: -
+-- Name: edan_vivienda_id_vivienda_seq; Type: SEQUENCE SET; Schema: edan; Owner: postgres
 --
 
 SELECT pg_catalog.setval('edan.edan_vivienda_id_vivienda_seq', 1, false);
 
 
 --
--- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE SET; Schema: rea; Owner: -
+-- Name: afectacion_categoria_id_categoria_seq; Type: SEQUENCE SET; Schema: rea; Owner: sinagersat
 --
 
-SELECT pg_catalog.setval('rea.afectacion_categoria_id_categoria_seq', 15, true);
-
-
---
--- Name: estado_reporte_id_estado_seq; Type: SEQUENCE SET; Schema: rea; Owner: -
---
-
-SELECT pg_catalog.setval('rea.estado_reporte_id_estado_seq', 10, true);
+SELECT pg_catalog.setval('rea.afectacion_categoria_id_categoria_seq', 8, true);
 
 
 --
--- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE SET; Schema: rea; Owner: -
+-- Name: estado_reporte_id_estado_seq; Type: SEQUENCE SET; Schema: rea; Owner: sinagersat
 --
 
-SELECT pg_catalog.setval('rea.reporte_evento_id_reporte_seq', 8, true);
+SELECT pg_catalog.setval('rea.estado_reporte_id_estado_seq', 5, true);
 
 
 --
--- Name: aplicacion_id_aplicacion_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
+-- Name: reporte_evento_id_reporte_seq; Type: SEQUENCE SET; Schema: rea; Owner: sinagersat
+--
+
+SELECT pg_catalog.setval('rea.reporte_evento_id_reporte_seq', 48, true);
+
+
+--
+-- Name: aplicacion_id_aplicacion_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
 --
 
 SELECT pg_catalog.setval('usuarios.aplicacion_id_aplicacion_seq', 3, true);
 
 
 --
--- Name: auditoria_id_auditoria_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
+-- Name: auditoria_id_auditoria_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
 --
 
 SELECT pg_catalog.setval('usuarios.auditoria_id_auditoria_seq', 1, false);
 
 
 --
--- Name: permiso_aplicacion_id_permiso_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion_id_permiso_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
 --
 
 SELECT pg_catalog.setval('usuarios.permiso_aplicacion_id_permiso_seq', 8, true);
 
 
 --
--- Name: reset_contrasena_id_reset_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
+-- Name: reset_contrasena_id_reset_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
 --
 
 SELECT pg_catalog.setval('usuarios.reset_contrasena_id_reset_seq', 1, false);
 
 
 --
--- Name: rol_id_rol_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
+-- Name: rol_id_rol_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
 --
 
 SELECT pg_catalog.setval('usuarios.rol_id_rol_seq', 4, true);
 
 
 --
--- Name: sesion_id_sesion_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
+-- Name: sesion_id_sesion_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
 --
 
-SELECT pg_catalog.setval('usuarios.sesion_id_sesion_seq', 4, true);
-
-
---
--- Name: usuario_id_usuario_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: -
---
-
-SELECT pg_catalog.setval('usuarios.usuario_id_usuario_seq', 17, true);
+SELECT pg_catalog.setval('usuarios.sesion_id_sesion_seq', 15, true);
 
 
 --
--- Name: ayuda_humanitaria catalogo_ayuda_humanitaria_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: usuario_id_usuario_seq; Type: SEQUENCE SET; Schema: usuarios; Owner: sinagersat
+--
+
+SELECT pg_catalog.setval('usuarios.usuario_id_usuario_seq', 16, true);
+
+
+--
+-- Name: ayuda_humanitaria catalogo_ayuda_humanitaria_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.ayuda_humanitaria
@@ -2771,7 +2969,7 @@ ALTER TABLE ONLY edan.ayuda_humanitaria
 
 
 --
--- Name: ayuda_humanitaria catalogo_ayuda_humanitaria_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: ayuda_humanitaria catalogo_ayuda_humanitaria_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.ayuda_humanitaria
@@ -2779,7 +2977,7 @@ ALTER TABLE ONLY edan.ayuda_humanitaria
 
 
 --
--- Name: categoria_proteccion catalogo_categoria_proteccion_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: categoria_proteccion catalogo_categoria_proteccion_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.categoria_proteccion
@@ -2787,7 +2985,7 @@ ALTER TABLE ONLY edan.categoria_proteccion
 
 
 --
--- Name: categoria_proteccion catalogo_categoria_proteccion_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: categoria_proteccion catalogo_categoria_proteccion_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.categoria_proteccion
@@ -2795,7 +2993,7 @@ ALTER TABLE ONLY edan.categoria_proteccion
 
 
 --
--- Name: grupo_etario catalogo_grupo_etario_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: grupo_etario catalogo_grupo_etario_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.grupo_etario
@@ -2803,7 +3001,7 @@ ALTER TABLE ONLY edan.grupo_etario
 
 
 --
--- Name: grupo_etario catalogo_grupo_etario_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: grupo_etario catalogo_grupo_etario_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.grupo_etario
@@ -2811,7 +3009,7 @@ ALTER TABLE ONLY edan.grupo_etario
 
 
 --
--- Name: servicio_basico catalogo_servicio_basico_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: servicio_basico catalogo_servicio_basico_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.servicio_basico
@@ -2819,7 +3017,7 @@ ALTER TABLE ONLY edan.servicio_basico
 
 
 --
--- Name: servicio_basico catalogo_servicio_basico_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: servicio_basico catalogo_servicio_basico_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.servicio_basico
@@ -2827,7 +3025,7 @@ ALTER TABLE ONLY edan.servicio_basico
 
 
 --
--- Name: tipo_evento catalogo_tipo_evento_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: tipo_evento catalogo_tipo_evento_nombre_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.tipo_evento
@@ -2835,7 +3033,7 @@ ALTER TABLE ONLY edan.tipo_evento
 
 
 --
--- Name: tipo_evento catalogo_tipo_evento_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: tipo_evento catalogo_tipo_evento_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.tipo_evento
@@ -2843,7 +3041,7 @@ ALTER TABLE ONLY edan.tipo_evento
 
 
 --
--- Name: edan_agricultura edan_agricultura_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_agricultura edan_agricultura_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_agricultura
@@ -2851,7 +3049,7 @@ ALTER TABLE ONLY edan.edan_agricultura
 
 
 --
--- Name: edan_ayuda_humanitaria edan_ayuda_humanitaria_id_edan_id_ayuda_humanitaria_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria edan_ayuda_humanitaria_id_edan_id_ayuda_humanitaria_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_ayuda_humanitaria
@@ -2859,7 +3057,7 @@ ALTER TABLE ONLY edan.edan_ayuda_humanitaria
 
 
 --
--- Name: edan_ayuda_humanitaria edan_ayuda_humanitaria_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_ayuda_humanitaria edan_ayuda_humanitaria_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_ayuda_humanitaria
@@ -2867,7 +3065,7 @@ ALTER TABLE ONLY edan.edan_ayuda_humanitaria
 
 
 --
--- Name: edan_comunidad edan_comunidad_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_comunidad edan_comunidad_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_comunidad
@@ -2875,7 +3073,7 @@ ALTER TABLE ONLY edan.edan_comunidad
 
 
 --
--- Name: edan_educacion_afectacion edan_educacion_afectacion_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_educacion_afectacion edan_educacion_afectacion_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_educacion_afectacion
@@ -2883,7 +3081,7 @@ ALTER TABLE ONLY edan.edan_educacion_afectacion
 
 
 --
--- Name: edan_educacion_dano edan_educacion_dano_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_educacion_dano edan_educacion_dano_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_educacion_dano
@@ -2891,7 +3089,7 @@ ALTER TABLE ONLY edan.edan_educacion_dano
 
 
 --
--- Name: edan_infraestructura_productiva edan_infraestructura_productiva_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_infraestructura_productiva edan_infraestructura_productiva_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_infraestructura_productiva
@@ -2899,7 +3097,7 @@ ALTER TABLE ONLY edan.edan_infraestructura_productiva
 
 
 --
--- Name: edan_infraestructura_publica edan_infraestructura_publica_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_infraestructura_publica edan_infraestructura_publica_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_infraestructura_publica
@@ -2907,7 +3105,7 @@ ALTER TABLE ONLY edan.edan_infraestructura_publica
 
 
 --
--- Name: edan_infraestructura_vial edan_infraestructura_vial_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_infraestructura_vial edan_infraestructura_vial_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_infraestructura_vial
@@ -2915,7 +3113,7 @@ ALTER TABLE ONLY edan.edan_infraestructura_vial
 
 
 --
--- Name: edan_pecuaria edan_pecuaria_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_pecuaria edan_pecuaria_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_pecuaria
@@ -2923,7 +3121,7 @@ ALTER TABLE ONLY edan.edan_pecuaria
 
 
 --
--- Name: edan edan_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan edan_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan
@@ -2931,7 +3129,7 @@ ALTER TABLE ONLY edan.edan
 
 
 --
--- Name: edan_poblacion_grupo edan_poblacion_grupo_id_edan_id_grupo_etario_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo edan_poblacion_grupo_id_edan_id_grupo_etario_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_poblacion_grupo
@@ -2939,7 +3137,7 @@ ALTER TABLE ONLY edan.edan_poblacion_grupo
 
 
 --
--- Name: edan_poblacion_grupo edan_poblacion_grupo_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_poblacion_grupo edan_poblacion_grupo_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_poblacion_grupo
@@ -2947,7 +3145,7 @@ ALTER TABLE ONLY edan.edan_poblacion_grupo
 
 
 --
--- Name: edan_primera_respuesta edan_primera_respuesta_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_primera_respuesta edan_primera_respuesta_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_primera_respuesta
@@ -2955,7 +3153,7 @@ ALTER TABLE ONLY edan.edan_primera_respuesta
 
 
 --
--- Name: edan_proteccion edan_proteccion_id_edan_id_categoria_proteccion_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_proteccion edan_proteccion_id_edan_id_categoria_proteccion_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_proteccion
@@ -2963,7 +3161,7 @@ ALTER TABLE ONLY edan.edan_proteccion
 
 
 --
--- Name: edan_proteccion edan_proteccion_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_proteccion edan_proteccion_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_proteccion
@@ -2971,7 +3169,7 @@ ALTER TABLE ONLY edan.edan_proteccion
 
 
 --
--- Name: edan_salud_establecimiento edan_salud_establecimiento_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_salud_establecimiento edan_salud_establecimiento_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_salud_establecimiento
@@ -2979,7 +3177,7 @@ ALTER TABLE ONLY edan.edan_salud_establecimiento
 
 
 --
--- Name: edan_salud_necesidades edan_salud_necesidades_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_salud_necesidades edan_salud_necesidades_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_salud_necesidades
@@ -2987,7 +3185,7 @@ ALTER TABLE ONLY edan.edan_salud_necesidades
 
 
 --
--- Name: edan_servicio_basico edan_servicio_basico_id_edan_id_servicio_basico_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_servicio_basico edan_servicio_basico_id_edan_id_servicio_basico_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_servicio_basico
@@ -2995,7 +3193,7 @@ ALTER TABLE ONLY edan.edan_servicio_basico
 
 
 --
--- Name: edan_servicio_basico edan_servicio_basico_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_servicio_basico edan_servicio_basico_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_servicio_basico
@@ -3003,7 +3201,7 @@ ALTER TABLE ONLY edan.edan_servicio_basico
 
 
 --
--- Name: edan_tipo_evento edan_tipo_evento_id_edan_id_tipo_evento_key; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_tipo_evento edan_tipo_evento_id_edan_id_tipo_evento_key; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_tipo_evento
@@ -3011,7 +3209,7 @@ ALTER TABLE ONLY edan.edan_tipo_evento
 
 
 --
--- Name: edan_tipo_evento edan_tipo_evento_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_tipo_evento edan_tipo_evento_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_tipo_evento
@@ -3019,7 +3217,7 @@ ALTER TABLE ONLY edan.edan_tipo_evento
 
 
 --
--- Name: edan_vivienda edan_vivienda_pkey; Type: CONSTRAINT; Schema: edan; Owner: -
+-- Name: edan_vivienda edan_vivienda_pkey; Type: CONSTRAINT; Schema: edan; Owner: postgres
 --
 
 ALTER TABLE ONLY edan.edan_vivienda
@@ -3027,7 +3225,7 @@ ALTER TABLE ONLY edan.edan_vivienda
 
 
 --
--- Name: afectacion_categoria afectacion_categoria_pkey; Type: CONSTRAINT; Schema: rea; Owner: -
+-- Name: afectacion_categoria afectacion_categoria_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.afectacion_categoria
@@ -3035,7 +3233,7 @@ ALTER TABLE ONLY rea.afectacion_categoria
 
 
 --
--- Name: estado_reporte estado_reporte_pkey; Type: CONSTRAINT; Schema: rea; Owner: -
+-- Name: estado_reporte estado_reporte_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.estado_reporte
@@ -3043,7 +3241,7 @@ ALTER TABLE ONLY rea.estado_reporte
 
 
 --
--- Name: reporte_afectacion reporte_afectacion_pkey; Type: CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_afectacion reporte_afectacion_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_afectacion
@@ -3051,7 +3249,7 @@ ALTER TABLE ONLY rea.reporte_afectacion
 
 
 --
--- Name: reporte_evento reporte_evento_pkey; Type: CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_pkey; Type: CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3059,7 +3257,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: departamento catalogo_departamento_codigo_ine_key; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: departamento catalogo_departamento_codigo_ine_key; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.departamento
@@ -3067,7 +3265,7 @@ ALTER TABLE ONLY shared.departamento
 
 
 --
--- Name: departamento catalogo_departamento_nombre_key; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: departamento catalogo_departamento_nombre_key; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.departamento
@@ -3075,7 +3273,7 @@ ALTER TABLE ONLY shared.departamento
 
 
 --
--- Name: departamento catalogo_departamento_pkey; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: departamento catalogo_departamento_pkey; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.departamento
@@ -3083,7 +3281,7 @@ ALTER TABLE ONLY shared.departamento
 
 
 --
--- Name: municipio catalogo_municipio_codigo_ine_key; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: municipio catalogo_municipio_codigo_ine_key; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.municipio
@@ -3091,7 +3289,7 @@ ALTER TABLE ONLY shared.municipio
 
 
 --
--- Name: municipio catalogo_municipio_pkey; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: municipio catalogo_municipio_pkey; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.municipio
@@ -3099,7 +3297,7 @@ ALTER TABLE ONLY shared.municipio
 
 
 --
--- Name: provincia catalogo_provincia_codigo_ine_key; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: provincia catalogo_provincia_codigo_ine_key; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.provincia
@@ -3107,7 +3305,7 @@ ALTER TABLE ONLY shared.provincia
 
 
 --
--- Name: provincia catalogo_provincia_pkey; Type: CONSTRAINT; Schema: shared; Owner: -
+-- Name: provincia catalogo_provincia_pkey; Type: CONSTRAINT; Schema: shared; Owner: postgres
 --
 
 ALTER TABLE ONLY shared.provincia
@@ -3115,7 +3313,7 @@ ALTER TABLE ONLY shared.provincia
 
 
 --
--- Name: aplicacion aplicacion_codigo_key; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: aplicacion aplicacion_codigo_key; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.aplicacion
@@ -3123,7 +3321,7 @@ ALTER TABLE ONLY usuarios.aplicacion
 
 
 --
--- Name: aplicacion aplicacion_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: aplicacion aplicacion_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.aplicacion
@@ -3131,7 +3329,7 @@ ALTER TABLE ONLY usuarios.aplicacion
 
 
 --
--- Name: auditoria auditoria_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: auditoria auditoria_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.auditoria
@@ -3139,7 +3337,7 @@ ALTER TABLE ONLY usuarios.auditoria
 
 
 --
--- Name: permiso_aplicacion permiso_aplicacion_id_rol_id_aplicacion_key; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion permiso_aplicacion_id_rol_id_aplicacion_key; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.permiso_aplicacion
@@ -3147,7 +3345,7 @@ ALTER TABLE ONLY usuarios.permiso_aplicacion
 
 
 --
--- Name: permiso_aplicacion permiso_aplicacion_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: permiso_aplicacion permiso_aplicacion_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.permiso_aplicacion
@@ -3155,7 +3353,7 @@ ALTER TABLE ONLY usuarios.permiso_aplicacion
 
 
 --
--- Name: reset_contrasena reset_contrasena_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: reset_contrasena reset_contrasena_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.reset_contrasena
@@ -3163,7 +3361,7 @@ ALTER TABLE ONLY usuarios.reset_contrasena
 
 
 --
--- Name: reset_contrasena reset_contrasena_token_key; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: reset_contrasena reset_contrasena_token_key; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.reset_contrasena
@@ -3171,7 +3369,7 @@ ALTER TABLE ONLY usuarios.reset_contrasena
 
 
 --
--- Name: rol rol_nombre_key; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: rol rol_nombre_key; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.rol
@@ -3179,7 +3377,7 @@ ALTER TABLE ONLY usuarios.rol
 
 
 --
--- Name: rol rol_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: rol rol_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.rol
@@ -3187,7 +3385,7 @@ ALTER TABLE ONLY usuarios.rol
 
 
 --
--- Name: sesion sesion_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: sesion sesion_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.sesion
@@ -3195,7 +3393,7 @@ ALTER TABLE ONLY usuarios.sesion
 
 
 --
--- Name: sesion sesion_token_key; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: sesion sesion_token_key; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.sesion
@@ -3203,7 +3401,7 @@ ALTER TABLE ONLY usuarios.sesion
 
 
 --
--- Name: usuario uq_usuario_carnet; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: usuario uq_usuario_carnet; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.usuario
@@ -3211,7 +3409,7 @@ ALTER TABLE ONLY usuarios.usuario
 
 
 --
--- Name: usuario usuario_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: usuario usuario_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.usuario
@@ -3219,7 +3417,7 @@ ALTER TABLE ONLY usuarios.usuario
 
 
 --
--- Name: usuario_rol usuario_rol_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: usuario_rol usuario_rol_pkey; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.usuario_rol
@@ -3227,7 +3425,7 @@ ALTER TABLE ONLY usuarios.usuario_rol
 
 
 --
--- Name: usuario usuario_usuario_key; Type: CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: usuario usuario_usuario_key; Type: CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.usuario
@@ -3235,419 +3433,147 @@ ALTER TABLE ONLY usuarios.usuario
 
 
 --
--- Name: idx_edan_agricultura_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_agricultura_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_agricultura_edan ON edan.edan_agricultura USING btree (id_edan);
 
 
 --
--- Name: idx_edan_ayuda_humanitaria_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_ayuda_humanitaria_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_ayuda_humanitaria_edan ON edan.edan_ayuda_humanitaria USING btree (id_edan);
 
 
 --
--- Name: idx_edan_comunidad_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_comunidad_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_comunidad_edan ON edan.edan_comunidad USING btree (id_edan);
 
 
 --
--- Name: idx_edan_dep; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_dep; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_dep ON edan.edan USING btree (id_departamento);
 
 
 --
--- Name: idx_edan_educacion_afectacion_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_educacion_afectacion_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_educacion_afectacion_edan ON edan.edan_educacion_afectacion USING btree (id_edan);
 
 
 --
--- Name: idx_edan_educacion_dano_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_educacion_dano_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_educacion_dano_edan ON edan.edan_educacion_dano USING btree (id_edan);
 
 
 --
--- Name: idx_edan_fecha_evento; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_fecha_evento; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_fecha_evento ON edan.edan USING btree (fecha_evento);
 
 
 --
--- Name: idx_edan_infraestructura_productiva_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_infraestructura_productiva_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_infraestructura_productiva_edan ON edan.edan_infraestructura_productiva USING btree (id_edan);
 
 
 --
--- Name: idx_edan_infraestructura_publica_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_infraestructura_publica_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_infraestructura_publica_edan ON edan.edan_infraestructura_publica USING btree (id_edan);
 
 
 --
--- Name: idx_edan_infraestructura_vial_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_infraestructura_vial_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_infraestructura_vial_edan ON edan.edan_infraestructura_vial USING btree (id_edan);
 
 
 --
--- Name: idx_edan_mun; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_mun; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_mun ON edan.edan USING btree (id_municipio);
 
 
 --
--- Name: idx_edan_pecuaria_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_pecuaria_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_pecuaria_edan ON edan.edan_pecuaria USING btree (id_edan);
 
 
 --
--- Name: idx_edan_poblacion_grupo_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_poblacion_grupo_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_poblacion_grupo_edan ON edan.edan_poblacion_grupo USING btree (id_edan);
 
 
 --
--- Name: idx_edan_primera_respuesta_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_primera_respuesta_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_primera_respuesta_edan ON edan.edan_primera_respuesta USING btree (id_edan);
 
 
 --
--- Name: idx_edan_proteccion_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_proteccion_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_proteccion_edan ON edan.edan_proteccion USING btree (id_edan);
 
 
 --
--- Name: idx_edan_salud_establecimiento_edan; Type: INDEX; Schema: edan; Owner: -
+-- Name: idx_edan_salud_establecimiento_edan; Type: INDEX; Schema: edan; Owner: postgres
 --
 
 CREATE INDEX idx_edan_salud_establecimiento_edan ON edan.edan_salud_establecimiento USING btree (id_edan);
 
 
 --
--- Name: idx_edan_salud_necesidades_edan; Type: INDEX; Schema: edan; Owner: -
---
-
-CREATE INDEX idx_edan_salud_necesidades_edan ON edan.edan_salud_necesidades USING btree (id_edan);
-
-
---
--- Name: idx_edan_servicio_basico_edan; Type: INDEX; Schema: edan; Owner: -
---
-
-CREATE INDEX idx_edan_servicio_basico_edan ON edan.edan_servicio_basico USING btree (id_edan);
-
-
---
--- Name: idx_edan_tipo_evento_edan; Type: INDEX; Schema: edan; Owner: -
---
-
-CREATE INDEX idx_edan_tipo_evento_edan ON edan.edan_tipo_evento USING btree (id_edan);
-
-
---
--- Name: idx_edan_vivienda_edan; Type: INDEX; Schema: edan; Owner: -
---
-
-CREATE INDEX idx_edan_vivienda_edan ON edan.edan_vivienda USING btree (id_edan);
-
-
---
--- Name: idx_reporte_estado; Type: INDEX; Schema: rea; Owner: -
+-- Name: idx_reporte_estado; Type: INDEX; Schema: rea; Owner: sinagersat
 --
 
 CREATE INDEX idx_reporte_estado ON rea.reporte_evento USING btree (id_estado);
 
 
 --
--- Name: idx_reporte_fecha; Type: INDEX; Schema: rea; Owner: -
---
-
-CREATE INDEX idx_reporte_fecha ON rea.reporte_evento USING btree (fecha_reporte);
-
-
---
--- Name: idx_reporte_municipio; Type: INDEX; Schema: rea; Owner: -
+-- Name: idx_reporte_municipio; Type: INDEX; Schema: rea; Owner: sinagersat
 --
 
 CREATE INDEX idx_reporte_municipio ON rea.reporte_evento USING btree (id_municipio);
 
 
 --
--- Name: idx_reporte_usuario; Type: INDEX; Schema: rea; Owner: -
+-- Name: idx_reporte_usuario; Type: INDEX; Schema: rea; Owner: sinagersat
 --
 
 CREATE INDEX idx_reporte_usuario ON rea.reporte_evento USING btree (id_usuario);
 
 
 --
--- Name: idx_municipio_dep; Type: INDEX; Schema: shared; Owner: -
---
-
-CREATE INDEX idx_municipio_dep ON shared.municipio USING btree (id_departamento);
-
-
---
--- Name: idx_municipio_geom; Type: INDEX; Schema: shared; Owner: -
+-- Name: idx_municipio_geom; Type: INDEX; Schema: shared; Owner: postgres
 --
 
 CREATE INDEX idx_municipio_geom ON shared.municipio USING gist (geom);
 
 
 --
--- Name: idx_municipio_prov; Type: INDEX; Schema: shared; Owner: -
---
-
-CREATE INDEX idx_municipio_prov ON shared.municipio USING btree (id_provincia);
-
-
---
--- Name: idx_provincia_dep; Type: INDEX; Schema: shared; Owner: -
---
-
-CREATE INDEX idx_provincia_dep ON shared.provincia USING btree (id_departamento);
-
-
---
--- Name: edan_agricultura edan_agricultura_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_agricultura
-    ADD CONSTRAINT edan_agricultura_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_ayuda_humanitaria edan_ayuda_humanitaria_id_ayuda_humanitaria_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_ayuda_humanitaria
-    ADD CONSTRAINT edan_ayuda_humanitaria_id_ayuda_humanitaria_fkey FOREIGN KEY (id_ayuda_humanitaria) REFERENCES edan.ayuda_humanitaria(id_ayuda_humanitaria);
-
-
---
--- Name: edan_ayuda_humanitaria edan_ayuda_humanitaria_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_ayuda_humanitaria
-    ADD CONSTRAINT edan_ayuda_humanitaria_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_comunidad edan_comunidad_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_comunidad
-    ADD CONSTRAINT edan_comunidad_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_educacion_afectacion edan_educacion_afectacion_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_educacion_afectacion
-    ADD CONSTRAINT edan_educacion_afectacion_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_educacion_afectacion edan_educacion_afectacion_id_educacion_dano_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_educacion_afectacion
-    ADD CONSTRAINT edan_educacion_afectacion_id_educacion_dano_fkey FOREIGN KEY (id_educacion_dano) REFERENCES edan.edan_educacion_dano(id_educacion_dano) ON DELETE CASCADE;
-
-
---
--- Name: edan_educacion_dano edan_educacion_dano_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_educacion_dano
-    ADD CONSTRAINT edan_educacion_dano_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan edan_id_departamento_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan
-    ADD CONSTRAINT edan_id_departamento_fkey FOREIGN KEY (id_departamento) REFERENCES shared.departamento(id);
-
-
---
--- Name: edan edan_id_municipio_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan
-    ADD CONSTRAINT edan_id_municipio_fkey FOREIGN KEY (id_municipio) REFERENCES shared.municipio(id);
-
-
---
--- Name: edan edan_id_reporte_rea_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan
-    ADD CONSTRAINT edan_id_reporte_rea_fkey FOREIGN KEY (id_reporte_rea) REFERENCES rea.reporte_evento(id_reporte);
-
-
---
--- Name: edan_infraestructura_productiva edan_infraestructura_productiva_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_infraestructura_productiva
-    ADD CONSTRAINT edan_infraestructura_productiva_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_infraestructura_publica edan_infraestructura_publica_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_infraestructura_publica
-    ADD CONSTRAINT edan_infraestructura_publica_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_infraestructura_vial edan_infraestructura_vial_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_infraestructura_vial
-    ADD CONSTRAINT edan_infraestructura_vial_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_pecuaria edan_pecuaria_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_pecuaria
-    ADD CONSTRAINT edan_pecuaria_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_poblacion_grupo edan_poblacion_grupo_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_poblacion_grupo
-    ADD CONSTRAINT edan_poblacion_grupo_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_poblacion_grupo edan_poblacion_grupo_id_grupo_etario_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_poblacion_grupo
-    ADD CONSTRAINT edan_poblacion_grupo_id_grupo_etario_fkey FOREIGN KEY (id_grupo_etario) REFERENCES edan.grupo_etario(id_grupo_etario);
-
-
---
--- Name: edan_primera_respuesta edan_primera_respuesta_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_primera_respuesta
-    ADD CONSTRAINT edan_primera_respuesta_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_proteccion edan_proteccion_id_categoria_proteccion_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_proteccion
-    ADD CONSTRAINT edan_proteccion_id_categoria_proteccion_fkey FOREIGN KEY (id_categoria_proteccion) REFERENCES edan.categoria_proteccion(id_categoria_proteccion);
-
-
---
--- Name: edan_proteccion edan_proteccion_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_proteccion
-    ADD CONSTRAINT edan_proteccion_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_salud_establecimiento edan_salud_establecimiento_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_salud_establecimiento
-    ADD CONSTRAINT edan_salud_establecimiento_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_salud_necesidades edan_salud_necesidades_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_salud_necesidades
-    ADD CONSTRAINT edan_salud_necesidades_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_servicio_basico edan_servicio_basico_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_servicio_basico
-    ADD CONSTRAINT edan_servicio_basico_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_servicio_basico edan_servicio_basico_id_servicio_basico_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_servicio_basico
-    ADD CONSTRAINT edan_servicio_basico_id_servicio_basico_fkey FOREIGN KEY (id_servicio_basico) REFERENCES edan.servicio_basico(id_servicio_basico);
-
-
---
--- Name: edan_tipo_evento edan_tipo_evento_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_tipo_evento
-    ADD CONSTRAINT edan_tipo_evento_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: edan_tipo_evento edan_tipo_evento_id_tipo_evento_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_tipo_evento
-    ADD CONSTRAINT edan_tipo_evento_id_tipo_evento_fkey FOREIGN KEY (id_tipo_evento) REFERENCES edan.tipo_evento(id_tipo_evento);
-
-
---
--- Name: edan edan_usuario_registro_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan
-    ADD CONSTRAINT edan_usuario_registro_fkey FOREIGN KEY (usuario_registro) REFERENCES usuarios.usuario(id_usuario);
-
-
---
--- Name: edan_vivienda edan_vivienda_id_edan_fkey; Type: FK CONSTRAINT; Schema: edan; Owner: -
---
-
-ALTER TABLE ONLY edan.edan_vivienda
-    ADD CONSTRAINT edan_vivienda_id_edan_fkey FOREIGN KEY (id_edan) REFERENCES edan.edan(id_edan) ON DELETE CASCADE;
-
-
---
--- Name: reporte_afectacion reporte_afectacion_id_categoria_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_afectacion reporte_afectacion_id_categoria_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_afectacion
@@ -3655,7 +3581,7 @@ ALTER TABLE ONLY rea.reporte_afectacion
 
 
 --
--- Name: reporte_afectacion reporte_afectacion_id_reporte_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_afectacion reporte_afectacion_id_reporte_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_afectacion
@@ -3663,7 +3589,7 @@ ALTER TABLE ONLY rea.reporte_afectacion
 
 
 --
--- Name: reporte_evento reporte_evento_id_departamento_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_id_departamento_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3671,7 +3597,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: reporte_evento reporte_evento_id_estado_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_id_estado_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3679,7 +3605,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: reporte_evento reporte_evento_id_municipio_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_id_municipio_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3687,7 +3613,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: reporte_evento reporte_evento_id_provincia_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_id_provincia_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3695,7 +3621,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: reporte_evento reporte_evento_id_tipo_evento_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_id_tipo_evento_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3703,7 +3629,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: reporte_evento reporte_evento_id_usuario_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: -
+-- Name: reporte_evento reporte_evento_id_usuario_fkey; Type: FK CONSTRAINT; Schema: rea; Owner: sinagersat
 --
 
 ALTER TABLE ONLY rea.reporte_evento
@@ -3711,87 +3637,7 @@ ALTER TABLE ONLY rea.reporte_evento
 
 
 --
--- Name: municipio catalogo_municipio_id_departamento_fkey; Type: FK CONSTRAINT; Schema: shared; Owner: -
---
-
-ALTER TABLE ONLY shared.municipio
-    ADD CONSTRAINT catalogo_municipio_id_departamento_fkey FOREIGN KEY (id_departamento) REFERENCES shared.departamento(id);
-
-
---
--- Name: provincia catalogo_provincia_id_departamento_fkey; Type: FK CONSTRAINT; Schema: shared; Owner: -
---
-
-ALTER TABLE ONLY shared.provincia
-    ADD CONSTRAINT catalogo_provincia_id_departamento_fkey FOREIGN KEY (id_departamento) REFERENCES shared.departamento(id);
-
-
---
--- Name: municipio municipio_id_provincia_fkey; Type: FK CONSTRAINT; Schema: shared; Owner: -
---
-
-ALTER TABLE ONLY shared.municipio
-    ADD CONSTRAINT municipio_id_provincia_fkey FOREIGN KEY (id_provincia) REFERENCES shared.provincia(id);
-
-
---
--- Name: auditoria auditoria_id_aplicacion_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.auditoria
-    ADD CONSTRAINT auditoria_id_aplicacion_fkey FOREIGN KEY (id_aplicacion) REFERENCES usuarios.aplicacion(id_aplicacion);
-
-
---
--- Name: auditoria auditoria_id_usuario_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.auditoria
-    ADD CONSTRAINT auditoria_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES usuarios.usuario(id_usuario);
-
-
---
--- Name: usuario fk_usuario_rol; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.usuario
-    ADD CONSTRAINT fk_usuario_rol FOREIGN KEY (id_rol) REFERENCES usuarios.rol(id_rol);
-
-
---
--- Name: permiso_aplicacion permiso_aplicacion_id_aplicacion_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.permiso_aplicacion
-    ADD CONSTRAINT permiso_aplicacion_id_aplicacion_fkey FOREIGN KEY (id_aplicacion) REFERENCES usuarios.aplicacion(id_aplicacion) ON DELETE CASCADE;
-
-
---
--- Name: permiso_aplicacion permiso_aplicacion_id_rol_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.permiso_aplicacion
-    ADD CONSTRAINT permiso_aplicacion_id_rol_fkey FOREIGN KEY (id_rol) REFERENCES usuarios.rol(id_rol) ON DELETE CASCADE;
-
-
---
--- Name: reset_contrasena reset_contrasena_id_usuario_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.reset_contrasena
-    ADD CONSTRAINT reset_contrasena_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES usuarios.usuario(id_usuario) ON DELETE CASCADE;
-
-
---
--- Name: sesion sesion_id_usuario_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.sesion
-    ADD CONSTRAINT sesion_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES usuarios.usuario(id_usuario) ON DELETE CASCADE;
-
-
---
--- Name: usuario usuario_id_rol_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
+-- Name: usuario usuario_id_rol_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: sinagersat
 --
 
 ALTER TABLE ONLY usuarios.usuario
@@ -3799,24 +3645,8 @@ ALTER TABLE ONLY usuarios.usuario
 
 
 --
--- Name: usuario_rol usuario_rol_id_rol_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.usuario_rol
-    ADD CONSTRAINT usuario_rol_id_rol_fkey FOREIGN KEY (id_rol) REFERENCES usuarios.rol(id_rol) ON DELETE CASCADE;
-
-
---
--- Name: usuario_rol usuario_rol_id_usuario_fkey; Type: FK CONSTRAINT; Schema: usuarios; Owner: -
---
-
-ALTER TABLE ONLY usuarios.usuario_rol
-    ADD CONSTRAINT usuario_rol_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES usuarios.usuario(id_usuario) ON DELETE CASCADE;
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict BzPcarCZQYUXIr8eVxgfyms1BdQQbCMlXRRccZCyJmnYKTePkpC9FSx9FLmrliX
+\unrestrict 0Z6F8RWxyeYw4N50pMTti8F9rdVzaSN5UOgE1A90rNTthAWicworBHOPuh6yxSp
 
