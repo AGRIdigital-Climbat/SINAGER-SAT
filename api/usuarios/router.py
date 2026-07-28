@@ -1,23 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
+from ..auth.permisos import module_permiso, permiso_required
 from ..response import SuccessResponse, MessageResponse
 from .schemas import *
 from . import service
 
-router = APIRouter(prefix="/usuarios")
+router = APIRouter(prefix="/usuarios", dependencies=[Depends(module_permiso("SISTEMA"))])
 
 TAG_USR = "Usuarios > Cuentas"
 TAG_ROL = "Usuarios > Roles"
 TAG_APL = "Usuarios > Aplicaciones"
 TAG_PER = "Usuarios > Permisos"
+TAG_ACC = "Usuarios > Acciones"
 TAG_SES = "Usuarios > Sesiones"
 TAG_AUD = "Usuarios > Auditoría"
 
 
 # ──────────────────────────────────────────────
-#  ROLES (antes de /{id} para evitar conflicto)
+#  ROLES
 # ──────────────────────────────────────────────
 
 @router.get("/roles", tags=[TAG_ROL], responses={200: {"model": SuccessResponse}})
@@ -54,25 +56,6 @@ def eliminar_rol(id: int, db: Session = Depends(get_db), _user=Depends(get_curre
     if not service.delete_rol(db, id):
         raise HTTPException(status_code=404, detail="Rol no encontrado")
     return MessageResponse(message="Rol eliminado correctamente")
-
-
-@router.get("/{id_usuario}/roles", tags=[TAG_ROL], responses={200: {"model": SuccessResponse}})
-def listar_usuario_roles(id_usuario: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    items = service.get_usuario_roles(db, id_usuario)
-    return SuccessResponse(message="Roles del usuario listados correctamente", data=items, total=len(items))
-
-
-@router.post("/{id_usuario}/roles/{id_rol}", tags=[TAG_ROL], responses={200: {"model": SuccessResponse}})
-def asignar_rol(id_usuario: int, id_rol: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    service.assign_rol(db, id_usuario, id_rol)
-    return SuccessResponse(message="Rol asignado correctamente")
-
-
-@router.delete("/{id_usuario}/roles/{id_rol}", tags=[TAG_ROL], responses={200: {"model": MessageResponse}})
-def remover_rol(id_usuario: int, id_rol: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    if not service.remove_rol(db, id_usuario, id_rol):
-        raise HTTPException(status_code=404, detail="Asignación no encontrada")
-    return MessageResponse(message="Rol removido correctamente")
 
 
 # ──────────────────────────────────────────────
@@ -116,8 +99,76 @@ def eliminar_aplicacion(id: int, db: Session = Depends(get_db), _user=Depends(ge
 
 
 # ──────────────────────────────────────────────
-#  PERMISOS
+#  ACCIONES
 # ──────────────────────────────────────────────
+
+@router.get("/acciones", tags=[TAG_ACC], responses={200: {"model": SuccessResponse}})
+def listar_acciones(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    items = service.get_acciones(db)
+    return SuccessResponse(message="Acciones listadas correctamente", data=items, total=len(items))
+
+
+@router.get("/acciones/{id}", tags=[TAG_ACC], responses={200: {"model": SuccessResponse}})
+def obtener_accion(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = service.get_accion(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Acción no encontrada")
+    return SuccessResponse(message="Acción obtenida correctamente", data=result)
+
+
+@router.post("/acciones", status_code=201, tags=[TAG_ACC], responses={201: {"model": SuccessResponse}})
+def crear_accion(data: AccionCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    id = service.create_accion(db, data.model_dump())
+    result = service.get_accion(db, id)
+    return SuccessResponse(message="Acción creada correctamente", data=result)
+
+
+@router.put("/acciones/{id}", tags=[TAG_ACC], responses={200: {"model": SuccessResponse}})
+def actualizar_accion(id: int, data: AccionUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = service.update_accion(db, id, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="Acción no encontrada")
+    return SuccessResponse(message="Acción actualizada correctamente", data=result)
+
+
+@router.delete("/acciones/{id}", tags=[TAG_ACC], responses={200: {"model": MessageResponse}})
+def eliminar_accion(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if not service.delete_accion(db, id):
+        raise HTTPException(status_code=404, detail="Acción no encontrada")
+    return MessageResponse(message="Acción eliminada correctamente")
+
+
+# ──────────────────────────────────────────────
+#  PERMISOS — endpoints intuitivos para frontend
+# ──────────────────────────────────────────────
+
+@router.get("/permisos/estructura", tags=[TAG_PER],
+            summary="Estructura completa para montar UI de permisos")
+def obtener_estructura_permisos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    data = service.get_permisos_estructura(db)
+    return SuccessResponse(message="Estructura de permisos obtenida", data=data)
+
+
+@router.get("/permisos/rol/{id_rol}", tags=[TAG_PER],
+            summary="Permisos de un rol agrupados por aplicación")
+def obtener_permisos_rol(id_rol: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = service.get_rol_permisos_agrupados(db, id_rol)
+    if not result:
+        raise HTTPException(status_code=404, detail="Rol no encontrado")
+    return SuccessResponse(message="Permisos del rol obtenidos", data=result)
+
+
+@router.put("/roles/{id_rol}/permisos", tags=[TAG_PER],
+            summary="Asignar permisos completos a un rol (reemplaza todos)")
+def asignar_permisos_rol(id_rol: int, data: PermisoBatchRequest,
+                         db: Session = Depends(get_db),
+                         _ua=Depends(permiso_required("SISTEMA", "UPDATE"))):
+    service.assign_permisos_batch(db, id_rol, data.permisos)
+    result = service.get_rol_permisos_agrupados(db, id_rol)
+    return SuccessResponse(message="Permisos actualizados correctamente", data=result)
+
+
+# ── Permisos individuales (ajustes finos desde la UI) ──
 
 @router.get("/permisos", tags=[TAG_PER], responses={200: {"model": SuccessResponse}})
 def listar_permisos(id_rol: int | None = Query(None), db: Session = Depends(get_db), _user=Depends(get_current_user)):
@@ -125,15 +176,17 @@ def listar_permisos(id_rol: int | None = Query(None), db: Session = Depends(get_
     return SuccessResponse(message="Permisos listados correctamente", data=items, total=len(items))
 
 
-@router.post("/permisos/{id_rol}/{id_aplicacion}", tags=[TAG_PER], responses={200: {"model": SuccessResponse}})
-def asignar_permiso(id_rol: int, id_aplicacion: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    service.assign_permiso(db, id_rol, id_aplicacion)
+@router.post("/permisos/{id_rol}/{id_aplicacion}/{id_accion}", tags=[TAG_PER], responses={200: {"model": SuccessResponse}})
+def asignar_permiso(id_rol: int, id_aplicacion: int, id_accion: int,
+                    db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    service.assign_permiso(db, id_rol, id_aplicacion, id_accion)
     return SuccessResponse(message="Permiso asignado correctamente")
 
 
-@router.delete("/permisos/{id_rol}/{id_aplicacion}", tags=[TAG_PER], responses={200: {"model": MessageResponse}})
-def remover_permiso(id_rol: int, id_aplicacion: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    if not service.remove_permiso(db, id_rol, id_aplicacion):
+@router.delete("/permisos/{id_rol}/{id_aplicacion}/{id_accion}", tags=[TAG_PER], responses={200: {"model": MessageResponse}})
+def remover_permiso(id_rol: int, id_aplicacion: int, id_accion: int,
+                    db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if not service.remove_permiso(db, id_rol, id_aplicacion, id_accion):
         raise HTTPException(status_code=404, detail="Permiso no encontrado")
     return MessageResponse(message="Permiso removido correctamente")
 
@@ -149,15 +202,23 @@ def listar_sesiones(id_usuario: int | None = Query(None), db: Session = Depends(
 
 
 @router.get("/auditoria", tags=[TAG_AUD], responses={200: {"model": SuccessResponse}})
-def listar_auditoria(id_usuario: int | None = Query(None), skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    items = service.get_auditoria(db, id_usuario, skip, limit)
-    return SuccessResponse(message="Auditoría listada correctamente", data=items, total=len(items))
-
-
-@router.get("/resets", tags=[TAG_AUD], responses={200: {"model": SuccessResponse}})
-def listar_resets(id_usuario: int | None = Query(None), db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    items = service.get_resets(db, id_usuario)
-    return SuccessResponse(message="Resets listados correctamente", data=items, total=len(items))
+def listar_auditoria(
+    id_usuario: int | None = Query(None, description="Filtrar por usuario"),
+    id_aplicacion: int | None = Query(None, description="Filtrar por aplicación (1=EDAN, 4=REA, 9=SISTEMA)"),
+    accion: str | None = Query(None, description="Filtrar por acción (CREATE, UPDATE, DELETE)"),
+    fecha_desde: str | None = Query(None, description="Desde (ISO: YYYY-MM-DD o YYYY-MM-DD HH:MM:SS)"),
+    fecha_hasta: str | None = Query(None, description="Hasta (ISO: YYYY-MM-DD o YYYY-MM-DD HH:MM:SS)"),
+    id_rol: int | None = Query(None, description="Filtrar usuarios por rol"),
+    id_municipio: int | None = Query(None, description="Filtrar usuarios por municipio"),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    items, total = service.get_auditoria(
+        db, id_usuario, id_aplicacion, accion,
+        fecha_desde, fecha_hasta, id_rol, id_municipio,
+        skip, limit,
+    )
+    return SuccessResponse(message="Auditoría listada correctamente", data=items, total=total)
 
 
 # ──────────────────────────────────────────────
@@ -184,16 +245,21 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db)):
         id = service.create_usuario(db, data.model_dump())
         result = service.get_usuario(db, id)
         return SuccessResponse(message="Usuario creado correctamente", data=result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/{id}", tags=[TAG_USR], responses={200: {"model": SuccessResponse}})
 def actualizar_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    result = service.update_usuario(db, id, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return SuccessResponse(message="Usuario actualizado correctamente", data=result)
+    try:
+        result = service.update_usuario(db, id, data.model_dump(exclude_unset=True))
+        if not result:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        return SuccessResponse(message="Usuario actualizado correctamente", data=result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{id}", tags=[TAG_USR], responses={200: {"model": MessageResponse}})

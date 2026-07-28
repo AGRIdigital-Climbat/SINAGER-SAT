@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
+from ..auth.permisos import module_permiso
 from ..response import SuccessResponse, ErrorResponse, MessageResponse
 from ..upload import save_upload_file
 from . import service
 from .schemas import *
 
-router = APIRouter(prefix="/edan")
+router = APIRouter(prefix="/edan", dependencies=[Depends(module_permiso("EDAN"))])
 
 
 # ──────────────────────────────────────────────

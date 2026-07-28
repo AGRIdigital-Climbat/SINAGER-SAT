@@ -11,7 +11,12 @@ USER="sinagersat"
 PW="12345678"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKUP="$SCRIPT_DIR/database/backup_2026_07_26.sql"
+# Preferir backup más reciente
+if [ -f "$SCRIPT_DIR/database/backup_v1.2.6.sql" ]; then
+    BACKUP="$SCRIPT_DIR/database/backup_v1.2.6.sql"
+else
+    BACKUP="$SCRIPT_DIR/database/backup_2026_07_26.sql"
+fi
 SQL_ESQUEMA="$SCRIPT_DIR/database/crear_edan_db.sql"
 SQL_GEOGRAFIA="$SCRIPT_DIR/database/insert_provincias_municipios.sql"
 

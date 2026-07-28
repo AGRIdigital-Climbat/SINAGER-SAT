@@ -26,7 +26,7 @@ def get_current_user(
             detail="Token inválido",
         )
     result = db.execute(
-        text("SELECT id_usuario, usuario, nombre, activo FROM usuarios.usuario WHERE id_usuario = :id"),
+        text("SELECT id_usuario, usuario, nombre, activo, id_rol FROM usuarios.usuario WHERE id_usuario = :id"),
         {"id": int(user_id)},
     )
     user = result.mappings().first()

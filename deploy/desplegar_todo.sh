@@ -29,6 +29,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Buscar backup (preferir el más reciente)
 BACKUP=""
 for CANDIDATO in \
+    "$PROJECT_DIR/database/backup_v1.2.6.sql" \
     "$PROJECT_DIR/database/backup_2026_07_26.sql" \
     "$PROJECT_DIR/database/backup_2026_07_21.sql" \
     "$PROJECT_DIR/database/edan_db_backup.sql"; do
@@ -419,6 +420,16 @@ if [ "$MODE" = "update" ] || [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ]; the
         warn "Archivo migration_v1.2.3.sql no encontrado"
     fi
     
+    # Ejecutar migración v1.2.5
+    MIGRATION_125="$PROJECT_DIR/database/migration_v1.2.5_permisos.sql"
+    if [ -f "$MIGRATION_125" ]; then
+        echo "  Ejecutando migración v1.2.5..."
+        PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_125" 2>/dev/null || true
+        ok "Migración v1.2.5 ejecutada"
+    else
+        warn "Archivo migration_v1.2.5_permisos.sql no encontrado"
+    fi
+    
     ok "Migraciones completadas"
 fi
 
@@ -716,7 +727,8 @@ echo ""
 echo -e "  ${VERDE}ARCHIVOS:${SIN_COLOR}"
 echo "    uploads/reports/           # Imágenes de reportes"
 echo "    .env                       # Variables de entorno"
-echo "    database/edan_db_backup.sql # Backup de BD"
+echo "    database/backup_v1.2.6.sql   # Backup de BD (v1.2.6)"
+echo "    database/backup_2026_07_26.sql   # Backup de BD (v1.2.5)"
 echo ""
 echo -e "  ${VERDE}HERRAMIENTAS:${SIN_COLOR}"
 echo "    DBeaver:   Host: 127.0.0.1 | DB: $DB | User: $USER"

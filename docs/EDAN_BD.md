@@ -689,7 +689,7 @@ usuarios.usuario ←── (FK: usuario_registro en edan.edan, id_usuario en rea
 |---|---|
 | Script SQL completo | `database/crear_db_sinagersat.sql` |
 | Script geografía | `database/insert_provincias_municipios.sql` |
-| Backup completo | `database/db_sinagersat_backup.sql` |
+| Backup completo | `database/backup_2026_07_26.sql` (más reciente) |
 | Config pgAdmin4 | `database/servers.json` |
 | Iniciar BD | `database/iniciar_edan.sh` |
 | Restaurar BD | `database/restore_db.sh` |

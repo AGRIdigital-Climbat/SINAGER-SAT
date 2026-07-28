@@ -223,22 +223,19 @@ SQL_GEOJSON_FEATURES = """
             ELSE NULL END,
             'area_km2', ROUND((ST_Area(m.geom::geography) / 1000000)::numeric, 2)
         ),
-        'bbox', ST_Extent(ST_Transform(m.geom, 4326))
+        'bbox', json_build_array(
+            ST_XMin(ST_Transform(m.geom, 4326)),
+            ST_YMin(ST_Transform(m.geom, 4326)),
+            ST_XMax(ST_Transform(m.geom, 4326)),
+            ST_YMax(ST_Transform(m.geom, 4326))
+        )
     ) as feature
     FROM shared.municipio m
     LEFT JOIN shared.departamento d ON m.id_departamento = d.id
     LEFT JOIN shared.provincia p ON m.id_provincia = p.id
 """
 
-SQL_GEOJSON_BBOX = """
-    SELECT ST_Extent(ST_Transform(geom, 4326)) as bbox
-    FROM shared.municipio
-"""
 
-SQL_GEOJSON_FEATURE_BBOX = """
-    SELECT ST_Extent(ST_Transform(geom, 4326)) as bbox
-    FROM shared.municipio WHERE id = :id
-"""
 
 
 def get_municipios_geojson(db: Session, id_provincia: int | None = None, id_departamento: int | None = None):
@@ -255,28 +252,12 @@ def get_municipios_geojson(db: Session, id_provincia: int | None = None, id_depa
     rows = db.execute(text(features_query), params).mappings().all()
     features = [dict(r)["feature"] for r in rows]
 
-    bbox_row = db.execute(text(SQL_GEOJSON_BBOX)).mappings().first()
-    bbox = _parse_bbox(bbox_row["bbox"]) if bbox_row and bbox_row["bbox"] else None
-
-    collection_bbox = None
-    if features:
-        all_coords = []
-        for f in features:
-            geom = f.get("geometry", {})
-            coords = geom.get("coordinates", [])
-            _extract_coords(coords, all_coords)
-        if all_coords:
-            lons = [c[0] for c in all_coords]
-            lats = [c[1] for c in all_coords]
-            collection_bbox = [min(lons), min(lats), max(lons), max(lats)]
-
     return {
         "type": "FeatureCollection",
         "name": "municipios_bolivia",
         "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"}},
         "features": features,
         "total": len(features),
-        "bbox": collection_bbox,
     }
 
 
@@ -287,14 +268,7 @@ def get_municipio_geojson(db: Session, id: int):
     ).mappings().first()
     if not row:
         return None
-
-    feature = dict(row)["feature"]
-
-    bbox_row = db.execute(text(SQL_GEOJSON_FEATURE_BBOX), {"id": id}).mappings().first()
-    if bbox_row and bbox_row["bbox"]:
-        feature["bbox"] = _parse_bbox(bbox_row["bbox"])
-
-    return feature
+    return dict(row)["feature"]
 
 
 # ── GEOM/WKT ──
@@ -394,24 +368,3 @@ def obtener_ubicacion(db: Session, lat: float, lon: float):
 
 
 # ── helpers ──
-
-def _parse_bbox(bbox_str: str) -> list[float] | None:
-    if not bbox_str:
-        return None
-    try:
-        clean = bbox_str.replace("BOX(", "").replace(")", "")
-        parts = clean.split(",")
-        ll = parts[0].split()
-        ur = parts[1].split()
-        return [float(ll[0]), float(ll[1]), float(ur[0]), float(ur[1])]
-    except Exception:
-        return None
-
-
-def _extract_coords(geom, result):
-    if isinstance(geom, list) and len(geom) >= 2:
-        if isinstance(geom[0], (int, float)):
-            result.append(geom[:2])
-        else:
-            for item in geom:
-                _extract_coords(item, result)

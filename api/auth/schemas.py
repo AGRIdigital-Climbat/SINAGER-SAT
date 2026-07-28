@@ -13,6 +13,8 @@ class RegisterRequest(BaseModel):
     celular: str | None = None
     carnet: str | None = None
     comunidad: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
@@ -28,6 +30,8 @@ class TokenResponse(BaseModel):
     celular: str | None = None
     carnet: str | None = None
     comunidad: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None

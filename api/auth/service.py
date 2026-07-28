@@ -1,14 +1,25 @@
+from datetime import datetime, timedelta
+
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .jwt import hash_password, verify_password, create_access_token
 from .schemas import LoginRequest, RegisterRequest, VerificarIdentidadRequest, CambiarContrasenaRequest
 
 
+TOKEN_LARGO = datetime(2099, 12, 31, 23, 59, 59)
+
+
+def _calcular_expiracion(id_rol: int) -> tuple[datetime, timedelta | None]:
+    if id_rol in (6, 7):
+        return TOKEN_LARGO, None
+    return datetime.now() + timedelta(hours=72), timedelta(hours=72)
+
+
 def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     result = db.execute(
         text("""
             SELECT u.id_usuario, u.usuario, u.nombre, u.contrasena, u.activo, u.id_rol,
-                   u.celular, u.carnet, u.comunidad,
+                   u.celular, u.carnet, u.comunidad, u.correo, u.cargo,
                    u.id_departamento, u.id_provincia, u.id_municipio,
                    r.nombre as rol,
                    d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
@@ -31,19 +42,24 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     if not verify_password(data.contrasena, user["contrasena"]):
         return None
 
-    # Buscar sesión activa existente - reutilizar token
+    # Buscar sesión activa existente - reutilizar token (solo si no expiró)
     sesion = db.execute(
-        text("SELECT token FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true"),
+        text("SELECT token FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW()"),
         {"uid": user["id_usuario"]}
     ).mappings().first()
+
+    fecha_exp, delta = _calcular_expiracion(user["id_rol"])
 
     if sesion:
         token = sesion["token"]
     else:
-        token = create_access_token({"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]})
+        token = create_access_token(
+            {"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]},
+            expires_delta=delta,
+        )
         db.execute(
-            text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_expiracion) VALUES (:uid, :token, true, '2099-12-31')"),
-            {"uid": user["id_usuario"], "token": token}
+            text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_expiracion) VALUES (:uid, :token, true, :fecha_exp)"),
+            {"uid": user["id_usuario"], "token": token, "fecha_exp": fecha_exp},
         )
         db.commit()
 
@@ -56,6 +72,8 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         "celular": user["celular"],
         "carnet": user["carnet"],
         "comunidad": user["comunidad"],
+        "correo": user["correo"],
+        "cargo": user["cargo"],
         "departamento": {
             "id": user["id_departamento"],
             "codigo_ine": user["d_codigo_ine"],
@@ -95,8 +113,10 @@ def register_user(db: Session, data: RegisterRequest) -> int:
     result = db.execute(
         text("""
             INSERT INTO usuarios.usuario (usuario, contrasena, nombre, celular, carnet, comunidad,
+                correo, cargo,
                 id_departamento, id_provincia, id_municipio, id_rol, activo)
             VALUES (:usuario, :contrasena, :nombre, :celular, :carnet, :comunidad,
+                :correo, :cargo,
                 :id_departamento, :id_provincia, :id_municipio, :id_rol, true)
             RETURNING id_usuario
         """),
@@ -107,6 +127,8 @@ def register_user(db: Session, data: RegisterRequest) -> int:
             "celular": data.celular,
             "carnet": data.carnet,
             "comunidad": data.comunidad,
+            "correo": data.correo,
+            "cargo": data.cargo,
             "id_departamento": data.id_departamento,
             "id_provincia": data.id_provincia,
             "id_municipio": data.id_municipio,

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from jose import jwt, JWTError
 import bcrypt
 from ..config import settings
@@ -11,8 +13,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
+    if expires_delta is not None:
+        expire = datetime.now(timezone.utc) + expires_delta
+        to_encode["exp"] = int(expire.timestamp())
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 

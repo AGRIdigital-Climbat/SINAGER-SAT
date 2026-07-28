@@ -2,6 +2,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 
+REPORTE_COLS = {
+    "id_usuario", "id_departamento", "id_provincia", "id_municipio",
+    "comunidad", "fecha_evento", "hora_evento", "id_tipo_evento",
+    "coordenada_lat", "coordenada_lon", "fotografia", "descripcion", "id_estado",
+}
+
+ESTADO_COLS = {"nombre", "descripcion", "orden"}
+
+CAT_COLS = {"nombre", "descripcion", "orden"}
+
+
 # ── REPORTE EVENTO ──
 
 SQL_REPORTE = """
@@ -27,9 +38,7 @@ def _build_reporte(row):
         "codigo_ine": data.pop("d_codigo_ine"),
         "nombre": data.pop("d_nombre"),
     } if data.get("d_id") else None
-    prov_d = None
     if data.get("prov_id"):
-        prov_d = None
         data["provincia"] = {
             "id": data.pop("prov_id"),
             "codigo_ine": data.pop("prov_codigo_ine"),
@@ -78,35 +87,49 @@ def _get_categorias(db: Session, id_reporte: int) -> list:
 
 def get_reportes(db: Session, id_estado: int | None = None, id_municipio: int | None = None, skip: int = 0, limit: int = 50):
     query = SQL_REPORTE
+    count_query = "SELECT COUNT(*) FROM rea.reporte_evento re"
     params = {}
     conditions = []
     if id_estado:
-        conditions.append("re.id_estado = :estado")
+        c = "re.id_estado = :estado"
+        conditions.append(c)
         params["estado"] = id_estado
     if id_municipio:
-        conditions.append("re.id_municipio = :muni")
+        c = "re.id_municipio = :muni"
+        conditions.append(c)
         params["muni"] = id_municipio
     if conditions:
-        query += " WHERE " + " AND ".join(conditions)
+        where = " WHERE " + " AND ".join(conditions)
+        query += where
+        count_query += where
+    total = db.execute(text(count_query), params).scalar()
     query += " ORDER BY re.id_reporte DESC LIMIT :limit OFFSET :skip"
     params["limit"] = limit
     params["skip"] = skip
     rows = db.execute(text(query), params).mappings().all()
-    return [_build_reporte(r) for r in rows]
+    return [_build_reporte(r) for r in rows], total
 
 
-def get_mis_resumen(db: Session, id_usuario: int):
-    rows = db.execute(
-        text("SELECT id_reporte, id_estado FROM rea.reporte_evento WHERE id_usuario = :uid ORDER BY id_reporte DESC"),
+def get_mis_resumen(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
+    total = db.execute(
+        text("SELECT COUNT(*) FROM rea.reporte_evento WHERE id_usuario = :uid"),
         {"uid": id_usuario},
+    ).scalar()
+    rows = db.execute(
+        text("SELECT id_reporte, id_estado FROM rea.reporte_evento WHERE id_usuario = :uid ORDER BY id_reporte DESC LIMIT :limit OFFSET :skip"),
+        {"uid": id_usuario, "limit": limit, "skip": skip},
     ).mappings().all()
-    return [dict(r) for r in rows]
+    return [dict(r) for r in rows], total
 
 
 def get_mis_reportes(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
+    total = db.execute(
+        text("SELECT COUNT(*) FROM rea.reporte_evento WHERE id_usuario = :uid"),
+        {"uid": id_usuario},
+    ).scalar()
     query = SQL_REPORTE + " WHERE re.id_usuario = :uid ORDER BY re.id_reporte DESC LIMIT :limit OFFSET :skip"
     rows = db.execute(text(query), {"uid": id_usuario, "limit": limit, "skip": skip}).mappings().all()
-    return [_build_reporte(r) for r in rows]
+    return [_build_reporte(r) for r in rows], total
 
 
 def get_reporte(db: Session, id: int):
@@ -127,10 +150,11 @@ def get_reporte_completo(db: Session, id: int):
 
 def create_reporte(db: Session, data: dict) -> int:
     categorias = data.pop("categorias", None)
-    cols = ", ".join(data.keys())
-    vals = ", ".join(f":{k}" for k in data.keys())
+    safe_data = {k: v for k, v in data.items() if k in REPORTE_COLS}
+    cols = ", ".join(safe_data.keys())
+    vals = ", ".join(f":{k}" for k in safe_data.keys())
     result = db.execute(
-        text(f"INSERT INTO rea.reporte_evento ({cols}) VALUES ({vals}) RETURNING id_reporte"), data
+        text(f"INSERT INTO rea.reporte_evento ({cols}) VALUES ({vals}) RETURNING id_reporte"), safe_data
     )
     reporte_id = result.scalar()
     if categorias:
@@ -143,13 +167,26 @@ def create_reporte(db: Session, data: dict) -> int:
     return reporte_id
 
 
+def _build_set_clause(fields: dict, whitelist: set) -> tuple[list[str], dict]:
+    set_parts = []
+    param_dict = {}
+    for k, v in fields.items():
+        if k not in whitelist:
+            continue
+        if v is None:
+            set_parts.append(f"{k} = NULL")
+        else:
+            set_parts.append(f"{k} = :{k}")
+            param_dict[k] = v
+    return set_parts, param_dict
+
+
 def update_reporte(db: Session, id: int, data: dict) -> dict | None:
     categorias = data.pop("categorias", None)
-    fields = {k: v for k, v in data.items() if v is not None}
-    if fields:
-        fields["id_reporte"] = id
-        set_clause = ", ".join(f"{k} = :{k}" for k in fields)
-        db.execute(text(f"UPDATE rea.reporte_evento SET {set_clause} WHERE id_reporte = :id_reporte"), fields)
+    set_parts, params = _build_set_clause(data, REPORTE_COLS)
+    if set_parts:
+        params["id_reporte"] = id
+        db.execute(text(f"UPDATE rea.reporte_evento SET {', '.join(set_parts)} WHERE id_reporte = :id_reporte"), params)
     if categorias is not None:
         db.execute(text("DELETE FROM rea.reporte_afectacion WHERE id_reporte = :id"), {"id": id})
         for cat_id in categorias:
@@ -171,6 +208,7 @@ def change_estado(db: Session, id: int, id_estado: int) -> dict | None:
 
 
 def delete_reporte(db: Session, id: int) -> bool:
+    db.execute(text("DELETE FROM rea.reporte_afectacion WHERE id_reporte = :id"), {"id": id})
     result = db.execute(text("DELETE FROM rea.reporte_evento WHERE id_reporte = :id"), {"id": id})
     db.commit()
     return result.rowcount > 0
@@ -198,12 +236,11 @@ def create_estado(db: Session, data: dict) -> int:
 
 
 def update_estado(db: Session, id: int, data: dict) -> dict | None:
-    fields = {k: v for k, v in data.items() if v is not None}
-    if not fields:
+    set_parts, params = _build_set_clause(data, ESTADO_COLS)
+    if not set_parts:
         return get_estado(db, id)
-    fields["id_estado"] = id
-    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
-    db.execute(text(f"UPDATE rea.estado_reporte SET {set_clause} WHERE id_estado = :id_estado"), fields)
+    params["id_estado"] = id
+    db.execute(text(f"UPDATE rea.estado_reporte SET {', '.join(set_parts)} WHERE id_estado = :id_estado"), params)
     db.commit()
     return get_estado(db, id)
 
@@ -236,12 +273,11 @@ def create_categoria(db: Session, data: dict) -> int:
 
 
 def update_categoria(db: Session, id: int, data: dict) -> dict | None:
-    fields = {k: v for k, v in data.items() if v is not None}
-    if not fields:
+    set_parts, params = _build_set_clause(data, CAT_COLS)
+    if not set_parts:
         return get_categoria(db, id)
-    fields["id_categoria"] = id
-    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
-    db.execute(text(f"UPDATE rea.afectacion_categoria SET {set_clause} WHERE id_categoria = :id_categoria"), fields)
+    params["id_categoria"] = id
+    db.execute(text(f"UPDATE rea.afectacion_categoria SET {', '.join(set_parts)} WHERE id_categoria = :id_categoria"), params)
     db.commit()
     return get_categoria(db, id)
 

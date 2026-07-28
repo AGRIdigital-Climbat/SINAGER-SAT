@@ -1,6 +1,6 @@
 # SINAGERSAT - Base de Datos
 
-Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.5.
+Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.6.
 
 ---
 
@@ -177,7 +177,7 @@ bash deploy/verificar.sh
 
 ---
 
-## API REST (FastAPI) v1.2.5
+## API REST (FastAPI) v1.2.6
 
 ### Iniciar API local
 
@@ -199,7 +199,7 @@ bash start_tunnel.sh
 grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-### Formato de Respuestas (v1.2.5)
+### Formato de Respuestas (v1.2.6)
 
 Todas las respuestas exitosas usan el formato estándar:
 
@@ -230,7 +230,7 @@ Para eliminaciones:
 }
 ```
 
-### Objetos Anidados (v1.2.5)
+### Objetos Anidados (v1.2.6)
 
 Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de usuario:
 
@@ -246,7 +246,7 @@ Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de
   "departamento": { "id": 2, "codigo_ine": "02", "nombre": "La Paz" },
   "provincia": { "id": 201, "codigo_ine": "0201", "nombre": "Murillo" },
   "municipio": { "id": 20101, "codigo_ine": "020101", "nombre": "La Paz" },
-  "rol": { "id_rol": 1, "nombre": "superadministrador", "descripcion": "...", "jerarquia": 5 }
+  "rol": { "id_rol": 1, "nombre": "superadministrador", "descripcion": "..." }
 }
 ```
 
@@ -266,7 +266,7 @@ Los campos `id_*` originales se mantienen para compatibilidad; los objetos anida
 | Usuarios | `/api/v1/usuarios/` | Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
 | Upload | `/api/v1/upload/` | Token | Subir/descargar archivos |
 
-### Geoespaciales (v1.2.5) — Compatible con herramientas de mapas
+### Geoespaciales (v1.2.6) — Compatible con herramientas de mapas
 
 La BD incluye PostGIS con geometrías de los 340 municipios (SRID 4326/WGS 84).
 
@@ -332,15 +332,15 @@ curl http://localhost:8000/api/v1/edan/ \
 
 ### Roles
 
-| id | Rol | Jerarquía | Descripción |
-|----|-----|-----------|-------------|
-| 1 | superadmin | 5 | Acceso total a todos los sistemas |
-| 2 | admin | 4 | Gestiona usuarios y datos de su sistema |
-| 3 | VIDECI Regional | 3 | Carga y edita formularios propios |
-| 4 | UGR Sectores | 2 | Carga y edita formularios propios |
-| 5 | UGR Gobernación | 2 | Carga y edita formularios propios |
-| 6 | UGR Municipio | 2 | Carga y edita formularios propios |
-| 7 | Responsable Local | 1 | Carga y edita formularios propios |
+| id | Rol | Descripción |
+|----|-----|-------------|
+| 1 | superadmin | Acceso total a todos los sistemas |
+| 2 | admin | Gestiona usuarios y datos de su sistema |
+| 3 | VIDECI Regional | Carga y edita formularios propios |
+| 4 | UGR Sectores | Carga y edita formularios propios |
+| 5 | UGR Gobernación | Carga y edita formularios propios |
+| 6 | UGR Municipio | Solo EDAN/REA propios (ownership forzado) |
+| 7 | Responsable Local | Solo EDAN/REA propios (ownership forzado) |
 
 ### Documentación interactiva
 

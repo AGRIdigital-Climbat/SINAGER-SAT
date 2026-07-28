@@ -8,6 +8,8 @@ class UsuarioCreate(BaseModel):
     celular: str | None = None
     carnet: str | None = None
     comunidad: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
@@ -21,6 +23,8 @@ class UsuarioUpdate(BaseModel):
     celular: str | None = None
     carnet: str | None = None
     comunidad: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
@@ -50,7 +54,6 @@ class UsuarioRol(BaseModel):
     id_rol: int
     nombre: str
     descripcion: str | None = None
-    jerarquia: int
 
 
 class UsuarioResponse(BaseModel):
@@ -60,6 +63,8 @@ class UsuarioResponse(BaseModel):
     celular: str | None = None
     carnet: str | None = None
     comunidad: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
@@ -77,34 +82,11 @@ class UsuarioResponse(BaseModel):
 class RolCreate(BaseModel):
     nombre: str
     descripcion: str | None = None
-    jerarquia: int
 
 
 class RolUpdate(BaseModel):
     nombre: str | None = None
     descripcion: str | None = None
-    jerarquia: int | None = None
-
-
-class RolResponse(BaseModel):
-    id_rol: int
-    nombre: str
-    descripcion: str | None = None
-    jerarquia: int
-    class Config:
-        from_attributes = True
-
-
-class UsuarioRolCreate(BaseModel):
-    id_usuario: int
-    id_rol: int
-
-
-class UsuarioRolResponse(BaseModel):
-    id_usuario: int
-    id_rol: int
-    class Config:
-        from_attributes = True
 
 
 class AplicacionCreate(BaseModel):
@@ -131,16 +113,41 @@ class AplicacionResponse(BaseModel):
         from_attributes = True
 
 
-class PermisoAplicacionCreate(BaseModel):
-    id_rol: int
-    id_aplicacion: int
+class AccionCreate(BaseModel):
+    codigo: str
+    nombre: str
 
 
-class PermisoAplicacionResponse(BaseModel):
-    id_rol: int
-    id_aplicacion: int
+class AccionUpdate(BaseModel):
+    codigo: str | None = None
+    nombre: str | None = None
+
+
+class AccionResponse(BaseModel):
+    id_accion: int
+    codigo: str
+    nombre: str
     class Config:
         from_attributes = True
+
+
+class PermisoCreate(BaseModel):
+    id_rol: int
+    id_aplicacion: int
+    id_accion: int
+
+
+class PermisoResponse(BaseModel):
+    id_permiso: int
+    id_rol: int
+    id_aplicacion: int
+    id_accion: int
+    class Config:
+        from_attributes = True
+
+
+class PermisoBatchRequest(BaseModel):
+    permisos: dict[str, list[str]]
 
 
 class SesionResponse(BaseModel):
@@ -163,17 +170,5 @@ class AuditoriaResponse(BaseModel):
     detalle: str | None = None
     ip_origen: str | None = None
     fecha: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class ResetContrasenaResponse(BaseModel):
-    id_reset: int
-    id_usuario: int
-    token: str
-    usado: bool | None = None
-    fecha_solicitud: str | None = None
-    fecha_expiracion: str | None = None
-    ip_origen: str | None = None
     class Config:
         from_attributes = True

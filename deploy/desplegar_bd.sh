@@ -46,12 +46,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Buscar en varias ubicaciones posibles (preferir el más reciente)
 BACKUP=""
 for CANDIDATO in \
+    "$SCRIPT_DIR/../database/backup_v1.2.6.sql" \
     "$SCRIPT_DIR/../database/backup_2026_07_26.sql" \
     "$SCRIPT_DIR/../database/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/../database/edan_db_backup.sql" \
+    "$SCRIPT_DIR/database/backup_v1.2.6.sql" \
     "$SCRIPT_DIR/database/backup_2026_07_26.sql" \
     "$SCRIPT_DIR/database/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/database/edan_db_backup.sql" \
+    "$SCRIPT_DIR/backup_v1.2.6.sql" \
     "$SCRIPT_DIR/backup_2026_07_26.sql" \
     "$SCRIPT_DIR/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/edan_db_backup.sql"; do
@@ -171,6 +174,16 @@ if [ -f "$MIGRATION_123" ]; then
     ok "Migración v1.2.3 ejecutada"
 else
     warn "Archivo migration_v1.2.3.sql no encontrado"
+fi
+
+# Ejecutar migración v1.2.5
+MIGRATION_125="$PROJECT_DIR/database/migration_v1.2.5_permisos.sql"
+if [ -f "$MIGRATION_125" ]; then
+    echo "  Ejecutando migración v1.2.5..."
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_125" 2>/dev/null || true
+    ok "Migración v1.2.5 ejecutada"
+else
+    warn "Archivo migration_v1.2.5_permisos.sql no encontrado"
 fi
 
 ok "Migraciones completadas"

@@ -1,20 +1,22 @@
 import json
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
+from ..auth.permisos import module_permiso
 from ..response import SuccessResponse, MessageResponse
 from ..upload import save_upload_file
 from .schemas import *
 from . import service
 
-router = APIRouter(prefix="/rea")
+router = APIRouter(prefix="/rea", dependencies=[Depends(module_permiso("REA"))])
 
 TAG_REP = "REA > Reportes"
 TAG_EST = "REA > Estados"
 TAG_CAT = "REA > Categorías"
+
+ROLES_BAJOS = (6, 7)
 
 
 @router.get("/reportes", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
@@ -26,8 +28,8 @@ def listar_reportes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    data = service.get_reportes(db, id_estado, id_municipio, skip, limit)
-    return SuccessResponse(message="Reportes listados correctamente", data=data, total=len(data))
+    data, total = service.get_reportes(db, id_estado, id_municipio, skip, limit)
+    return SuccessResponse(message="Reportes listados correctamente", data=data, total=total)
 
 
 @router.get("/reportes/mis-resumen", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
@@ -38,9 +40,9 @@ def mis_resumen(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = id_usuario if id_usuario else _user["id_usuario"]
-    data = service.get_mis_resumen(db, uid)
-    return SuccessResponse(message="Resumen de reportes del usuario listado correctamente", data=data, total=len(data))
+    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_BAJOS else (id_usuario or _user["id_usuario"])
+    data, total = service.get_mis_resumen(db, uid, skip, limit)
+    return SuccessResponse(message="Resumen de reportes del usuario listado correctamente", data=data, total=total)
 
 
 @router.get("/reportes/mis-reportes", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
@@ -51,9 +53,9 @@ def mis_reportes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = id_usuario if id_usuario else _user["id_usuario"]
-    data = service.get_mis_reportes(db, uid, skip, limit)
-    return SuccessResponse(message="Reportes del usuario listados correctamente", data=data, total=len(data))
+    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_BAJOS else (id_usuario or _user["id_usuario"])
+    data, total = service.get_mis_reportes(db, uid, skip, limit)
+    return SuccessResponse(message="Reportes del usuario listados correctamente", data=data, total=total)
 
 
 @router.get("/reportes/{id}", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
@@ -67,6 +69,8 @@ def obtener_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_cu
 @router.post("/reportes", status_code=201, tags=[TAG_REP], responses={201: {"model": SuccessResponse}})
 def crear_reporte(data: ReporteEventoCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
+        if _user["id_rol"] in ROLES_BAJOS:
+            data.id_usuario = _user["id_usuario"]
         reporte_id = service.create_reporte(db, data.model_dump())
         result = service.get_reporte_completo(db, reporte_id)
         return SuccessResponse(message="Reporte creado correctamente", data=result)
@@ -98,8 +102,10 @@ async def crear_reporte_con_foto(
 
         cat_list = json.loads(categorias) if categorias else None
 
+        uid = _user["id_usuario"] if _user["id_rol"] in ROLES_BAJOS else id_usuario
+
         data = {
-            "id_usuario": id_usuario,
+            "id_usuario": uid,
             "id_departamento": id_departamento,
             "id_provincia": id_provincia,
             "id_municipio": id_municipio,
@@ -126,6 +132,10 @@ async def crear_reporte_con_foto(
 
 @router.put("/reportes/{id}", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
 def actualizar_reporte(id: int, data: ReporteEventoUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if _user["id_rol"] in ROLES_BAJOS:
+        reporte = service.get_reporte(db, id)
+        if not reporte or reporte["id_usuario"] != _user["id_usuario"]:
+            raise HTTPException(status_code=403, detail="No puedes modificar un reporte que no te pertenece")
     result = service.update_reporte(db, id, data.model_dump(exclude_unset=True))
     if not result:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
@@ -134,6 +144,10 @@ def actualizar_reporte(id: int, data: ReporteEventoUpdate, db: Session = Depends
 
 @router.put("/reportes/{id}/estado", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
 def cambiar_estado(id: int, data: CambiarEstadoRequest, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if _user["id_rol"] in ROLES_BAJOS:
+        reporte = service.get_reporte(db, id)
+        if not reporte or reporte["id_usuario"] != _user["id_usuario"]:
+            raise HTTPException(status_code=403, detail="No puedes cambiar el estado de un reporte que no te pertenece")
     result = service.change_estado(db, id, data.id_estado)
     if not result:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
@@ -142,6 +156,10 @@ def cambiar_estado(id: int, data: CambiarEstadoRequest, db: Session = Depends(ge
 
 @router.delete("/reportes/{id}", tags=[TAG_REP], responses={200: {"model": MessageResponse}})
 def eliminar_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if _user["id_rol"] in ROLES_BAJOS:
+        reporte = service.get_reporte(db, id)
+        if not reporte or reporte["id_usuario"] != _user["id_usuario"]:
+            raise HTTPException(status_code=403, detail="No puedes eliminar un reporte que no te pertenece")
     if not service.delete_reporte(db, id):
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     return MessageResponse(message="Reporte eliminado correctamente")

@@ -1,6 +1,6 @@
 # SINAGERSAT API - Despliegue y Acceso Externo
 
-Guía completa para desplegar la API REST y acceder desde internet. v1.2.4.
+Guía completa para desplegar la API REST y acceder desde internet. v1.2.6.
 
 ---
 
@@ -231,15 +231,28 @@ Contenido:
 - Datos iniciales: 5 estados + 8 categorías de afectación
 - Índices para optimizar consultas
 
+### Migración v1.2.5
+
+```bash
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database/migration_v1.2.5_permisos.sql
+```
+
+Contenido:
+- Tabla `usuarios.accion` con catálogo de acciones (CREATE, READ, UPDATE, DELETE)
+- Tabla `usuarios.permiso` con granularidad rol-aplicación-acción
+- Aplicaciones `REA` y `SISTEMA` registradas
+- Migración de datos desde `permiso_aplicacion` al nuevo modelo
+- Roles 1-2 con acceso completo a SISTEMA
+
 ### Ejecutar todas las migraciones
 
 ```bash
-PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database/migration_v1.2.0.sql -f database/migration_v1.2.1.sql -f database/migration_v1.2.3.sql
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 -f database/migration_v1.2.0.sql -f database/migration_v1.2.1.sql -f database/migration_v1.2.3.sql -f database/migration_v1.2.5_permisos.sql
 ```
 
 ---
 
-## 5. Formato de Respuestas (v1.2.4)
+## 5. Formato de Respuestas (v1.2.6)
 
 ### Respuesta exitosa (lista)
 
@@ -318,7 +331,7 @@ Esto aplica a: departamento, provincia, municipio, rol, tipo_evento, estado, gru
 
 ## 6. Estructura de Endpoints
 
-La API tiene **159 endpoints** v1.2.4 organizados en 6 módulos.
+La API tiene **166 endpoints** v1.2.6 organizados en 6 módulos.
 
 ### Endpoints Públicos (sin token)
 
@@ -409,7 +422,7 @@ La API tiene **159 endpoints** v1.2.4 organizados en 6 módulos.
 
 ## 7. Autenticación y Roles
 
-La API usa JWT (JSON Web Tokens) v1.2.4 con sistema de roles.
+La API usa JWT (JSON Web Tokens) v1.2.6 con sistema de roles.
 
 ### Comportamiento del Token
 
@@ -451,7 +464,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
   -d '{"usuario":"sinagersat","contrasena":"12345678"}'
 ```
 
-Respuesta (v1.2.4):
+Respuesta (v1.2.6):
 ```json
 {
   "success": true,
@@ -725,11 +738,13 @@ SINAGER-SAT/
 │       ├── sinagersat-api.service
 │       └── sinagersat-tunnel.service
 ├── database/
-│   ├── backup_2026_07_21.sql # Backup completo de BD (v1.2.4)
-│   ├── migration_v1.2.0.sql  # Migración: carnet UNIQUE + edan fotografia
-│   ├── migration_v1.2.1.sql  # Migración: rea fotografia TEXT + índice
-│   ├── migration_v1.2.3.sql  # Migración: id_rol, esquema REA completo
-│   └── servers.json          # Config pgAdmin4
+│   ├── backup_v1.2.6.sql          # Backup completo BD (v1.2.6)
+│   ├── backup_2026_07_26.sql      # Backup completo BD (v1.2.5 previo)
+│   ├── migration_v1.2.0.sql       # Migración: carnet UNIQUE + edan fotografia
+│   ├── migration_v1.2.1.sql       # Migración: rea fotografia TEXT + índice
+│   ├── migration_v1.2.3.sql       # Migración: id_rol, esquema REA completo
+│   ├── migration_v1.2.5_permisos.sql # Migración: tabla permiso + acciones
+│   └── servers.json               # Config pgAdmin4
 ├── uploads/                 # Imágenes subidas por usuarios
 │   └── reports/             # Fotos de reportes REA/EDAN
 └── docs/
