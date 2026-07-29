@@ -41,7 +41,7 @@ sudo bash deploy/desplegar_todo.sh --tunnel         # Todo + Cloudflare tunnel p
 
 | Parámetro | Valor |
 |-----------|-------|
-| Host | `localhost` o `127.0.0.1` |
+| Host | `localhost`, `127.0.0.1` o `10.10.0.24` |
 | Puerto | `5432` |
 | Base de datos | `db_sinagersat` |
 | Usuario | `sinagersat` |
@@ -64,6 +64,7 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
 | `docs/SERVICIOS.md` | Gestión de servicios systemd (API + tunnel) |
 | `docs/CONECTAR.md` | Credenciales y formas de conexión a la BD |
 | `docs/CLOUDFLARE_TUNNEL.md` | Cloudflare Named Tunnel con dominio fijo |
+| `docs/DOMINIO_API.md` | Despliegue con dominio api.climbat.net (Apache + SSL) |
 
 ---
 
@@ -77,6 +78,12 @@ bash start_api.sh
 # Con tunnel público
 bash start_tunnel.sh
 # → URL: grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+
+# Con Apache proxy (producción)
+# Ver docs/APACHE_PROXY.md
+
+# Con dominio api.climbat.net
+# Ver docs/DOMINIO_API.md
 ```
 
 ### Endpoints (~170 totales)
