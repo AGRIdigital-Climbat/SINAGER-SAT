@@ -18,8 +18,10 @@ Instala PostgreSQL, Python, crea la BD completa con todos los datos, configura l
 sudo bash deploy/desplegar_todo.sh                  # Todo (BD + API)
 sudo bash deploy/desplegar_todo.sh --db-only        # Solo base de datos
 sudo bash deploy/desplegar_todo.sh --api-only       # Solo API (si PG ya está)
-sudo bash deploy/desplegar_todo.sh --tunnel         # Todo + Cloudflare tunnel público
 ```
+
+**Con Apache + Dominio HTTPS (producción):**  
+Ver [`docs/APACHE_PROXY.md`](docs/APACHE_PROXY.md) — instrucciones para entregar al proveedor de hosting.
 
 ---
 
@@ -61,7 +63,7 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
 | `docs/PERMISOS_API.md` | Sistema RBAC: roles, apps, acciones, matriz visual |
 | `docs/EDAN_BD.md` | Documentación completa de la BD (esquemas, tablas, SQL) |
 | `docs/GEOESPACIALES.md` | Endpoints GeoJSON/WKT/Ubicación + herramientas de mapas |
-| `docs/SERVICIOS.md` | Gestión de servicios systemd (API + tunnel) |
+| `docs/SERVICIOS.md` | Gestión de servicios systemd de la API |
 | `docs/CONECTAR.md` | Credenciales y formas de conexión a la BD |
 | `docs/CLOUDFLARE_TUNNEL.md` | Cloudflare Named Tunnel con dominio fijo |
 | `docs/DOMINIO_API.md` | Despliegue con dominio api.climbat.net (Apache + SSL) |
@@ -74,10 +76,6 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
 # Iniciar local
 bash start_api.sh
 # → http://localhost:8000/docs
-
-# Con tunnel público
-bash start_tunnel.sh
-# → URL: grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 
 # Con Apache proxy (producción)
 # Ver docs/APACHE_PROXY.md

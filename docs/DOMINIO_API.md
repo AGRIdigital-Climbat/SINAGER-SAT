@@ -2,7 +2,8 @@
 
 **Versión:** 1.2.7
 **Dominio:** `https://api.climbat.net`
-**IP del servidor:** `10.10.0.24`
+**IP del servidor (API):** `10.10.0.24`
+**IP del proxy upstream:** `10.10.0.6`
 
 ---
 
@@ -11,18 +12,22 @@
 ```
 Usuario (HTTPS)
     ↓
-api.climbat.net:443
+api.climbat.net:443 (DNS → 10.10.0.6)
     ↓
-Apache (proxy inverso)
+Proxy upstream (10.10.0.6)
+  - Termina SSL/TLS
+  - Reenvía en HTTP
     ↓
-Uvicorn (FastAPI) → 127.0.0.1:8000
+Uvicorn (FastAPI) → 0.0.0.0:8000
     ↓
 PostgreSQL → 127.0.0.1:5432
 ```
 
-- **Apache** recibe peticiones HTTPS en `api.climbat.net` y las redirige a la API interna.
-- **Uvicorn** (FastAPI/Python) corre en el puerto `8000`.
-- **PostgreSQL** corre en el puerto `5432` (solo local, no expuesto).
+- **Proxy upstream** en `10.10.0.6` maneja SSL y redirige tráfico HTTP a este servidor.
+- **Uvicorn** (FastAPI/Python) corre en `0.0.0.0:8000` aceptando conexiones desde cualquier interfaz.
+- **PostgreSQL** corre en `127.0.0.1:5432` (solo local, no expuesto).
+
+No se necesita Apache ni Nginx en este servidor — el proxy upstream hace ese trabajo.
 
 ---
 
@@ -60,25 +65,25 @@ Al iniciar la API con `uvicorn`, el parámetro `--host` define desde qué direcc
 
 | Host | Alcance | Cuándo usarlo |
 |------|---------|---------------|
-| `127.0.0.1` | Solo localhost | Desarrollo local o cuando Apache hace de proxy (recomendado) |
-| `0.0.0.0` | Todas las interfaces de red | Cuando no hay firewall selectivo o pruebas rápidas |
-| `10.10.0.24` | Solo la interfaz con esa IP | Producción con IP fija conocida |
+| `127.0.0.1` | Solo localhost | Detrás de un proxy en el mismo servidor (Apache, Nginx) |
+| `0.0.0.0` | Todas las interfaces de red | Cuando el proxy upstream está en otra máquina |
+| `10.10.0.24` | Solo la interfaz con esa IP | Producción con IP fija y firewall selectivo |
 
-### Opción A: `127.0.0.1` — solo localhost (por defecto)
+### Opción A: `127.0.0.1` — solo localhost
 
 ```bash
 uvicorn api.main:app --host 127.0.0.1 --port 8000 --workers 4
 ```
 
-La API solo responde en `localhost`. Apache (o cualquier proxy) en el mismo servidor puede redirigir tráfico externo hacia ella.
+La API solo responde en `localhost`. Útil cuando Apache/Nginx está en el mismo servidor.
 
-### Opción B: `0.0.0.0` — todas las interfaces
+### Opción B: `0.0.0.0` — todas las interfaces (usada actualmente)
 
 ```bash
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-La API responde en cualquier interfaz de red: `localhost`, `10.10.0.24`, y cualquier otra IP del servidor.
+La API responde en cualquier interfaz de red. **Esta es la configuración actual** porque el proxy upstream está en `10.10.0.6` (otra máquina) y necesita acceder a `10.10.0.24:8000`.
 
 ### Opción C: `10.10.0.24` — IP fija
 
@@ -86,7 +91,7 @@ La API responde en cualquier interfaz de red: `localhost`, `10.10.0.24`, y cualq
 uvicorn api.main:app --host 10.10.0.24 --port 8000 --workers 4
 ```
 
-La API solo responde en la interfaz con IP `10.10.0.24`. No responde en `localhost` ni en otras interfaces.
+La API solo responde en la interfaz con IP `10.10.0.24`. Requiere que el proxy upstream pueda alcanzar esa IP.
 
 ### Script de inicio
 
@@ -103,19 +108,38 @@ uvicorn api.main:app --host 127.0.0.1 --port 8000 --workers 4
 
 ---
 
-## 4. Configurar Apache para api.climbat.net
+## 4. Configuración del proxy upstream
 
-### 4.1 Requisitos
+Esta configuración se realiza en el servidor `10.10.0.6`, no en este servidor.
 
-```bash
-sudo apt-get install -y apache2 certbot python3-certbot-apache
-sudo a2enmod proxy proxy_http proxy_wstunnel ssl rewrite headers
-sudo systemctl restart apache2
+### Opción A: Nginx
+
+```nginx
+server {
+    listen 80;
+    server_name api.climbat.net;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.climbat.net;
+
+    ssl_certificate /etc/letsencrypt/live/api.climbat.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.climbat.net/privkey.pem;
+
+    location / {
+        proxy_pass http://10.10.0.24:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}
 ```
 
-### 4.2 VirtualHost
-
-**Archivo:** `/etc/apache2/sites-available/api.climbat.net.conf`
+### Opción B: Apache
 
 ```apache
 <VirtualHost *:80>
@@ -125,50 +149,29 @@ sudo systemctl restart apache2
 
 <VirtualHost *:443>
     ServerName api.climbat.net
-    ServerAdmin admin@climbat.net
 
     SSLEngine on
     SSLCertificateFile /etc/letsencrypt/live/api.climbat.net/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/api.climbat.net/privkey.pem
 
-    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    Header always set X-Frame-Options "SAMEORIGIN"
-    Header always set X-Content-Type-Options "nosniff"
-
     ProxyPreserveHost On
     ProxyRequests Off
 
     <Location />
-        ProxyPass http://127.0.0.1:8000/
-        ProxyPassReverse http://127.0.0.1:8000/
+        ProxyPass http://10.10.0.24:8000/
+        ProxyPassReverse http://10.10.0.24:8000/
     </Location>
-
-    ErrorLog ${APACHE_LOG_DIR}/api.climbat.net-error.log
-    CustomLog ${APACHE_LOG_DIR}/api.climbat.net-access.log combined
 
     ProxyTimeout 300
     Timeout 300
 </VirtualHost>
 ```
 
-### 4.3 Activar sitio y SSL
-
-```bash
-sudo a2ensite api.climbat.net.conf
-sudo systemctl reload apache2
-
-# SSL con Let's Encrypt
-sudo certbot --apache -d api.climbat.net
-
-# Verificar renovación automática
-sudo certbot renew --dry-run
-```
-
 ---
 
-## 5. Servicio systemd
+## 5. Servicio systemd (en este servidor)
 
-La API debe correr como servicio permanente para que inicie automáticamente al reiniciar el servidor.
+Opcional — para que la API inicie automáticamente al reiniciar.
 
 **Archivo:** `/etc/systemd/system/sinagersat-api.service`
 
@@ -183,7 +186,7 @@ Type=simple
 User=prosuco
 Group=prosuco
 WorkingDirectory=/home/prosuco/SINAGERSAT/BaseData
-ExecStart=/home/prosuco/SINAGERSAT/BaseData/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000
+ExecStart=/home/prosuco/SINAGERSAT/BaseData/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 Environment=PATH=/home/prosuco/SINAGERSAT/BaseData/venv/bin:/usr/bin:/bin
@@ -193,7 +196,7 @@ EnvironmentFile=/home/prosuco/SINAGERSAT/BaseData/.env
 WantedBy=multi-user.target
 ```
 
-**Nota:** El `ExecStart` usa `--host 127.0.0.1` porque Apache está enfrente. Si se quiere exponer directo sin Apache, cambiar a `--host 0.0.0.0` o `--host 10.10.0.24`.
+**Nota:** `ExecStart` usa `--host 0.0.0.0` porque el proxy upstream está en `10.10.0.6` (otra máquina). Si el proxy estuviera en este mismo servidor, se usaría `--host 127.0.0.1`.
 
 ### Instalar y activar
 
@@ -261,12 +264,10 @@ sudo systemctl start|stop|restart|status sinagersat-api
 
 # Logs de la API
 journalctl -u sinagersat-api -f
+tail -f /tmp/uvicorn.log
 
-# Recargar Apache
-sudo systemctl reload apache2
-
-# Verificar SSL
-sudo certbot renew --dry-run
+# Verificar que el proxy upstream funciona
+curl -s -o /dev/null -w "%{http_code}" https://api.climbat.net/
 ```
 
 ---
@@ -275,9 +276,9 @@ sudo certbot renew --dry-run
 
 | Problema | Causa posible | Solución |
 |----------|---------------|----------|
-| `Connection refused` al acceder por dominio | Apache no está corriendo | `sudo systemctl start apache2` |
-| `502 Bad Gateway` | Uvicorn no está corriendo | `sudo systemctl restart sinagersat-api` |
-| El dominio no resuelve | DNS no configurado | Agregar registro A: `api.climbat.net → 10.10.0.24` |
-| SSL no funciona | Certificado vencido | `sudo certbot renew` |
+| `Connection refused` en dominio | API no está corriendo | `bash start_api.sh` o reiniciar systemd |
+| `502 Bad Gateway` desde dominio | Proxy upstream no puede alcanzar `10.10.0.24:8000` | Verificar que la API corre en `0.0.0.0:8000` |
+| El dominio no resuelve | DNS mal configurado | Verificar registro A: `api.climbat.net → 10.10.0.6` |
+| SSL no funciona | Certificado vencido en el upstream | Renovar en el servidor `10.10.0.6` |
 | No se puede conectar a la BD | PostgreSQL caído | `sudo systemctl restart postgresql` |
-| La API responde lento | Pocos workers | Aumentar `--workers` en el servicio systemd |
+| La API responde lento | Pocos workers | Aumentar `--workers` al iniciar uvicorn |

@@ -21,12 +21,6 @@ Instala PostgreSQL + Python + BD completa + API.
 sudo bash deploy/desplegar_todo.sh --api-only
 ```
 
-### Con acceso externo (Cloudflare Tunnel)
-
-```bash
-sudo bash deploy/desplegar_todo.sh --tunnel
-```
-
 ### Actualizar desde versión anterior (preservar datos)
 
 ```bash
@@ -45,18 +39,19 @@ sudo bash deploy/desplegar_todo.sh --update
 | Swagger UI | `http://localhost:8000/docs` |
 | Health Check | `http://localhost:8000/health` |
 
-### Externa (desde internet)
+### Por dominio (producción)
 
-Con Cloudflare Quick Tunnel (URL dinámica):
+| Servicio | URL |
+|----------|-----|
+| API Base | `https://api.climbat.net` |
+| Swagger UI | `https://api.climbat.net/docs` |
+| ReDoc | `https://api.climbat.net/redoc` |
+| Health Check | `https://api.climbat.net/health` |
+
+### Por IP del servidor
 
 ```bash
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
-```
-
-### Desde otra máquina en la red local
-
-```bash
-curl http://192.168.0.34:8000
+curl http://10.10.0.24:8000
 ```
 
 ---
@@ -388,27 +383,22 @@ uvicorn api.main:app --host 0.0.0.0 --port 9000 --reload
 
 ---
 
-## 9. Acceso Externo (desde internet)
+## 9. Acceso por dominio (api.climbat.net)
 
-Tres opciones:
+El dominio `api.climbat.net` apunta al servidor mediante un proxy upstream en `10.10.0.6` que:
 
-### A) Cloudflare Quick Tunnel (recomendado, sin configuración)
+- Termina SSL/TLS
+- Reenvía el tráfico HTTP a `10.10.0.24:8000` (Uvicorn)
 
-```bash
-bash start_tunnel.sh
-# URL: grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+```
+Usuario → https://api.climbat.net (DNS → 10.10.0.6)
+             ↓ (SSL termina en 10.10.0.6)
+          [Proxy upstream 10.10.0.6]
+             ↓ (HTTP)
+          api:8000 en 10.10.0.24 (Uvicorn)
 ```
 
-### B) URL Fija con Cloudflare (producción)
-
-Requiere dominio. Ver `docs/CLOUDFLARE_TUNNEL.md`.
-
-### C) Port Forwarding
-
-```bash
-# Router → Puerto 8000 → IP local 192.168.0.34
-curl http://181.188.161.73:8000/
-```
+Ver `docs/DOMINIO_API.md` para más detalles.
 
 ---
 
@@ -416,7 +406,7 @@ curl http://181.188.161.73:8000/
 
 ```bash
 # Logs de la API
-journalctl -u sinagersat-api -f
+tail -f /tmp/uvicorn.log
 
 # Verificar BD
 pg_isready
@@ -424,8 +414,8 @@ pg_isready
 # Probar conexión
 PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
 
-# Obtener URL del tunnel
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
+# Verificar endpoint público
+curl https://api.climbat.net/health
 
 # Verificar uploads
 ls -la uploads/reports/
@@ -453,7 +443,6 @@ SINAGER-SAT/
 ├── .env                     # Variables de entorno
 ├── requirements.txt         # Dependencias Python
 ├── start_api.sh             # Iniciar API local
-├── start_tunnel.sh          # Iniciar API + tunnel
 ├── stop.sh                  # Detener todo
 ├── database/
 │   ├── backup_v1.2.7.sql    # Backup completo (Jul 2026)
@@ -476,5 +465,5 @@ SINAGER-SAT/
     ├── GEOESPACIALES.md     # GeoJSON/WKT/Ubicación
     ├── SERVICIOS.md         # Gestión systemd
     ├── CONECTAR.md          # Credenciales BD
-    └── CLOUDFLARE_TUNNEL.md # Tunnel con dominio fijo
+    └── DOMINIO_API.md       # Despliegue con dominio api.climbat.net
 ```

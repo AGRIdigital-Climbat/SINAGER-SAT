@@ -1,6 +1,6 @@
 # SINAGERSAT — Gestión de Servicios
 
-Guía rápida para administrar la API y el tunnel de acceso externo. v1.2.7.
+Guía rápida para administrar la API. v1.2.7.
 
 ---
 
@@ -9,44 +9,49 @@ Guía rápida para administrar la API y el tunnel de acceso externo. v1.2.7.
 | Servicio | Descripción |
 |----------|-------------|
 | `sinagersat-api` | FastAPI en puerto 8000 |
-| `sinagersat-tunnel` | Cloudflare Quick Tunnel (acceso externo) |
 
 ---
 
 ## Comandos
 
+### Inicio manual
+
+```bash
+cd /home/prosuco/SINAGERSAT/BaseData
+bash start_api.sh
+```
+
+### Servicio systemd (opcional)
+
 ```bash
 # Estado
-sudo systemctl status sinagersat-api sinagersat-tunnel
+sudo systemctl status sinagersat-api
 
 # Iniciar
-sudo systemctl start sinagersat-api sinagersat-tunnel
+sudo systemctl start sinagersat-api
 
 # Detener
-sudo systemctl stop sinagersat-tunnel sinagersat-api
+sudo systemctl stop sinagersat-api
 
 # Reiniciar
-sudo systemctl restart sinagersat-api sinagersat-tunnel
+sudo systemctl restart sinagersat-api
 
 # Habilitar al inicio
-sudo systemctl enable sinagersat-api sinagersat-tunnel
+sudo systemctl enable sinagersat-api
 
 # Deshabilitar
-sudo systemctl disable sinagersat-api sinagersat-tunnel
+sudo systemctl disable sinagersat-api
 ```
 
 ---
 
-## Obtener URL Pública
+## Acceso por dominio
 
 ```bash
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
-```
-
-### Alias rápido (~/.bashrc)
-
-```bash
-alias sinagersat-url="grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1"
+curl https://api.climbat.net/          # → Información de la API
+curl https://api.climbat.net/health    # → {"status":"ok"}
+curl https://api.climbat.net/docs      # → Swagger UI
+curl https://api.climbat.net/redoc     # → ReDoc
 ```
 
 ---
@@ -54,10 +59,8 @@ alias sinagersat-url="grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/clou
 ## Ver Logs
 
 ```bash
-journalctl -u sinagersat-api -f     # API en tiempo real
-journalctl -u sinagersat-tunnel -f  # Tunnel en tiempo real
-tail -f /tmp/uvicorn.log            # Log de uvicorn
-tail -f /tmp/cloudflared.log        # Log de cloudflare
+journalctl -u sinagersat-api -f        # API en tiempo real (si hay servicio systemd)
+tail -f /tmp/uvicorn.log               # Log de uvicorn (inicio manual)
 ```
 
 ---
@@ -65,20 +68,19 @@ tail -f /tmp/cloudflared.log        # Log de cloudflare
 ## Verificar que Todo Funciona
 
 ```bash
-# 1. API responde
-curl http://localhost:8000/
+# 1. API responde localmente
+curl http://127.0.0.1:8000/
 
 # 2. Swagger
-curl http://localhost:8000/docs
+curl http://127.0.0.1:8000/docs
 
 # 3. Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
+curl -X POST http://127.0.0.1:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"usuario":"sinagersat","contrasena":"12345678"}'
 
-# 4. URL externa
-URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
-curl "$URL/"
+# 4. Por dominio
+curl https://api.climbat.net/
 ```
 
 ---
@@ -90,18 +92,14 @@ curl "$URL/"
 journalctl -u sinagersat-api -n 20
 pg_isready
 
-# Tunnel no arranca
-cloudflared --version
-curl http://localhost:8000/
-
 # Puerto 8000 ocupado
 ss -tlnp | grep 8000
 sudo fuser -k 8000/tcp
 
-# URL del tunnel cambió
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
-
 # Error 500
 journalctl -u sinagersat-api -f
 sudo systemctl restart sinagersat-api
+
+# Verificar que el proxy upstream responde
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/
 ```

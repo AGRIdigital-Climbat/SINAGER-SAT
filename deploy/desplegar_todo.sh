@@ -7,7 +7,6 @@
 #    sudo bash deploy/desplegar_todo.sh              # despliegue completo
 #    sudo bash deploy/desplegar_todo.sh --db-only    # solo base de datos
 #    sudo bash deploy/desplegar_todo.sh --api-only   # solo API (si PG ya está)
-#    sudo bash deploy/desplegar_todo.sh --tunnel     # completo + Cloudflare tunnel
 #    sudo bash deploy/desplegar_todo.sh --update     # actualizar desde versión anterior
 #
 #  Requiere: Ubuntu/Debian, internet, archivos del proyecto
@@ -61,7 +60,6 @@ for arg in "$@"; do
     case $arg in
         --db-only)  MODE="db" ;;
         --api-only) MODE="api" ;;
-        --tunnel)   MODE="tunnel" ;;
         --update)   MODE="update" ;;
         --help|-h)
             echo "Uso: sudo bash deploy/desplegar_todo.sh [opciones]"
@@ -70,7 +68,6 @@ for arg in "$@"; do
             echo "  (sin args)    Despliegue completo (BD + API)"
             echo "  --db-only     Solo base de datos"
             echo "  --api-only    Solo API (PostgreSQL debe estar corriendo)"
-            echo "  --tunnel      Completo + Cloudflare Quick Tunnel"
             echo "  --update      Actualizar desde versión anterior (preserva datos)"
             echo "  --help        Mostrar esta ayuda"
             exit 0
@@ -82,7 +79,6 @@ case $MODE in
     full)   TOTAL_STEPS=8 ;;
     db)     TOTAL_STEPS=5 ;;
     api)    TOTAL_STEPS=3 ;;
-    tunnel) TOTAL_STEPS=9 ;;
     update) TOTAL_STEPS=7 ;;
 esac
 
@@ -100,7 +96,7 @@ echo ""
 # ================================================================
 #  VERIFICAR ROOT (para instalar paquetes)
 # ================================================================
-if [ "$EUID" -ne 0 ] && [ "$MODE" = "db" -o "$MODE" = "full" -o "$MODE" = "tunnel" ]; then
+if [ "$EUID" -ne 0 ] && [ "$MODE" = "db" -o "$MODE" = "full" ]; then
     fail "Ejecuta como root: sudo bash deploy/desplegar_todo.sh"
     exit 1
 fi
@@ -187,7 +183,7 @@ if [ "$MODE" != "api" ]; then
         ok "Build tools disponibles"
     fi
 
-    # curl (para Cloudflare tunnel)
+    # curl
     if ! command -v curl &>/dev/null; then
         apt-get install -y -qq curl
         ok "curl instalado"
@@ -382,7 +378,7 @@ fi
 # ================================================================
 #  5.1 EJECUTAR MIGRACIONES (modo update o full)
 # ================================================================
-if [ "$MODE" = "update" ] || [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ]; then
+if [ "$MODE" = "update" ] || [ "$MODE" = "full" ]; then
     step 6 "Ejecutando migraciones de base de datos..."
     
     # Verificar que la BD existe
@@ -429,6 +425,16 @@ if [ "$MODE" = "update" ] || [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ]; the
         ok "Migración v1.2.5 ejecutada"
     else
         warn "Archivo migration_v1.2.5_permisos.sql no encontrado"
+    fi
+    
+    # Ejecutar migración v1.2.7
+    MIGRATION_127="$PROJECT_DIR/database/migration_v1.2.7.sql"
+    if [ -f "$MIGRATION_127" ]; then
+        echo "  Ejecutando migración v1.2.7..."
+        PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_127" 2>/dev/null || true
+        ok "Migración v1.2.7 ejecutada"
+    else
+        warn "Archivo migration_v1.2.7.sql no encontrado"
     fi
     
     ok "Migraciones completadas"
@@ -496,119 +502,21 @@ APIEOF
 chmod +x "$PROJECT_DIR/start_api.sh"
 ok "start_api.sh creado"
 
-# --- start_tunnel.sh ---
-cat > "$PROJECT_DIR/start_tunnel.sh" << 'TUNELEOF'
-#!/bin/bash
-# SINAGERSAT - Iniciar API + Cloudflare Quick Tunnel
-set -e
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
-
-CYAN="\033[0;36m"; VERDE="\033[0;32m"; ROJO="\033[0;31m"; AMARILLO="\033[1;33m"; BOLD="\033[1m"; SIN_COLOR="\033[0m"
-
-echo ""
-echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
-echo -e "${CYAN}${BOLD}  SINAGERSAT API + Cloudflare Tunnel${SIN_COLOR}"
-echo -e "${CYAN}${BOLD}  Acceso externo desde internet${SIN_COLOR}"
-echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
-echo ""
-
-if [ ! -d "venv" ]; then
-    python3 -m venv venv && source venv/bin/activate && pip install -q -r requirements.txt
-else
-    source venv/bin/activate
-fi
-
-if ! command -v cloudflared &>/dev/null; then
-    echo -e "${AMARILLO}[!]${SIN_COLOR} Instalando cloudflared..."
-    curl -L --output /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb 2>/dev/null
-    sudo dpkg -i /tmp/cloudflared.deb 2>/dev/null
-    rm -f /tmp/cloudflared.deb
-fi
-
-pkill -f "uvicorn api.main" 2>/dev/null || true
-pkill -f "cloudflared tunnel" 2>/dev/null || true
-sleep 1
-
-echo -e "${BOLD}[1/3]${SIN_COLOR} Iniciando API..."
-uvicorn api.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
-API_PID=$!
-sleep 3
-
-if ! curl -s http://127.0.0.1:8000/ > /dev/null 2>&1; then
-    echo -e "${ROJO}[ERROR]${SIN_COLOR} La API no pudo iniciarse"; cat /tmp/uvicorn.log | tail -5; exit 1
-fi
-echo -e "  ${VERDE}[OK]${SIN_COLOR} API corriendo (PID: $API_PID)"
-
-echo -e "${BOLD}[2/3]${SIN_COLOR} Iniciando Cloudflare Quick Tunnel..."
-cloudflared tunnel --url http://localhost:8000 > /tmp/cloudflared.log 2>&1 &
-TUNNEL_PID=$!
-
-TUNNEL_URL=""
-for i in $(seq 1 15); do
-    TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1)
-    [ -n "$TUNNEL_URL" ] && break
-    sleep 1
-done
-
-if [ -z "$TUNNEL_URL" ]; then
-    echo -e "${ROJO}[ERROR]${SIN_COLOR} No se pudo obtener la URL del tunnel"; kill $API_PID 2>/dev/null; exit 1
-fi
-echo -e "  ${VERDE}[OK]${SIN_COLOR} Tunnel activo (PID: $TUNNEL_PID)"
-
-echo -e "${BOLD}[3/3]${SIN_COLOR} Verificando acceso externo..."
-sleep 2
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$TUNNEL_URL/" 2>/dev/null)
-[ "$HTTP_CODE" = "200" ] && echo -e "  ${VERDE}[OK]${SIN_COLOR} Acceso externo verificado" || echo -e "  ${AMARILLO}[!]${SIN_COLOR} HTTP: $HTTP_CODE (puede estar propagándose)"
-
-echo "$TUNNEL_URL" > /tmp/sinagersat_url.txt
-
-echo ""
-echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
-echo -e "${CYAN}${BOLD}  SERVIDOR SINAGERSAT ACTIVO${SIN_COLOR}"
-echo -e "${CYAN}${BOLD}================================================${SIN_COLOR}"
-echo ""
-echo -e "  ${BOLD}LOCAL:${SIN_COLOR}"
-echo "    API:       http://localhost:8000"
-echo "    Swagger:   http://localhost:8000/docs"
-echo "    ReDoc:     http://localhost:8000/redoc"
-echo ""
-echo -e "  ${BOLD}ACCESO EXTERNO (desde internet):${SIN_COLOR}"
-echo -e "    ${VERDE}$TUNNEL_URL${SIN_COLOR}"
-echo ""
-echo -e "    ${BOLD}Swagger:${SIN_COLOR}  $TUNNEL_URL/docs"
-echo -e "    ${BOLD}ReDoc:${SIN_COLOR}    $TUNNEL_URL/redoc"
-echo -e "    ${BOLD}Health:${SIN_COLOR}   $TUNNEL_URL/health"
-echo ""
-echo -e "  ${BOLD}Comparte esta URL:${SIN_COLOR}"
-echo -e "    ${VERDE}$TUNNEL_URL${SIN_COLOR}"
-echo ""
-echo -e "  ${BOLD}DETENER:${SIN_COLOR} kill $API_PID $TUNNEL_PID"
-echo -e "  ${BOLD}LOGS:${SIN_COLOR}   tail -f /tmp/uvicorn.log | tail -f /tmp/cloudflared.log"
-echo ""
-
-echo "$API_PID $TUNNEL_PID" > /tmp/sinagersat_pids.txt
-TUNELEOF
-chmod +x "$PROJECT_DIR/start_tunnel.sh"
-ok "start_tunnel.sh creado"
-
 # --- stop.sh ---
 cat > "$PROJECT_DIR/stop.sh" << 'STOPEOF'
 #!/bin/bash
 # SINAGERSAT - Detener todos los servicios
 echo "Deteniendo SINAGERSAT..."
 pkill -f "uvicorn api.main" 2>/dev/null && echo "  API detenida" || echo "  API no estaba corriendo"
-pkill -f "cloudflared tunnel" 2>/dev/null && echo "  Tunnel detenido" || echo "  Tunnel no estaba corriendo"
-rm -f /tmp/sinagersat_pids.txt
 echo "Listo."
 STOPEOF
 chmod +x "$PROJECT_DIR/stop.sh"
 ok "stop.sh creado"
 
 # ================================================================
-#  9. INICIAR API (y opcionalmente tunnel)
+#  9. INICIAR API
 # ================================================================
-if [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ] || [ "$MODE" = "api" ]; then
+if [ "$MODE" = "full" ] || [ "$MODE" = "api" ]; then
     step 9 "Iniciando API SINAGERSAT..."
 
     # Matar instancias anteriores
@@ -628,56 +536,6 @@ if [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ] || [ "$MODE" = "api" ]; then
 else
     step 8 "Saltando inicio de API..."
     ok "Iniciar manualmente: bash start_api.sh"
-fi
-
-# ================================================================
-#  10. CLOUDFLARE TUNNEL (solo con --tunnel)
-# ================================================================
-if [ "$MODE" = "tunnel" ]; then
-    step 10 "Iniciando Cloudflare Quick Tunnel..."
-
-    # Verificar/instalar cloudflared
-    if ! command -v cloudflared &>/dev/null; then
-        echo "  Instalando cloudflared..."
-        curl -L --output /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb 2>/dev/null
-        dpkg -i /tmp/cloudflared.deb 2>/dev/null
-        rm -f /tmp/cloudflared.deb
-        ok "cloudflared instalado"
-    else
-        ok "cloudflared ya instalado ($(cloudflared --version 2>/dev/null | head -1))"
-    fi
-
-    # Iniciar tunnel
-    pkill -f "cloudflared tunnel" 2>/dev/null || true
-    sleep 1
-    cloudflared tunnel --url "http://localhost:$API_PORT" > /tmp/cloudflared.log 2>&1 &
-    TUNNEL_PID=$!
-
-    # Esperar URL con reintentos
-    TUNNEL_URL=""
-    for i in $(seq 1 20); do
-        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1)
-        [ -n "$TUNNEL_URL" ] && break
-        sleep 1
-    done
-
-    if [ -n "$TUNNEL_URL" ]; then
-        # Verificar acceso externo
-        sleep 2
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$TUNNEL_URL/" 2>/dev/null)
-        ok "Tunnel activo: $TUNNEL_URL"
-        [ "$HTTP_CODE" = "200" ] && ok "Acceso externo verificado" || warn "HTTP $HTTP_CODE (puede estar propagándose)"
-        echo "$TUNNEL_URL" > /tmp/sinagersat_url.txt
-        echo "$TUNNEL_PID" > /tmp/sinagersat_tunnel_pid.txt
-    else
-        warn "No se pudo obtener la URL del tunnel"
-        warn "Verifica: tail -f /tmp/cloudflared.log"
-    fi
-else
-    if [ "$MODE" != "db" ]; then
-        step 10 "Saltando Cloudflare tunnel..."
-        ok "Para activar: bash start_tunnel.sh"
-    fi
 fi
 
 # ================================================================
@@ -702,7 +560,7 @@ if [ "$MODE" != "api" ]; then
     echo ""
 fi
 
-if [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ] || [ "$MODE" = "api" ]; then
+if [ "$MODE" = "full" ] || [ "$MODE" = "api" ]; then
     echo -e "  ${VERDE}API REST:${SIN_COLOR}"
     echo "    Local:    http://localhost:$API_PORT"
     echo "    Docs:     http://localhost:$API_PORT/docs"
@@ -712,16 +570,8 @@ if [ "$MODE" = "full" ] || [ "$MODE" = "tunnel" ] || [ "$MODE" = "api" ]; then
     echo ""
 fi
 
-if [ "$MODE" = "tunnel" ] && [ -n "$TUNNEL_URL" ]; then
-    echo -e "  ${VERDE}CLOUDFLARE TUNNEL:${SIN_COLOR}"
-    echo "    Público:  $TUNNEL_URL"
-    echo "    Docs:     $TUNNEL_URL/docs"
-    echo ""
-fi
-
 echo -e "  ${VERDE}COMANDOS ÚTILES:${SIN_COLOR}"
 echo "    bash start_api.sh          # Iniciar API local"
-echo "    bash start_tunnel.sh       # Iniciar API + tunnel público"
 echo "    bash stop.sh               # Detener todo"
 echo "    bash deploy/verificar.sh   # Verificar base de datos"
 echo ""
