@@ -1,6 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
@@ -144,10 +145,30 @@ def actualizar_reporte(id: int, data: ReporteEventoUpdate, db: Session = Depends
 
 @router.put("/reportes/{id}/estado", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
 def cambiar_estado(id: int, data: CambiarEstadoRequest, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    if _user["id_rol"] in ROLES_BAJOS:
-        reporte = service.get_reporte(db, id)
-        if not reporte or reporte["id_usuario"] != _user["id_usuario"]:
+    if _user["id_rol"] <= 5:
+        result = service.change_estado(db, id, data.id_estado)
+        if not result:
+            raise HTTPException(status_code=404, detail="Reporte no encontrado")
+        return SuccessResponse(message="Estado del reporte actualizado correctamente", data=result)
+
+    reporte = service.get_reporte(db, id)
+    if not reporte:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+
+    if _user["id_rol"] == 7:
+        if reporte["id_usuario"] != _user["id_usuario"]:
             raise HTTPException(status_code=403, detail="No puedes cambiar el estado de un reporte que no te pertenece")
+
+    if _user["id_rol"] == 6:
+        creador = db.execute(
+            text("SELECT id_rol FROM usuarios.usuario WHERE id_usuario = :id"),
+            {"id": reporte["id_usuario"]},
+        ).mappings().first()
+        if not creador or creador["id_rol"] != 7:
+            raise HTTPException(status_code=403, detail="Solo puedes cambiar estado de reportes de Responsables Locales")
+        if reporte["id_municipio"] != _user["id_municipio"]:
+            raise HTTPException(status_code=403, detail="No puedes cambiar estado de reportes de otro municipio")
+
     result = service.change_estado(db, id, data.id_estado)
     if not result:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")

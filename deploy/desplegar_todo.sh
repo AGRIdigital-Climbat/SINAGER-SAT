@@ -29,6 +29,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Buscar backup (preferir el más reciente)
 BACKUP=""
 for CANDIDATO in \
+    "$PROJECT_DIR/database/backup_v1.2.7.sql" \
     "$PROJECT_DIR/database/backup_v1.2.6.sql" \
     "$PROJECT_DIR/database/backup_2026_07_26.sql" \
     "$PROJECT_DIR/database/backup_2026_07_21.sql" \
@@ -727,8 +728,8 @@ echo ""
 echo -e "  ${VERDE}ARCHIVOS:${SIN_COLOR}"
 echo "    uploads/reports/           # Imágenes de reportes"
 echo "    .env                       # Variables de entorno"
-echo "    database/backup_v1.2.6.sql   # Backup de BD (v1.2.6)"
-echo "    database/backup_2026_07_26.sql   # Backup de BD (v1.2.5)"
+    echo "    database/backup_v1.2.7.sql   # Backup de BD (v1.2.7)"
+    echo "    database/backup_v1.2.6.sql   # Backup de BD (v1.2.6)"
 echo ""
 echo -e "  ${VERDE}HERRAMIENTAS:${SIN_COLOR}"
 echo "    DBeaver:   Host: 127.0.0.1 | DB: $DB | User: $USER"

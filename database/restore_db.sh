@@ -17,6 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Buscar backup (preferir el más reciente)
 BACKUP=""
 for CANDIDATO in \
+    "$SCRIPT_DIR/backup_v1.2.7.sql" \
     "$SCRIPT_DIR/backup_v1.2.6.sql" \
     "$SCRIPT_DIR/backup_2026_07_21.sql" \
     "$SCRIPT_DIR/edan_db_backup.sql"; do

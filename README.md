@@ -1,348 +1,107 @@
-# SINAGERSAT - Base de Datos
+# SINAGERSAT — API REST v1.2.7
 
-Sistema Nacional de Alerta Temprana y Gestión de Riesgos. Base de datos multi-esquema con módulos EDAN y REA. API REST v1.2.6.
+Sistema Nacional de Alerta Temprana y Gestión de Riesgos. API con módulos EDAN, REA, geografía, usuarios, y sistema completo de permisos RBAC.
 
 ---
 
-## Desplegar desde cero (entorno vacío)
+## Despliegue rápido (entorno vacío)
 
 ```bash
 sudo bash deploy/desplegar_todo.sh
 ```
 
-Esto instala PostgreSQL, Python, crea la BD completa con todos los datos, configura la API y la inicia.
+Instala PostgreSQL, Python, crea la BD completa con todos los datos, configura la API y la inicia.
 
 **Opciones:**
-```bash
-sudo bash deploy/desplegar_todo.sh              # Todo (BD + API)
-sudo bash deploy/desplegar_todo.sh --db-only    # Solo base de datos
-sudo bash deploy/desplegar_todo.sh --api-only   # Solo API (si PG ya está)
-sudo bash deploy/desplegar_todo.sh --tunnel     # Todo + Cloudflare tunnel público
-```
-
-## Restaurar solo BD (si ya tienes PostgreSQL)
 
 ```bash
-bash deploy/desplegar_bd.sh
+sudo bash deploy/desplegar_todo.sh                  # Todo (BD + API)
+sudo bash deploy/desplegar_todo.sh --db-only        # Solo base de datos
+sudo bash deploy/desplegar_todo.sh --api-only       # Solo API (si PG ya está)
+sudo bash deploy/desplegar_todo.sh --tunnel         # Todo + Cloudflare tunnel público
 ```
-
-## Iniciar API
-
-```bash
-bash start_api.sh           # Local: http://localhost:8000/docs
-bash start_tunnel.sh        # + Tunnel público Cloudflare
-bash stop.sh                # Detener todo
-```
-
-## Verificar
-
-```bash
-bash deploy/verificar.sh
-```
-
----
-
-## Obtener URL Pública (Cloudflare Tunnel)
-
-La API se expone a internet mediante Cloudflare Quick Tunnel. La URL es **dinámica** (cambia al reiniciar).
-
-### Obtener URL actual
-
-```bash
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
-```
-
-### Obtener URL + copiar al portapapeles
-
-```bash
-# Linux
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 | xclip -selection clipboard
-
-# macOS
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 | pbcopy
-```
-
-### Script rápido
-
-```bash
-# Agregar alias a ~/.bashrc
-alias sinagersat-url="grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1"
-
-# Uso
-sinagersat-url           # Imprime la URL actual
-sinagersat-url | xclip   # Copia al portapapeles
-```
-
-### Verificar que funciona desde internet
-
-```bash
-URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1)
-curl "$URL/"
-curl "$URL/docs"
-```
-
-### URL fija (con dominio propio)
-
-Si necesitas una URL permanente:
-
-1. Crear cuenta gratuita en [Cloudflare](https://dash.cloudflare.com)
-2. Registrar un dominio (o usar uno existente)
-3. Crear tunnel nombrado:
-
-```bash
-cloudflared tunnel login
-cloudflared tunnel create sinagersat
-```
-
-4. Configurar `~/.cloudflared/config.yml`:
-
-```yaml
-tunnel: sinagersat
-credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
-
-ingress:
-  - hostname: api.TU_DOMINIO.com
-    service: http://localhost:8000
-  - service: http_status:404
-```
-
-5. Asociar DNS e iniciar:
-
-```bash
-cloudflared tunnel route dns sinagersat api.TU_DOMINIO.com
-cloudflared tunnel run sinagersat
-```
-
-Resultado: `https://api.TU_DOMINIO.com` siempre apunta a tu API.
 
 ---
 
 ## Arquitectura
 
 | Esquema | Descripción |
-|---|---|
-| `shared` | Geografía INE 2024 (9 deptos, 112 provs, 340 munis) |
-| `usuarios` | Gestión de usuarios (cuentas, roles) |
+|---------|-------------|
+| `shared` | Geografía INE 2024 (9 deptos, 112 provs, 340 munis con PostGIS) |
+| `usuarios` | Cuentas, roles, sesiones, permisos RBAC, auditoría |
 | `edan` | Formularios EDAN (23 tablas) |
 | `rea` | Reportes de Eventos Adversos (4 tablas) |
-| `rida`, `sinb`, `recursos` | Vacíos - futuros módulos |
+| `rida`, `sinb`, `recursos` | Vacíos — futuros módulos |
+
+**Total:** ~38 tablas, 35+ FK, 29+ índices, PostGIS habilitado.
 
 ---
 
-## Conexión
+## Conexión BD
 
 | Parámetro | Valor |
 |-----------|-------|
-| Host | `localhost` o `192.168.0.34` |
+| Host | `localhost` o `127.0.0.1` |
 | Puerto | `5432` |
 | Base de datos | `db_sinagersat` |
 | Usuario | `sinagersat` |
 | Contraseña | `12345678` |
 
 ```bash
-PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h localhost
+PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
 ```
-
----
-
-## Herramientas gráficas
-
-- **DBeaver**: Host: `localhost` | Port: `5432` | DB: `db_sinagersat` | User: `sinagersat`
-- **pgAdmin4**: File > Import > `database/servers.json`
 
 ---
 
 ## Documentación
 
-- `docs/EDAN_BD.md` - Documentación completa de la BD (esquemas, tablas, relaciones, SQL)
-- `docs/DESPLIEGUE_API.md` - Guía de despliegue de la API y acceso externo desde internet
-- `docs/SERVICIOS.md` - Gestión de servicios systemd (API + tunnel)
-- `docs/CONECTAR.md` - Credenciales y formas de conexión a la BD
-- `docs/GEOESPACIALES.md` - Guía de endpoints GeoJSON/Geom/Ubicación y uso con herramientas de mapas
+| Archivo | Contenido |
+|---------|-----------|
+| `docs/DESPLIEGUE_API.md` | Guía completa de despliegue, endpoints, auth, ejemplos |
+| `docs/PERMISOS_API.md` | Sistema RBAC: roles, apps, acciones, matriz visual |
+| `docs/EDAN_BD.md` | Documentación completa de la BD (esquemas, tablas, SQL) |
+| `docs/GEOESPACIALES.md` | Endpoints GeoJSON/WKT/Ubicación + herramientas de mapas |
+| `docs/SERVICIOS.md` | Gestión de servicios systemd (API + tunnel) |
+| `docs/CONECTAR.md` | Credenciales y formas de conexión a la BD |
+| `docs/CLOUDFLARE_TUNNEL.md` | Cloudflare Named Tunnel con dominio fijo |
 
 ---
 
-## Solución de problemas
+## API REST
 
 ```bash
-# PostgreSQL no está corriendo
-sudo service postgresql start
-
-# Restaurar BD
-bash deploy/desplegar_bd.sh
-
-# Verificar
-bash deploy/verificar.sh
-```
-
----
-
-## API REST (FastAPI) v1.2.6
-
-### Iniciar API local
-
-```bash
+# Iniciar local
 bash start_api.sh
 # → http://localhost:8000/docs
-```
 
-### Iniciar API + Cloudflare Tunnel (acceso externo)
-
-```bash
+# Con tunnel público
 bash start_tunnel.sh
-# → URL temporal: https://xxx.trycloudflare.com/docs
+# → URL: grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
 ```
 
-### Obtener URL pública
+### Endpoints (~170 totales)
 
-```bash
-grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cloudflared.log | tail -1
-```
-
-### Formato de Respuestas (v1.2.6)
-
-Todas las respuestas exitosas usan el formato estándar:
-
-```json
-{
-  "success": true,
-  "message": "Operación exitosa",
-  "data": { ... },
-  "total": 9
-}
-```
-
-Para errores:
-
-```json
-{
-  "success": false,
-  "message": "Error interno del servidor",
-  "error_code": 500
-}
-```
-
-Para eliminaciones:
-
-```json
-{
-  "message": "Recurso eliminado correctamente"
-}
-```
-
-### Objetos Anidados (v1.2.6)
-
-Las respuestas incluyen objetos anidados para todas las foreign keys. Ejemplo de usuario:
-
-```json
-{
-  "id_usuario": 1,
-  "usuario": "sinagersat",
-  "nombre": "sinagersat",
-  "id_departamento": 2,
-  "id_provincia": 201,
-  "id_municipio": 20101,
-  "id_rol": 1,
-  "departamento": { "id": 2, "codigo_ine": "02", "nombre": "La Paz" },
-  "provincia": { "id": 201, "codigo_ine": "0201", "nombre": "Murillo" },
-  "municipio": { "id": 20101, "codigo_ine": "020101", "nombre": "La Paz" },
-  "rol": { "id_rol": 1, "nombre": "superadministrador", "descripcion": "..." }
-}
-```
-
-Los campos `id_*` originales se mantienen para compatibilidad; los objetos anidados son información complementaria.
-
-### Endpoints (166 totales)
-
-| Grupo | Prefijo | Acceso | Operaciones |
-|---|---|---|---|
-| Auth | `/api/v1/auth/` | Público | Login, Register |
-| Shared | `/api/v1/shared/` | Público | CRUD deptos, provs, municipios |
-| GeoJSON | `/api/v1/shared/municipios/geojson` | Público | FeatureCollection GeoJSON (RFC 7946) |
-| GEOM/WKT | `/api/v1/shared/municipios/geom` | Público | Geometrías WKT |
-| Ubicación | `/api/v1/shared/municipios/ubicacion` | Público | Punto-dentro-de-polígono (lat, lon) |
-| EDAN | `/api/v1/edan/` | Token | CRUD EDAN + 17 sub-tablas + 5 catálogos + con-foto |
-| REA | `/api/v1/rea/` | Token | CRUD reportes + con-foto, estados, categorías |
-| Usuarios | `/api/v1/usuarios/` | Token | CRUD usuarios, roles, permisos, sesiones, auditoría |
-| Upload | `/api/v1/upload/` | Token | Subir/descargar archivos |
-
-### Geoespaciales (v1.2.6) — Compatible con herramientas de mapas
-
-La BD incluye PostGIS con geometrías de los 340 municipios (SRID 4326/WGS 84).
-
-#### GeoJSON (RFC 7946) — Leaflet, OpenLayers, Google Maps, Mapbox, QGIS, kepler.gl
-
-```bash
-# Todos los municipios
-curl http://localhost:8000/api/v1/shared/municipios/geojson
-
-# Filtrar por departamento
-curl http://localhost:8000/api/v1/shared/municipios/geojson?id_departamento=2
-
-# Un municipio
-curl http://localhost:8000/api/v1/shared/municipios/20101/geojson
-```
-
-#### WKT (Well-Known Text) — PostGIS, Shapely, SQL directo
-
-```bash
-curl http://localhost:8000/api/v1/shared/municipios/geom
-```
-
-#### Ubicación (punto-dentro-de-polígono) — GPS, geolocalización
-
-```bash
-# ¿En qué municipio está la coordenada?
-curl "http://localhost:8000/api/v1/shared/municipios/ubicacion?lat=-16.4897&lon=-68.1193"
-```
-
-Respuesta:
-```json
-{
-  "lat": -16.4897,
-  "lon": -68.1193,
-  "municipio": {"id": 20101, "codigo_ine": "020101", "nombre": "La Paz"},
-  "provincia": {"id": 201, "codigo_ine": "0201", "nombre": "Murillo"},
-  "departamento": {"id": 2, "codigo_ine": "02", "nombre": "La Paz"}
-}
-```
-
-### Autenticación
-
-```bash
-# Registrar usuario (sin token, default rol visor)
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"usuario":"admin","contrasena":"pass123","nombre":"Admin"}'
-
-# Registrar con rol específico
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"usuario":"enc1","contrasena":"pass123","nombre":"Enc1","id_rol":3}'
-
-# Login → obtiene token JWT + info de rol
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"usuario":"admin","contrasena":"pass123"}'
-
-# Usar token en requests protegidos
-curl http://localhost:8000/api/v1/edan/ \
-  -H "Authorization: Bearer <TU_TOKEN>"
-```
+| Grupo | Prefijo | Acceso |
+|-------|---------|--------|
+| Auth | `/api/v1/auth/` | Público |
+| Geografía | `/api/v1/shared/` | Público |
+| EDAN | `/api/v1/edan/` | Token |
+| REA | `/api/v1/rea/` | Token |
+| Usuarios | `/api/v1/usuarios/` | Token |
+| Upload | `/api/v1/upload/` | Token |
 
 ### Roles
 
-| id | Rol | Descripción |
-|----|-----|-------------|
-| 1 | superadmin | Acceso total a todos los sistemas |
-| 2 | admin | Gestiona usuarios y datos de su sistema |
-| 3 | VIDECI Regional | Carga y edita formularios propios |
-| 4 | UGR Sectores | Carga y edita formularios propios |
-| 5 | UGR Gobernación | Carga y edita formularios propios |
-| 6 | UGR Municipio | Solo EDAN/REA propios (ownership forzado) |
-| 7 | Responsable Local | Solo EDAN/REA propios (ownership forzado) |
+| id | Rol | Token |
+|----|-----|-------|
+| 1 | superadmin | 72h con `exp` |
+| 2 | admin | 72h con `exp` |
+| 3 | VIDECI Regional | 72h con `exp` |
+| 4 | UGR Sectores | 72h con `exp` |
+| 5 | DGR Gobernacion | 72h con `exp` |
+| 6 | UGR Municipio | **Eterno** (año 2099) |
+| 7 | Responsable Local | **Eterno** (año 2099) |
 
-### Documentación interactiva
+El login devuelve `permisos`: `"full_access"` para rol 1, o `{app: [acciones]}` para los demás.
 
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
+Ver `docs/PERMISOS_API.md` para más detalles.

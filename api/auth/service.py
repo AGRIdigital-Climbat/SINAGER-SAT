@@ -15,6 +15,33 @@ def _calcular_expiracion(id_rol: int) -> tuple[datetime, timedelta | None]:
     return datetime.now() + timedelta(hours=72), timedelta(hours=72)
 
 
+PERMISOS_POR_ROL = """
+    SELECT a.codigo as app, ac.codigo as accion
+    FROM usuarios.permiso p
+    JOIN usuarios.aplicacion a ON a.id_aplicacion = p.id_aplicacion
+    JOIN usuarios.accion ac ON ac.id_accion = p.id_accion
+    WHERE p.id_rol = :r
+"""
+
+
+def _agrupar_permisos(db: Session, id_rol: int) -> dict[str, list[str]]:
+    rows = db.execute(text(PERMISOS_POR_ROL), {"r": id_rol}).mappings().all()
+    result = {}
+    for r in rows:
+        app = r["app"]
+        accion = r["accion"]
+        if app not in result:
+            result[app] = []
+        result[app].append(accion)
+    return result
+
+
+def _get_permisos_response(id_rol: int, db: Session) -> dict | str:
+    if id_rol == 1:
+        return "full_access"
+    return _agrupar_permisos(db, id_rol)
+
+
 def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     result = db.execute(
         text("""
@@ -92,6 +119,7 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         "id_rol": user["id_rol"],
         "rol": user["rol"],
         "activo": user["activo"],
+        "permisos": _get_permisos_response(user["id_rol"], db),
     }
 
 

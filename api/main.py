@@ -44,7 +44,7 @@ TAGS_METADATA = [
 app = FastAPI(
     title="SINAGERSAT API",
     description="API del Sistema Nacional de Alerta Temprana y Gestión de Riesgos.",
-    version="1.2.6",
+    version="1.2.7",
     openapi_tags=TAGS_METADATA,
     docs_url=None,
 )
@@ -197,7 +197,7 @@ const ui = SwaggerUIBundle({{
 def root():
     return {
         "name": "SINAGERSAT API",
-        "version": "1.2.6",
+        "version": "1.2.7",
         "docs": "/docs",
         "redoc": "/redoc",
     }
