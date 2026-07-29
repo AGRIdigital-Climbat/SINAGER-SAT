@@ -465,5 +465,6 @@ SINAGER-SAT/
     ├── GEOESPACIALES.md     # GeoJSON/WKT/Ubicación
     ├── SERVICIOS.md         # Gestión systemd
     ├── CONECTAR.md          # Credenciales BD
-    └── DOMINIO_API.md       # Despliegue con dominio api.climbat.net
+    ├── DOMINIO_API.md       # Despliegue con dominio api.climbat.net
+    └── APACHE_PROXY.md      # Configuración Apache (para proxy upstream)
 ```
