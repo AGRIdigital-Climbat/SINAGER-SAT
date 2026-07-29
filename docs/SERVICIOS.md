@@ -49,7 +49,7 @@ cd /home/prosuco/SINAGERSAT/BaseData
 bash start_api.sh
 ```
 
-### Servicio systemd (opcional)
+### Servicio systemd (instalado y activo)
 
 ```bash
 # Estado
