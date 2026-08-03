@@ -1,6 +1,6 @@
 # SINAGERSAT API — Despliegue con dominio api.climbat.net
 
-**Versión:** 1.2.7
+**Versión:** 1.2.8
 **Dominio:** `https://api.climbat.net`
 **IP del servidor (API):** `10.10.0.24`
 **IP del proxy upstream:** `10.10.0.6`

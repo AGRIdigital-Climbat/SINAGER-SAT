@@ -1,6 +1,9 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..auth.jwt import hash_password
+from ..shared.service import validar_geografia
+
+GEOGRAFIA_COLS = ("id_departamento", "id_provincia", "id_municipio")
 
 
 SELECT_USUARIO = """
@@ -69,6 +72,12 @@ def create_usuario(db: Session, data: dict) -> int:
     ).first()
     if existing:
         raise ValueError("El nombre de usuario ya existe")
+    validar_geografia(
+        db,
+        data.get("id_departamento"),
+        data.get("id_provincia"),
+        data.get("id_municipio"),
+    )
     hashed = hash_password(data["contrasena"])
     result = db.execute(
         text("""
@@ -96,7 +105,25 @@ def update_usuario(db: Session, id: int, data: dict) -> dict | None:
             raise ValueError("El nombre de usuario ya está en uso")
     if "contrasena" in data and data["contrasena"]:
         data["contrasena"] = hash_password(data["contrasena"])
-    fields = {k: v for k, v in data.items() if v is not None}
+
+    current = db.execute(
+        text("SELECT id_departamento, id_provincia, id_municipio FROM usuarios.usuario WHERE id_usuario = :id"),
+        {"id": id},
+    ).mappings().first()
+    if not current:
+        return None
+
+    dep = data.get("id_departamento", current["id_departamento"])
+    prov = data.get("id_provincia", current["id_provincia"])
+    mun = data.get("id_municipio", current["id_municipio"])
+    validar_geografia(db, dep, prov, mun)
+
+    fields = {}
+    for k, v in data.items():
+        if k in GEOGRAFIA_COLS:
+            fields[k] = v
+        elif v is not None:
+            fields[k] = v
     if not fields:
         return get_usuario(db, id)
     fields["id_usuario"] = id

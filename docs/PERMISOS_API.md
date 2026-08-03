@@ -1,6 +1,6 @@
 # SINAGERSAT — Sistema de Permisos
 
-Guía completa del sistema de permisos basado en **rol-aplicación-acción**. v1.2.7.
+Guía completa del sistema de permisos basado en **rol-aplicación-acción**. v1.2.8.
 
 ---
 
@@ -199,3 +199,6 @@ Resp Loc | ■  ■  ■  □      | ■  ■  ■  □      | □  □  □  �
 | Token expira | 72h | 72h | 72h | **Nunca** |
 | Editar/eliminar REA ajeno | ✅ | ✅ | ✅ | ❌ solo propios |
 | Cambiar estado REA ajeno | ✅ | ✅ | ✅ | ❌ (excepción: rol 6 a reportes de rol 7 en mismo municipio) |
+| Editar su propio perfil (`PUT /usuarios/{id}` propio) | ✅ | ✅ | ✅ | ✅ sin SISTEMA |
+| Editar perfil de otros (`PUT /usuarios/{id}` ajeno) | ✅ | ✅ | ❌ | ❌ |
+| Administrar cuenta ajena (`PUT /usuarios/{id}/cuenta`) | ✅ | ✅ | ❌ | ❌ |

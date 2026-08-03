@@ -15,20 +15,95 @@ CAT_COLS = {"nombre", "descripcion", "orden"}
 
 # ── REPORTE EVENTO ──
 
+USER_COLS = """
+           u.id_usuario as u_id, u.usuario as u_usuario, u.nombre as u_nombre,
+           u.celular as u_celular, u.carnet as u_carnet, u.comunidad as u_comunidad,
+           u.correo as u_correo, u.cargo as u_cargo, u.activo as u_activo,
+           u.id_rol as u_id_rol, u.id_departamento as u_dep_id, u.id_provincia as u_prov_id, u.id_municipio as u_muni_id,
+           rol.id_rol as r_id, rol.nombre as r_nombre, rol.descripcion as r_descripcion,
+           ud.id as ud_id, ud.codigo_ine as ud_codigo_ine, ud.nombre as ud_nombre,
+           up.id as up_id, up.codigo_ine as up_codigo_ine, up.nombre as up_nombre,
+           um.id as um_id, um.codigo_ine as um_codigo_ine, um.nombre as um_nombre
+"""
+
+USER_JOIN = """
+    LEFT JOIN usuarios.usuario u ON re.id_usuario = u.id_usuario
+    LEFT JOIN usuarios.rol rol ON u.id_rol = rol.id_rol
+    LEFT JOIN shared.departamento ud ON u.id_departamento = ud.id
+    LEFT JOIN shared.provincia up ON u.id_provincia = up.id
+    LEFT JOIN shared.municipio um ON u.id_municipio = um.id
+"""
+
 SQL_REPORTE = """
     SELECT re.*,
            d.id as d_id, d.codigo_ine as d_codigo_ine, d.nombre as d_nombre,
            prov.id as prov_id, prov.codigo_ine as prov_codigo_ine, prov.nombre as prov_nombre,
            m.id as m_id, m.codigo_ine as m_codigo_ine, m.nombre as m_nombre,
            te.id_tipo_evento as te_id, te.nombre as te_nombre,
-           er.id_estado as er_id, er.nombre as er_nombre, er.descripcion as er_descripcion, er.orden as er_orden
+           er.id_estado as er_id, er.nombre as er_nombre, er.descripcion as er_descripcion, er.orden as er_orden,
+""" + USER_COLS + """
     FROM rea.reporte_evento re
     LEFT JOIN shared.departamento d ON re.id_departamento = d.id
     LEFT JOIN shared.provincia prov ON re.id_provincia = prov.id
     LEFT JOIN shared.municipio m ON re.id_municipio = m.id
     LEFT JOIN edan.tipo_evento te ON re.id_tipo_evento = te.id_tipo_evento
     LEFT JOIN rea.estado_reporte er ON re.id_estado = er.id_estado
-"""
+""" + USER_JOIN
+
+
+def _build_usuario_node(data):
+    if not data.get("u_id"):
+        for k in ("u_id", "u_usuario", "u_nombre", "u_celular", "u_carnet", "u_comunidad",
+                  "u_correo", "u_cargo", "u_activo", "u_id_rol",
+                  "u_dep_id", "u_prov_id", "u_muni_id",
+                  "r_id", "r_nombre", "r_descripcion",
+                  "ud_id", "ud_codigo_ine", "ud_nombre",
+                  "up_id", "up_codigo_ine", "up_nombre",
+                  "um_id", "um_codigo_ine", "um_nombre"):
+            data.pop(k, None)
+        return None
+    departamento = {
+        "id": data.pop("ud_id"),
+        "codigo_ine": data.pop("ud_codigo_ine"),
+        "nombre": data.pop("ud_nombre"),
+    } if data.get("ud_id") else None
+    provincia = {
+        "id": data.pop("up_id"),
+        "codigo_ine": data.pop("up_codigo_ine"),
+        "nombre": data.pop("up_nombre"),
+        "departamento": departamento,
+    } if data.get("up_id") else None
+    municipio = {
+        "id": data.pop("um_id"),
+        "codigo_ine": data.pop("um_codigo_ine"),
+        "nombre": data.pop("um_nombre"),
+        "departamento": departamento,
+        "provincia": provincia,
+    } if data.get("um_id") else None
+    rol = {
+        "id_rol": data.pop("r_id"),
+        "nombre": data.pop("r_nombre"),
+        "descripcion": data.pop("r_descripcion"),
+    } if data.get("r_id") else None
+    return {
+        "id_usuario": data.pop("u_id"),
+        "usuario": data.pop("u_usuario"),
+        "nombre": data.pop("u_nombre"),
+        "celular": data.pop("u_celular"),
+        "carnet": data.pop("u_carnet"),
+        "comunidad": data.pop("u_comunidad"),
+        "correo": data.pop("u_correo"),
+        "cargo": data.pop("u_cargo"),
+        "activo": data.pop("u_activo"),
+        "id_rol": data.pop("u_id_rol"),
+        "rol": rol,
+        "id_departamento": data.pop("u_dep_id"),
+        "id_provincia": data.pop("u_prov_id"),
+        "id_municipio": data.pop("u_muni_id"),
+        "departamento": departamento,
+        "provincia": provincia,
+        "municipio": municipio,
+    }
 
 
 def _build_reporte(row):
@@ -66,6 +141,7 @@ def _build_reporte(row):
         "descripcion": data.pop("er_descripcion"),
         "orden": data.pop("er_orden"),
     } if data.get("er_id") else None
+    data["usuario"] = _build_usuario_node(data)
     return data
 
 
@@ -107,7 +183,12 @@ def get_reportes(db: Session, id_estado: int | None = None, id_municipio: int | 
     params["limit"] = limit
     params["skip"] = skip
     rows = db.execute(text(query), params).mappings().all()
-    return [_build_reporte(r) for r in rows], total
+    data = []
+    for r in rows:
+        item = _build_reporte(r)
+        item["categorias"] = _get_categorias(db, item["id_reporte"])
+        data.append(item)
+    return data, total
 
 
 def get_mis_resumen(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
@@ -116,10 +197,19 @@ def get_mis_resumen(db: Session, id_usuario: int, skip: int = 0, limit: int = 50
         {"uid": id_usuario},
     ).scalar()
     rows = db.execute(
-        text("SELECT id_reporte, id_estado FROM rea.reporte_evento WHERE id_usuario = :uid ORDER BY id_reporte DESC LIMIT :limit OFFSET :skip"),
+        text(f"""
+            SELECT re.id_reporte, re.id_estado,{USER_COLS}
+            FROM rea.reporte_evento re{USER_JOIN}
+            WHERE re.id_usuario = :uid ORDER BY re.id_reporte DESC LIMIT :limit OFFSET :skip
+        """),
         {"uid": id_usuario, "limit": limit, "skip": skip},
     ).mappings().all()
-    return [dict(r) for r in rows], total
+    data = []
+    for r in rows:
+        item = dict(r)
+        item["usuario"] = _build_usuario_node(item)
+        data.append(item)
+    return data, total
 
 
 def get_mis_reportes(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
@@ -129,7 +219,12 @@ def get_mis_reportes(db: Session, id_usuario: int, skip: int = 0, limit: int = 5
     ).scalar()
     query = SQL_REPORTE + " WHERE re.id_usuario = :uid ORDER BY re.id_reporte DESC LIMIT :limit OFFSET :skip"
     rows = db.execute(text(query), {"uid": id_usuario, "limit": limit, "skip": skip}).mappings().all()
-    return [_build_reporte(r) for r in rows], total
+    data = []
+    for r in rows:
+        item = _build_reporte(r)
+        item["categorias"] = _get_categorias(db, item["id_reporte"])
+        data.append(item)
+    return data, total
 
 
 def get_reporte(db: Session, id: int):

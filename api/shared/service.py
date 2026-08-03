@@ -367,4 +367,45 @@ def obtener_ubicacion(db: Session, lat: float, lon: float):
     }
 
 
+# ── VALIDACIÓN DE GEOGRAFÍA ──
+
+def validar_geografia(db: Session, id_departamento: int | None,
+                      id_provincia: int | None, id_municipio: int | None):
+    """
+    Valida que la combinación departamento → provincia → municipio sea consistente.
+    Lanza ValueError con mensaje claro si hay alguna inconsistencia.
+    """
+    if id_departamento is not None:
+        depto = db.execute(
+            text("SELECT 1 FROM shared.departamento WHERE id = :id"),
+            {"id": id_departamento},
+        ).scalar()
+        if not depto:
+            raise ValueError("El departamento seleccionado no existe")
+
+    if id_provincia is not None:
+        if id_departamento is None:
+            raise ValueError("Debe seleccionar un departamento para la provincia")
+        prov = db.execute(
+            text("SELECT id_departamento FROM shared.provincia WHERE id = :id"),
+            {"id": id_provincia},
+        ).mappings().first()
+        if not prov:
+            raise ValueError("La provincia seleccionada no existe")
+        if prov["id_departamento"] != id_departamento:
+            raise ValueError("La provincia seleccionada no pertenece al departamento elegido")
+
+    if id_municipio is not None:
+        if id_departamento is None or id_provincia is None:
+            raise ValueError("Debe seleccionar departamento y provincia para el municipio")
+        mun = db.execute(
+            text("SELECT id_provincia, id_departamento FROM shared.municipio WHERE id = :id"),
+            {"id": id_municipio},
+        ).mappings().first()
+        if not mun:
+            raise ValueError("El municipio seleccionado no existe")
+        if mun["id_provincia"] != id_provincia or mun["id_departamento"] != id_departamento:
+            raise ValueError("El municipio seleccionado no pertenece a la provincia o departamento elegidos")
+
+
 # ── helpers ──

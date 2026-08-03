@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UsuarioCreate(BaseModel):
@@ -17,8 +17,9 @@ class UsuarioCreate(BaseModel):
     activo: bool = True
 
 
-class UsuarioUpdate(BaseModel):
-    contrasena: str | None = None
+class PerfilUpdate(BaseModel):
+    """Edición de perfil: solo datos personales y geografía. Sin contraseña/rol/estado."""
+    model_config = ConfigDict(extra="forbid")
     nombre: str | None = None
     celular: str | None = None
     carnet: str | None = None
@@ -28,6 +29,12 @@ class UsuarioUpdate(BaseModel):
     id_departamento: int | None = None
     id_provincia: int | None = None
     id_municipio: int | None = None
+
+
+class UsuarioAdminUpdate(BaseModel):
+    """Administración de cuenta: credenciales, rol y estado (solo SISTEMA UPDATE)."""
+    model_config = ConfigDict(extra="forbid")
+    contrasena: str | None = None
     id_rol: int | None = None
     activo: bool | None = None
 

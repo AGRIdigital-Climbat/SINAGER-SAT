@@ -1,6 +1,6 @@
 # Geoespaciales — GeoJSON, WKT y Ubicación
 
-Guía de los endpoints geoespaciales de SINAGERSAT (v1.2.7) para uso con herramientas de mapas y GPS.
+Guía de los endpoints geoespaciales de SINAGERSAT (v1.2.8) para uso con herramientas de mapas y GPS.
 
 ## Requisitos
 

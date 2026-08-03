@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .jwt import hash_password, verify_password, create_access_token
 from .schemas import LoginRequest, RegisterRequest, VerificarIdentidadRequest, CambiarContrasenaRequest
+from ..shared.service import validar_geografia
 
 
 TOKEN_LARGO = datetime(2099, 12, 31, 23, 59, 59)
@@ -137,6 +138,7 @@ def register_user(db: Session, data: RegisterRequest) -> int:
         ).first()
         if existing_carnet:
             raise ValueError("El número de carnet ya está registrado")
+    validar_geografia(db, data.id_departamento, data.id_provincia, data.id_municipio)
     hashed = hash_password(data.contrasena)
     result = db.execute(
         text("""

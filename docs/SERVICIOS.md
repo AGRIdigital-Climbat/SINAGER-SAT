@@ -1,6 +1,6 @@
 # SINAGERSAT — Gestión de Servicios
 
-Guía rápida para administrar la base de datos y la API. v1.2.7.
+Guía rápida para administrar la base de datos y la API. v1.2.8.
 
 ---
 

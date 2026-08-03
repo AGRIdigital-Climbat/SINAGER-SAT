@@ -1,6 +1,6 @@
 # SINAGERSAT API — Despliegue con Apache Proxy + Dominio HTTPS
 
-**Versión:** 1.2.7  
+**Versión:** 1.2.8  
 **Propósito:** Documento para entregar al proveedor de hosting. Describe cómo vincular la API de SINAGERSAT con Apache y un dominio con SSL.
 
 ---
@@ -192,11 +192,11 @@ journalctl -u sinagersat-api -f               # Logs en tiempo real
 
 ```bash
 # Interno (en el servidor)
-curl -s http://127.0.0.1:8000/          # → {"name":"SINAGERSAT API","version":"1.2.7",...}
+curl -s http://127.0.0.1:8000/          # → {"name":"SINAGERSAT API","version":"1.2.8",...}
 curl -s http://127.0.0.1:8000/health   # → {"status":"ok"}
 
 # Externo (vía dominio)
-curl -s https://midominio.com/          # → {"name":"SINAGERSAT API","version":"1.2.7",...}
+curl -s https://midominio.com/          # → {"name":"SINAGERSAT API","version":"1.2.8",...}
 curl -s https://midominio.com/health    # → {"status":"ok"}
 curl -s https://midominio.com/docs      # → Swagger UI
 ```

@@ -1,6 +1,6 @@
 # SINAGERSAT API — Despliegue y Documentación
 
-Guía completa de la API REST v1.2.7. Incluye despliegue, endpoints, autenticación, roles, permisos y ejemplos.
+Guía completa de la API REST v1.2.8. Incluye despliegue, endpoints, autenticación, roles, permisos y ejemplos.
 
 ---
 
@@ -160,9 +160,14 @@ La API tiene ~170 endpoints organizados en 6 módulos.
 │   ├── GET/POST /categorias
 │   └── GET/PUT/DELETE /categorias/{id}
 │
+│   # Todos los GET de reportes incluyen:
+│   #  • "categorias": [ {id_categoria, nombre, descripcion, orden}, ... ]
+│   #  • "usuario":    perfil completo del que registró (con rol y geografía anidados)
+│
 ├── usuarios/                  # Gestión de usuarios (🔒 token)
 │   ├── GET/POST /
-│   ├── GET/PUT/DELETE /{id}
+│   ├── GET/PUT/DELETE /{id}    # ✏️ GET/PUT de tu propio id = "mi perfil" (PUT sin contraseña)
+│   ├── PUT /{id}/cuenta        # 🔒 Solo admin: contraseña, rol, estado (SISTEMA UPDATE)
 │   ├── GET/POST /roles
 │   ├── GET/PUT/DELETE /roles/{id}
 │   ├── PUT /roles/{id}/permisos     # Batch: reemplaza todos los permisos
@@ -183,7 +188,58 @@ La API tiene ~170 endpoints organizados en 6 módulos.
 
 ---
 
-## 5. Autenticación y Roles
+## 5. Edición de perfil (auto-edición)
+
+Cualquier usuario autenticado puede ver y editar **su propio perfil** sin permiso del
+módulo SISTEMA usando `GET` / `PUT /api/v1/usuarios/{id}` con su propio `id`
+(el id se obtiene del token, o de `GET /api/v1/auth/mis-permisos`).
+
+Campos editables en auto-edición (incluye toda la geografía):
+
+```json
+{
+  "nombre": "Luis Quenta",
+  "celular": "76543210",
+  "carnet": "7051296",
+  "comunidad": "Challapata",
+  "correo": "luis@example.com",
+  "cargo": "Responsable local",
+  "id_departamento": 2,
+  "id_provincia": 201,
+  "id_municipio": 20101
+}
+```
+
+- **El `PUT /usuarios/{id}` NO acepta `contrasena` ni `id_rol` ni `activo`**
+  (el esquema los rechaza con 422). La contraseña se cambia solo en
+  `POST /api/v1/auth/cambiar-contrasena` (el usuario ya está logueado).
+- La geografía se valida: la provincia debe pertenecer al departamento y el municipio a
+  la provincia/departamento (400 si son inconsistentes). Para limpiar la geografía,
+  enviar `null` en los tres campos.
+- Para editar el perfil de **otro** usuario se requiere permiso SISTEMA `UPDATE`
+  (solo admin/superadmin), con el mismo cuerpo de perfil.
+
+### Administración de cuenta (solo SISTEMA UPDATE)
+
+`PUT /api/v1/usuarios/{id}/cuenta` permite a admin/superadmin modificar credenciales,
+rol y estado de cualquier usuario:
+
+```json
+{ "contrasena": "NuevaClave", "id_rol": 6, "activo": false }
+```
+
+Ejemplo:
+
+```bash
+curl -X PUT http://localhost:8000/api/v1/usuarios/7 \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id_departamento":2,"id_provincia":201,"id_municipio":20101}'
+```
+
+---
+
+## 6. Autenticación y Roles
 
 ### Login
 
@@ -259,6 +315,16 @@ Desde Swagger UI: click **Authorize** → pegar token.
 
 ## 6. Migraciones de Base de Datos
 
+### Migración v1.2.8
+
+Incluye la migración **v1.3.0** de BD (nombrada así por el esquema de versionado de la base) y cambios de API:
+
+- **Geografía en perfil de usuario**: `shared.provincia` y `shared.municipio` ahora tienen claves únicas compuestas; `usuarios.usuario` valida que departamento→provincia→municipio sean coherentes (FKs compuestas en `database/migration_v1.3.0.sql`).
+- **Edición de perfil**: `PUT /usuarios/{id}` sin contraseña (autocontrol por token); nuevo `PUT /usuarios/{id}/cuenta` (solo `SISTEMA UPDATE`).
+- **REA — categorías**: `GET /reportes`, `GET /reportes/mis-reportes` y `GET /reportes/mis-resumen` ahora devuelven `categorias` (objetos completos desde `rea.reporte_afectacion`), igual que el detalle.
+- **REA — nodo `usuario`**: todos los GET de reportes (y las respuestas de POST/PUT) incluyen un nodo anidado `usuario` con el perfil completo del que registró el reporte (id, nombre, carnet, celular, correo, cargo, rol y geografía anidados).
+- Versión de API alineada a `1.2.8`.
+
 ### Migración v1.2.7
 
 No requiere cambios en esquema de BD. Solo cambios en lógica de API:
@@ -274,7 +340,8 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 \
   -f database/migration_v1.2.0.sql \
   -f database/migration_v1.2.1.sql \
   -f database/migration_v1.2.3.sql \
-  -f database/migration_v1.2.5_permisos.sql
+  -f database/migration_v1.2.5_permisos.sql \
+  -f database/migration_v1.3.0.sql
 ```
 
 ---
@@ -428,7 +495,7 @@ ls -la uploads/reports/
 ```
 SINAGER-SAT/
 ├── api/                     # Código fuente FastAPI
-│   ├── main.py              # v1.2.7 — Entry point + Swagger custom
+│   ├── main.py              # v1.2.8 — Entry point + Swagger custom
 │   ├── config.py            # Config (.env)
 │   ├── database.py          # SQLAlchemy connection
 │   ├── dependencies.py      # JWT auth (incluye id_municipio)
@@ -446,10 +513,13 @@ SINAGER-SAT/
 ├── stop.sh                  # Detener todo
 ├── database/
 │   ├── backup_v1.2.7.sql    # Backup completo (Jul 2026)
+│   ├── backup_v1.2.8.sql    # Backup completo v1.2.8 (Ago 2026)
 │   ├── migration_v1.2.0.sql
 │   ├── migration_v1.2.1.sql
 │   ├── migration_v1.2.3.sql
 │   ├── migration_v1.2.5_permisos.sql
+│   ├── migration_v1.2.7.sql
+│   ├── migration_v1.3.0.sql    # FKs compuestas geografía en usuarios.usuario
 │   └── servers.json         # Config pgAdmin4
 ├── deploy/
 │   ├── desplegar_todo.sh    # Despliegue completo

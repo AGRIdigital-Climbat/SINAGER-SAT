@@ -38,6 +38,30 @@ class ReporteCategoria(BaseModel):
     descripcion: str | None = None
     orden: int | None = None
 
+class ReporteRol(BaseModel):
+    id_rol: int | None = None
+    nombre: str | None = None
+    descripcion: str | None = None
+
+class ReporteUsuario(BaseModel):
+    id_usuario: int
+    usuario: str
+    nombre: str
+    celular: str | None = None
+    carnet: str | None = None
+    comunidad: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
+    activo: bool | None = None
+    id_rol: int | None = None
+    rol: ReporteRol | None = None
+    id_departamento: int | None = None
+    id_provincia: int | None = None
+    id_municipio: int | None = None
+    departamento: ReporteDepartamento | None = None
+    provincia: ReporteProvincia | None = None
+    municipio: ReporteMunicipio | None = None
+
 
 class ReporteEventoCreate(BaseModel):
     id_usuario: int
@@ -93,6 +117,7 @@ class ReporteEventoResponse(BaseModel):
     tipo_evento: ReporteTipoEvento | None = None
     estado: ReporteEstado | None = None
     categorias: list[ReporteCategoria] | None = None
+    usuario: ReporteUsuario | None = None
 
     class Config:
         from_attributes = True

@@ -189,6 +189,16 @@ else
     warn "Archivo migration_v1.2.5_permisos.sql no encontrado"
 fi
 
+# Ejecutar migración v1.2.7
+MIGRATION_127="$PROJECT_DIR/database/migration_v1.2.7.sql"
+if [ -f "$MIGRATION_127" ]; then
+    echo "  Ejecutando migración v1.2.7..."
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_127" 2>/dev/null || true
+    ok "Migración v1.2.7 ejecutada"
+else
+    warn "Archivo migration_v1.2.7.sql no encontrado"
+fi
+
 ok "Migraciones completadas"
 
 # --------------------------------------------------

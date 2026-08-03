@@ -1,4 +1,4 @@
-# SINAGERSAT — API REST v1.2.7
+# SINAGERSAT — API REST v1.2.8
 
 Sistema Nacional de Alerta Temprana y Gestión de Riesgos. API con módulos EDAN, REA, geografía, usuarios, y sistema completo de permisos RBAC.
 
