@@ -250,9 +250,26 @@ def listar_auditoria(
 # ──────────────────────────────────────────────
 
 @router.get("/", tags=[TAG_USR], responses={200: {"model": SuccessResponse}})
-def listar_usuarios(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), _user=Depends(module_permiso("SISTEMA"))):
-    items = service.get_usuarios(db, skip, limit)
-    return SuccessResponse(message="Usuarios listados correctamente", data=items, total=len(items))
+def listar_usuarios(
+    id_departamento: int | None = Query(None, description="Filtrar por departamento"),
+    id_provincia: int | None = Query(None, description="Filtrar por provincia"),
+    id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+    id_rol: int | None = Query(None, description="Filtrar por rol"),
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _user=Depends(module_permiso("SISTEMA")),
+):
+    geografia = [f for f in (id_departamento, id_provincia, id_municipio) if f is not None]
+    if len(geografia) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se permite un filtro de geografía a la vez (departamento, provincia o municipio)",
+        )
+    items, total = service.get_usuarios(
+        db, id_departamento, id_provincia, id_municipio, id_rol, skip, limit,
+    )
+    return SuccessResponse(message="Usuarios listados correctamente", data=items, total=total)
 
 
 @router.get("/{id}", tags=[TAG_USR], responses={200: {"model": SuccessResponse}})

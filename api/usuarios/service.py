@@ -49,12 +49,33 @@ def _build_usuario(row):
 
 # ── USUARIOS ──
 
-def get_usuarios(db: Session, skip: int = 0, limit: int = 50):
+def get_usuarios(db: Session, id_departamento: int | None = None, id_provincia: int | None = None,
+                 id_municipio: int | None = None, id_rol: int | None = None,
+                 skip: int = 0, limit: int = 50):
+    conditions = []
+    params = {}
+    if id_departamento is not None:
+        conditions.append("u.id_departamento = :dep")
+        params["dep"] = id_departamento
+    if id_provincia is not None:
+        conditions.append("u.id_provincia = :prov")
+        params["prov"] = id_provincia
+    if id_municipio is not None:
+        conditions.append("u.id_municipio = :mun")
+        params["mun"] = id_municipio
+    if id_rol is not None:
+        conditions.append("u.id_rol = :rol")
+        params["rol"] = id_rol
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM usuarios.usuario u{where}"),
+        params,
+    ).scalar()
     rows = db.execute(
-        text(f"{SELECT_USUARIO} ORDER BY u.id_usuario LIMIT :limit OFFSET :skip"),
-        {"limit": limit, "skip": skip},
+        text(f"{SELECT_USUARIO}{where} ORDER BY u.id_usuario LIMIT :limit OFFSET :skip"),
+        {**params, "limit": limit, "skip": skip},
     ).mappings().all()
-    return [_build_usuario(r) for r in rows]
+    return [_build_usuario(r) for r in rows], total
 
 
 def get_usuario(db: Session, id: int):

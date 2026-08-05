@@ -166,6 +166,9 @@ La API tiene ~170 endpoints organizados en 6 módulos.
 │
 ├── usuarios/                  # Gestión de usuarios (🔒 token)
 │   ├── GET/POST /
+│   │     # GET / soporta filtros (a lo sumo uno de geografía, + opcional id_rol):
+│   │     #   ?id_departamento=2 | ?id_provincia=201 | ?id_municipio=20101 | ?id_rol=7
+│   │     #   combos válidos: geografía + id_rol (ej. ?id_municipio=20101&id_rol=7)
 │   ├── GET/PUT/DELETE /{id}    # ✏️ GET/PUT de tu propio id = "mi perfil" (PUT sin contraseña)
 │   ├── PUT /{id}/cuenta        # 🔒 Solo admin: contraseña, rol, estado (SISTEMA UPDATE)
 │   ├── GET/POST /roles
@@ -323,6 +326,7 @@ Incluye la migración **v1.3.0** de BD (nombrada así por el esquema de versiona
 - **Edición de perfil**: `PUT /usuarios/{id}` sin contraseña (autocontrol por token); nuevo `PUT /usuarios/{id}/cuenta` (solo `SISTEMA UPDATE`).
 - **REA — categorías**: `GET /reportes`, `GET /reportes/mis-reportes` y `GET /reportes/mis-resumen` ahora devuelven `categorias` (objetos completos desde `rea.reporte_afectacion`), igual que el detalle.
 - **REA — nodo `usuario`**: todos los GET de reportes (y las respuestas de POST/PUT) incluyen un nodo anidado `usuario` con el perfil completo del que registró el reporte (id, nombre, carnet, celular, correo, cargo, rol y geografía anidados).
+- **Usuarios — filtros en listado**: `GET /usuarios/` acepta `id_departamento`, `id_provincia`, `id_municipio` e `id_rol`. Regla: a lo sumo **un** filtro de geografía a la vez (dos o más → `400`), opcionalmente acompañado de `id_rol`. `total` ahora es el conteo real (`COUNT(*)`), correcto con paginación.
 - Versión de API alineada a `1.2.8`.
 
 ### Migración v1.2.7
@@ -414,6 +418,22 @@ curl -X POST http://localhost:8000/api/v1/edan/ \
     "fecha_llenado": "2026-07-18",
     "fecha_evento": "2026-07-15"
   }'
+```
+
+### Consultar usuarios con filtros
+
+```bash
+# Solo municipio
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/usuarios/?id_municipio=20101"
+
+# Municipio + rol (combo válido)
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/usuarios/?id_municipio=20101&id_rol=7"
+
+# Dos geografías a la vez → HTTP 400
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/usuarios/?id_departamento=2&id_provincia=201"
 ```
 
 ### Consultar geografía
