@@ -35,7 +35,7 @@ Una sola base de datos `db_sinagersat` con 6 esquemas que separan responsabilida
 PostgreSQL: db_sinagersat
 ├── shared   → Geografía (catálogos INE: departamento, provincia, municipio)
 ├── usuarios → Gestión de usuarios (cuentas, roles, sesiones, permisos, auditoría)
-├── edan     → Formularios EDAN (24 tablas: cabecera + localidades anidadas)
+├── edan     → Formularios EDAN (20 tablas: cabecera + localidades anidadas)
 ├── rea      → Reportes de Eventos Adversos (4 tablas)
 ├── rida     → (vacío - futuro sistema RIDA)
 ├── sinb     → (vacío - futuro sistema SINB)
