@@ -1,550 +1,332 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-# ── EDAN PRINCIPAL ──
+# ============================================================================
+#  MODELOS ANIDADOS DEL FORMULARIO EDAN
+#  Espejo de lib/models/edan.dart (nombres JSON exactos de la app).
+# ============================================================================
 
-class EdanDepartamento(BaseModel):
-    id: int
-    codigo_ine: str | None = None
-    nombre: str | None = None
+class GrupoEtarioDetalle(BaseModel):
+    rango: str = ''
+    fallecidos: int = 0
+    heridos: int = 0
+    desaparecidos: int = 0
+    observaciones: str = ''
 
-class EdanMunicipio(BaseModel):
-    id: int
-    codigo_ine: str | None = None
-    nombre: str | None = None
+
+class ImpactoPoblacion(BaseModel):
+    grupo_etario: str = ''
+    fallecidos: int = 0
+    heridos: int = 0
+    desaparecidos: int = 0
+    observaciones: str = ''
+    grupos_etarios: list[GrupoEtarioDetalle] = []
+
+
+class PrimeraRespuesta(BaseModel):
+    busqueda: bool = False
+    salvamento: bool = False
+    evacuacion: bool = False
+    observaciones: str = ''
+
+
+class EstablecimientoSalud(BaseModel):
+    nombre_establecimiento: str = ''
+    comunidad: str = ''
+    nivel_atencion: str = ''
+    dano_parcial: bool = False
+    dano_total: bool = False
+    medicos_afectados: int = 0
+    enfermeras_afectados: int = 0
+    otros_afectados: int = 0
+
+
+class NecesidadSalud(BaseModel):
+    botiquines: bool = False
+    numero_personas: int = 0
+    otras_necesidades: str = ''
+    observaciones: str = ''
+
+
+class DanoVial(BaseModel):
+    via_puente: str = ''
+    tramo: str = ''
+    dano_parcial: bool = False
+    dano_total: bool = False
+    km_danio: float | None = 0
+    necesidades_inmediatas: str = ''
+    observaciones: str = ''
+
+
+class DanoInfraPublica(BaseModel):
+    comunidad: str = ''
+    tipo_estructura: str = ''
+    dano_parcial: bool = False
+    dano_total: bool = False
+    observaciones: str = ''
+
+
+class ServicioBasicoDetalle(BaseModel):
+    tipo: str = ''
+    afectado: bool = False
+    dano_parcial: bool = False
+    dano_total: bool = False
+    necesidades_inmediatas: str = ''
+    observaciones: str = ''
+
+
+class UnidadEducativa(BaseModel):
+    nombre_establecimiento: str = ''
+    comunidad: str = ''
+    dano_parcial: bool = False
+    dano_total: bool = False
+    suspension_clases: bool | None = None
+    perdida_material: bool | None = None
+    funciona_albergue: bool | None = None
+    estudiantes: int = 0
+    profesores: int = 0
+    administrativos: int = 0
+    observaciones: str = ''
+
+
+class DanoVivienda(BaseModel):
+    comunidad: str = ''
+    dano_parcial: int = 0
+    dano_total: int = 0
+    necesidades_inmediatas: str = ''
+    observaciones: str = ''
+
+
+class DanoAgricultura(BaseModel):
+    tipo_cultivo: str = ''
+    id_cultivo: int | None = None
+    hectareas_afectadas: int = 0
+    hectareas_perdidas: int = 0
+    necesidades_inmediatas: str = ''
+    observaciones: str = ''
+
+
+class DanoPecuario(BaseModel):
+    especie: str = ''
+    id_especie: int | None = None
+    raza: str = ''
+    animales_afectados: int = 0
+    animales_muertos: int = 0
+    necesidades_inmediatas: str = ''
+
+
+class InfraProductiva(BaseModel):
+    tipo: str = ''
+    dano_parcial: int = 0
+    dano_total: int = 0
+
+
+class GrupoVulnerable(BaseModel):
+    mujeres: int = 0
+    hombres: int = 0
+    apoyo_psicologico: bool | None = None
+    reposicion_documentos: bool | None = None
+    observaciones: str = ''
+
+
+class Vulnerables(BaseModel):
+    ninos: GrupoVulnerable = GrupoVulnerable()
+    adolescentes: GrupoVulnerable = GrupoVulnerable()
+    mujeres_lactantes: GrupoVulnerable = GrupoVulnerable()
+    mujeres_embarazadas: GrupoVulnerable = GrupoVulnerable()
+    adultos_mayores: GrupoVulnerable = GrupoVulnerable()
+    personas_discapacidad: GrupoVulnerable = GrupoVulnerable()
+    personas_enfermedad: GrupoVulnerable = GrupoVulnerable()
+
+
+class Proteccion(BaseModel):
+    vulnerables: Vulnerables = Vulnerables()
+
+
+class NecesidadHumanitaria(BaseModel):
+    alimentos: bool = False
+    refugio_vivienda: bool = False
+    ropa_cama: bool = False
+    articulos_higiene: bool = False
+    articulos_cocina: bool = False
+    prendas_vestir: bool = False
+    herramientas: bool = False
+    almacenamiento_agua: bool = False
+    banos: bool = False
+    obs_alimentos: str = ''
+    obs_refugio_vivienda: str = ''
+    obs_ropa_cama: str = ''
+    obs_articulos_higiene: str = ''
+    obs_articulos_cocina: str = ''
+    obs_prendas_vestir: str = ''
+    obs_herramientas: str = ''
+    obs_almacenamiento_agua: str = ''
+    obs_banos: str = ''
+
+
+class Responsable(BaseModel):
+    nombre: str = ''
+    cargo: str = ''
+    fono: str = ''
+    correo: str = ''
+
+
+class LocalidadCreate(BaseModel):
+    tipo_localidad: str = ''
+    nombre: str = ''
+    imp_poblacion: bool = False
+    imp_salud: bool = False
+    imp_infraestructura: bool = False
+    imp_servicios: bool = False
+    imp_educacion: bool = False
+    imp_vivienda: bool = False
+    imp_agropecuario: bool = False
+    imp_proteccion: bool = False
+    imp_necesidades: bool = False
+    impacto_poblacion: ImpactoPoblacion | None = None
+    necesidad_primera_respuesta: PrimeraRespuesta | None = None
+    establecimientos_salud: list[EstablecimientoSalud] = []
+    necesidad_salud: NecesidadSalud | None = None
+    danos_viales: list[DanoVial] = []
+    danos_infra_publica: list[DanoInfraPublica] = []
+    servicios_basicos: list[ServicioBasicoDetalle] = []
+    unidades_educativas: list[UnidadEducativa] = []
+    danos_vivienda: list[DanoVivienda] = []
+    danos_agricultura: list[DanoAgricultura] = []
+    danos_pecuarios: list[DanoPecuario] = []
+    infra_productiva: list[InfraProductiva] = []
+    proteccion: Proteccion | None = None
+    necesidad_humanitaria: NecesidadHumanitaria | None = None
+
 
 class EdanCreate(BaseModel):
+    id_local: int | None = None
+    id_server: int | None = None
     codigo_edan: str | None = None
+    id_usuario: int | None = None
     id_departamento: int | None = None
+    id_provincia: int | None = None
     id_municipio: int | None = None
-    nombre_alcalde: str | None = None
-    telefono_alcalde: str | None = None
+    departamento_nombre: str | None = None
+    provincia_nombre: str | None = None
+    municipio_nombre: str | None = None
+    nombre_alcalde: str = ''
+    fono_alcalde: str = ''
     fecha_llenado: str | None = None
     fecha_evento: str | None = None
     hora_evento: str | None = None
-    localidades_afectadas: int = 0
     total_poblacion_afectada: int = 0
     total_familias_afectadas: int = 0
     total_familias_damnificadas: int = 0
-    nombre_responsable: str | None = None
-    cargo_responsable: str | None = None
-    telefono_responsable: str | None = None
-    email_responsable: str | None = None
-    usuario_registro: int | None = None
+    id_tipo_evento: int | None = None
+    tipo_evento_nombre: str | None = None
+    localidades: list[LocalidadCreate] = []
+    responsable: Responsable | None = None
+    id_estado: int = 1
+    estado: str = 'borrador'
+    sincronizado: bool = False
+    pendiente_eliminacion: bool = False
+    pendiente_actualizacion: bool = False
+    es_borrador: bool = False
     id_reporte_rea: int | None = None
     fotografia: str | None = None
 
 
 class EdanUpdate(BaseModel):
+    id_server: int | None = None
     codigo_edan: str | None = None
+    id_usuario: int | None = None
     id_departamento: int | None = None
+    id_provincia: int | None = None
     id_municipio: int | None = None
     nombre_alcalde: str | None = None
-    telefono_alcalde: str | None = None
+    fono_alcalde: str | None = None
     fecha_llenado: str | None = None
     fecha_evento: str | None = None
     hora_evento: str | None = None
-    localidades_afectadas: int | None = None
     total_poblacion_afectada: int | None = None
     total_familias_afectadas: int | None = None
     total_familias_damnificadas: int | None = None
-    nombre_responsable: str | None = None
-    cargo_responsable: str | None = None
-    telefono_responsable: str | None = None
-    email_responsable: str | None = None
+    id_tipo_evento: int | None = None
+    id_estado: int | None = None
+    estado: str | None = None
+    sincronizado: bool | None = None
+    pendiente_eliminacion: bool | None = None
+    pendiente_actualizacion: bool | None = None
+    es_borrador: bool | None = None
+    responsable: Responsable | None = None
     id_reporte_rea: int | None = None
     fotografia: str | None = None
 
 
-class EdanResponse(BaseModel):
-    id_edan: int
-    codigo_edan: str | None = None
-    id_departamento: int | None = None
-    id_municipio: int | None = None
-    nombre_alcalde: str | None = None
-    telefono_alcalde: str | None = None
-    fecha_llenado: str | None = None
-    fecha_evento: str | None = None
-    hora_evento: str | None = None
-    localidades_afectadas: int | None = None
-    total_poblacion_afectada: int | None = None
-    total_familias_afectadas: int | None = None
-    total_familias_damnificadas: int | None = None
-    nombre_responsable: str | None = None
-    cargo_responsable: str | None = None
-    telefono_responsable: str | None = None
-    email_responsable: str | None = None
-    usuario_registro: int | None = None
-    id_reporte_rea: int | None = None
-    fotografia: str | None = None
-    departamento: EdanDepartamento | None = None
-    municipio: EdanMunicipio | None = None
+class LocalidadUpdate(BaseModel):
+    tipo_localidad: str = ''
+    nombre: str = ''
+    imp_poblacion: bool = False
+    imp_salud: bool = False
+    imp_infraestructura: bool = False
+    imp_servicios: bool = False
+    imp_educacion: bool = False
+    imp_vivienda: bool = False
+    imp_agropecuario: bool = False
+    imp_proteccion: bool = False
+    imp_necesidades: bool = False
+    impacto_poblacion: ImpactoPoblacion | None = None
+    necesidad_primera_respuesta: PrimeraRespuesta | None = None
+    establecimientos_salud: list[EstablecimientoSalud] | None = None
+    necesidad_salud: NecesidadSalud | None = None
+    danos_viales: list[DanoVial] | None = None
+    danos_infra_publica: list[DanoInfraPublica] | None = None
+    servicios_basicos: list[ServicioBasicoDetalle] | None = None
+    unidades_educativas: list[UnidadEducativa] | None = None
+    danos_vivienda: list[DanoVivienda] | None = None
+    danos_agricultura: list[DanoAgricultura] | None = None
+    danos_pecuarios: list[DanoPecuario] | None = None
+    infra_productiva: list[InfraProductiva] | None = None
+    proteccion: Proteccion | None = None
+    necesidad_humanitaria: NecesidadHumanitaria | None = None
 
-    class Config:
-        from_attributes = True
 
-
-# ── CATÁLOGOS ──
+# ============================================================================
+#  CATÁLOGOS
+# ============================================================================
 
 class TipoEventoCreate(BaseModel):
     nombre: str
     descripcion: str | None = None
 
+
 class TipoEventoUpdate(BaseModel):
     nombre: str | None = None
     descripcion: str | None = None
+
 
 class TipoEventoResponse(BaseModel):
     id_tipo_evento: int
     nombre: str
     descripcion: str | None = None
+
     class Config:
         from_attributes = True
 
 
-class GrupoEtarioCreate(BaseModel):
+class EstadoEdanCreate(BaseModel):
     nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+
+
+class EstadoEdanUpdate(BaseModel):
+    nombre: str | None = None
     descripcion: str | None = None
     orden: int | None = None
 
-class GrupoEtarioUpdate(BaseModel):
-    nombre: str | None = None
-    descripcion: str | None = None
-    orden: int | None = None
 
-class GrupoEtarioResponse(BaseModel):
-    id_grupo_etario: int
+class EstadoEdanResponse(BaseModel):
+    id_estado: int
     nombre: str
     descripcion: str | None = None
-    orden: int | None = None
-    class Config:
-        from_attributes = True
+    orden: int = 0
 
-
-class ServicioBasicoCreate(BaseModel):
-    nombre: str
-    descripcion: str | None = None
-
-class ServicioBasicoUpdate(BaseModel):
-    nombre: str | None = None
-    descripcion: str | None = None
-
-class ServicioBasicoResponse(BaseModel):
-    id_servicio_basico: int
-    nombre: str
-    descripcion: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class CategoriaProteccionCreate(BaseModel):
-    nombre: str
-    descripcion: str | None = None
-
-class CategoriaProteccionUpdate(BaseModel):
-    nombre: str | None = None
-    descripcion: str | None = None
-
-class CategoriaProteccionResponse(BaseModel):
-    id_categoria_proteccion: int
-    nombre: str
-    descripcion: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class AyudaHumanitariaCreate(BaseModel):
-    nombre: str
-    descripcion: str | None = None
-
-class AyudaHumanitariaUpdate(BaseModel):
-    nombre: str | None = None
-    descripcion: str | None = None
-
-class AyudaHumanitariaResponse(BaseModel):
-    id_ayuda_humanitaria: int
-    nombre: str
-    descripcion: str | None = None
-    class Config:
-        from_attributes = True
-
-
-# ── SUB-TABLAS ──
-
-class PoblacionGrupoGrupoEtario(BaseModel):
-    id_grupo_etario: int
-    nombre: str | None = None
-    descripcion: str | None = None
-
-class PoblacionGrupoCreate(BaseModel):
-    id_edan: int
-    id_grupo_etario: int
-    fallecidos: int = 0
-    heridos: int = 0
-    desaparecidos: int = 0
-    observaciones: str | None = None
-
-class PoblacionGrupoResponse(BaseModel):
-    id_poblacion_grupo: int
-    id_edan: int
-    id_grupo_etario: int
-    fallecidos: int | None = None
-    heridos: int | None = None
-    desaparecidos: int | None = None
-    observaciones: str | None = None
-    grupo_etario: PoblacionGrupoGrupoEtario | None = None
-    class Config:
-        from_attributes = True
-
-
-class EdanTipoEventoTipoEvento(BaseModel):
-    id_tipo_evento: int
-    nombre: str | None = None
-    descripcion: str | None = None
-
-class EdanTipoEventoCreate(BaseModel):
-    id_edan: int
-    id_tipo_evento: int
-
-class EdanTipoEventoResponse(BaseModel):
-    id_tipo_evento_edan: int
-    id_edan: int
-    id_tipo_evento: int
-    tipo_evento: EdanTipoEventoTipoEvento | None = None
-    class Config:
-        from_attributes = True
-
-
-class PrimeraRespuestaCreate(BaseModel):
-    id_edan: int
-    busqueda_requerimiento: bool | None = None
-    busqueda_observaciones: str | None = None
-    salvamento_requerimiento: bool | None = None
-    salvamento_observaciones: str | None = None
-    evacuacion_requerimiento: bool | None = None
-    evacuacion_observaciones: str | None = None
-    otros_requerimiento: bool | None = None
-    otros_observaciones: str | None = None
-    observaciones_generales: str | None = None
-
-class PrimeraRespuestaResponse(BaseModel):
-    id_primera_respuesta: int
-    id_edan: int
-    busqueda_requerimiento: bool | None = None
-    busqueda_observaciones: str | None = None
-    salvamento_requerimiento: bool | None = None
-    salvamento_observaciones: str | None = None
-    evacuacion_requerimiento: bool | None = None
-    evacuacion_observaciones: str | None = None
-    otros_requerimiento: bool | None = None
-    otros_observaciones: str | None = None
-    observaciones_generales: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class SaludEstablecimientoCreate(BaseModel):
-    id_edan: int
-    nombre_establecimiento: str
-    localidad_comunidad: str | None = None
-    nivel_atencion: int | None = None
-    dano_parcial: bool | None = None
-    dano_total: bool | None = None
-    personal_medicos: int | None = None
-    personal_enfermeras: int | None = None
-    personal_otros: int | None = None
-    observaciones: str | None = None
-
-class SaludEstablecimientoResponse(BaseModel):
-    id_salud_establecimiento: int
-    id_edan: int
-    nombre_establecimiento: str
-    localidad_comunidad: str | None = None
-    nivel_atencion: int | None = None
-    dano_parcial: bool | None = None
-    dano_total: bool | None = None
-    personal_medicos: int | None = None
-    personal_enfermeras: int | None = None
-    personal_otros: int | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class SaludNecesidadesCreate(BaseModel):
-    id_edan: int
-    botiquin_personas: int | None = None
-    otras_necesidades: str | None = None
-    observaciones: str | None = None
-
-class SaludNecesidadesResponse(BaseModel):
-    id_salud_necesidad: int
-    id_edan: int
-    botiquin_personas: int | None = None
-    otras_necesidades: str | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class InfraestructuraVialCreate(BaseModel):
-    id_edan: int
-    via_acceso_puentes: str | None = None
-    tramo: str | None = None
-    localidad_origen: str | None = None
-    localidad_destino: str | None = None
-    dano_parcial_km: float | None = None
-    dano_total_km: float | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-
-class InfraestructuraVialResponse(BaseModel):
-    id_infraestructura_vial: int
-    id_edan: int
-    via_acceso_puentes: str | None = None
-    tramo: str | None = None
-    localidad_origen: str | None = None
-    localidad_destino: str | None = None
-    dano_parcial_km: float | None = None
-    dano_total_km: float | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class InfraestructuraPublicaCreate(BaseModel):
-    id_edan: int
-    localidad_comunidad: str | None = None
-    tipo_estructura: str | None = None
-    dano_parcial: int | None = None
-    dano_total: int | None = None
-    observaciones: str | None = None
-
-class InfraestructuraPublicaResponse(BaseModel):
-    id_infraestructura_publica: int
-    id_edan: int
-    localidad_comunidad: str | None = None
-    tipo_estructura: str | None = None
-    dano_parcial: int | None = None
-    dano_total: int | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class ServicioBasicoEdanServicioBasico(BaseModel):
-    id_servicio_basico: int
-    nombre: str | None = None
-
-class ServicioBasicoEdanCreate(BaseModel):
-    id_edan: int
-    id_servicio_basico: int
-    dano_parcial: bool | None = None
-    dano_total: bool | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-
-class ServicioBasicoEdanResponse(BaseModel):
-    id_servicio_basico_edan: int
-    id_edan: int
-    id_servicio_basico: int
-    dano_parcial: bool | None = None
-    dano_total: bool | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-    servicio_basico: ServicioBasicoEdanServicioBasico | None = None
-    class Config:
-        from_attributes = True
-
-
-class EducacionDanoCreate(BaseModel):
-    id_edan: int
-    nombre_establecimiento: str
-    comunidad: str | None = None
-    dano_parcial: bool | None = None
-    dano_total: bool | None = None
-    suspension_clases: bool | None = None
-    perdida_material: bool | None = None
-    funciona_albergue: bool | None = None
-    observaciones: str | None = None
-
-class EducacionDanoResponse(BaseModel):
-    id_educacion_dano: int
-    id_edan: int
-    nombre_establecimiento: str
-    comunidad: str | None = None
-    dano_parcial: bool | None = None
-    dano_total: bool | None = None
-    suspension_clases: bool | None = None
-    perdida_material: bool | None = None
-    funciona_albergue: bool | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class EducacionAfectacionCreate(BaseModel):
-    id_edan: int
-    id_educacion_dano: int | None = None
-    nombre_establecimiento: str | None = None
-    estudiantes_afectados: int | None = None
-    profesores_afectados: int | None = None
-    administrativos_afectados: int | None = None
-    total_afectados: int | None = None
-    observaciones: str | None = None
-
-class EducacionAfectacionResponse(BaseModel):
-    id_educacion_afectacion: int
-    id_edan: int
-    id_educacion_dano: int | None = None
-    nombre_establecimiento: str | None = None
-    estudiantes_afectados: int | None = None
-    profesores_afectados: int | None = None
-    administrativos_afectados: int | None = None
-    total_afectados: int | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class ViviendaCreate(BaseModel):
-    id_edan: int
-    comunidad: str | None = None
-    viviendas_dano_parcial: int | None = None
-    viviendas_dano_total: int | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-
-class ViviendaResponse(BaseModel):
-    id_vivienda: int
-    id_edan: int
-    comunidad: str | None = None
-    viviendas_dano_parcial: int | None = None
-    viviendas_dano_total: int | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class AgriculturaCreate(BaseModel):
-    id_edan: int
-    tipo_cultivo: str | None = None
-    hectareas_afectadas: float | None = None
-    hectareas_perdidas: float | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-
-class AgriculturaResponse(BaseModel):
-    id_agricultura: int
-    id_edan: int
-    tipo_cultivo: str | None = None
-    hectareas_afectadas: float | None = None
-    hectareas_perdidas: float | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class PecuariaCreate(BaseModel):
-    id_edan: int
-    tipo_especie: str | None = None
-    raza: str | None = None
-    animales_afectados: int | None = None
-    animales_muertos: int | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-
-class PecuariaResponse(BaseModel):
-    id_pecuaria: int
-    id_edan: int
-    tipo_especie: str | None = None
-    raza: str | None = None
-    animales_afectados: int | None = None
-    animales_muertos: int | None = None
-    necesidades_inmediatas: str | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class InfraProductivaCreate(BaseModel):
-    id_edan: int
-    tipo: str | None = None
-    dano_parcial: int | None = None
-    dano_total: int | None = None
-    observaciones: str | None = None
-
-class InfraProductivaResponse(BaseModel):
-    id_infra_productiva: int
-    id_edan: int
-    tipo: str | None = None
-    dano_parcial: int | None = None
-    dano_total: int | None = None
-    observaciones: str | None = None
-    class Config:
-        from_attributes = True
-
-
-class ProteccionCategoriaProteccion(BaseModel):
-    id_categoria_proteccion: int
-    nombre: str | None = None
-
-class ProteccionCreate(BaseModel):
-    id_edan: int
-    id_categoria_proteccion: int
-    mujeres: int | None = None
-    hombres: int | None = None
-    total: int | None = None
-    apoyo_psicosocial: bool | None = None
-    reposicion_documentos: bool | None = None
-    observaciones: str | None = None
-
-class ProteccionResponse(BaseModel):
-    id_proteccion: int
-    id_edan: int
-    id_categoria_proteccion: int
-    mujeres: int | None = None
-    hombres: int | None = None
-    total: int | None = None
-    apoyo_psicosocial: bool | None = None
-    reposicion_documentos: bool | None = None
-    observaciones: str | None = None
-    categoria_proteccion: ProteccionCategoriaProteccion | None = None
-    class Config:
-        from_attributes = True
-
-
-class AyudaHumanitariaEdanAyudaHumanitaria(BaseModel):
-    id_ayuda_humanitaria: int
-    nombre: str | None = None
-
-class AyudaHumanitariaEdanCreate(BaseModel):
-    id_edan: int
-    id_ayuda_humanitaria: int
-    requiere: bool | None = None
-    observaciones: str | None = None
-
-class AyudaHumanitariaEdanResponse(BaseModel):
-    id_ayuda_edan: int
-    id_edan: int
-    id_ayuda_humanitaria: int
-    requiere: bool | None = None
-    observaciones: str | None = None
-    ayuda_humanitaria: AyudaHumanitariaEdanAyudaHumanitaria | None = None
-    class Config:
-        from_attributes = True
-
-
-class ComunidadCreate(BaseModel):
-    id_edan: int
-    nombre_comunidad: str
-
-class ComunidadResponse(BaseModel):
-    id_comunidad: int
-    id_edan: int
-    nombre_comunidad: str
     class Config:
         from_attributes = True

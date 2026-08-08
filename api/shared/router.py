@@ -8,6 +8,8 @@ from .schemas import (
     DepartamentoCreate, DepartamentoUpdate, DepartamentoResponse,
     ProvinciaCreate, ProvinciaUpdate, ProvinciaResponse,
     MunicipioCreate, MunicipioUpdate, MunicipioResponse,
+    CultivoResponse,
+    PecuarioResponse,
 )
 from . import service
 
@@ -264,3 +266,57 @@ def obtener_municipio_geom(id: int, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="Municipio no encontrado")
     return JSONResponse(content=result)
+
+
+TAG_CULTIVOS = "Catálogos > Cultivos"
+
+
+@router.get("/cultivos/grupos", response_model=SuccessResponse, tags=[TAG_CULTIVOS])
+def listar_grupos_cultivo(db: Session = Depends(get_db)):
+    items = service.get_grupos_cultivo(db)
+    return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+
+@router.get("/cultivos", response_model=SuccessResponse, tags=[TAG_CULTIVOS])
+def listar_cultivos(
+    grupo: str | None = Query(None, description="Filtrar por grupo exacto (ej: Frutales)"),
+    q: str | None = Query(None, description="Buscar por nombre parcial (ej: maiz)"),
+    db: Session = Depends(get_db),
+):
+    items = service.get_cultivos(db, grupo, q)
+    return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+
+@router.get("/cultivos/{id}", response_model=SuccessResponse, tags=[TAG_CULTIVOS])
+def obtener_cultivo(id: int, db: Session = Depends(get_db)):
+    result = service.get_cultivo(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Cultivo no encontrado")
+    return SuccessResponse(message="Operación exitosa", data=result)
+
+
+TAG_PECUARIO = "Catálogos > Pecuaria"
+
+
+@router.get("/pecuario/grupos", response_model=SuccessResponse, tags=[TAG_PECUARIO])
+def listar_grupos_pecuario(db: Session = Depends(get_db)):
+    items = service.get_grupos_pecuario(db)
+    return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+
+@router.get("/pecuario", response_model=SuccessResponse, tags=[TAG_PECUARIO])
+def listar_pecuario(
+    grupo: str | None = Query(None, description="Filtrar por grupo exacto (ej: Camélidos)"),
+    q: str | None = Query(None, description="Buscar por nombre parcial (ej: trucha)"),
+    db: Session = Depends(get_db),
+):
+    items = service.get_pecuario(db, grupo, q)
+    return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+
+@router.get("/pecuario/{id}", response_model=SuccessResponse, tags=[TAG_PECUARIO])
+def obtener_pecuario(id: int, db: Session = Depends(get_db)):
+    result = service.get_pecuario_by_id(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Especie no encontrada")
+    return SuccessResponse(message="Operación exitosa", data=result)

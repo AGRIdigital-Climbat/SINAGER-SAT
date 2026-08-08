@@ -409,3 +409,68 @@ def validar_geografia(db: Session, id_departamento: int | None,
 
 
 # ── helpers ──
+
+# ── CULTIVOS (catálogo SIIP) ──
+
+def get_cultivos(db: Session, grupo: str | None = None, q: str | None = None):
+    sql = "SELECT id, nombre, grupo FROM shared.cultivo"
+    where = []
+    params = {}
+    if grupo:
+        where.append("grupo = :grupo")
+        params["grupo"] = grupo
+    if q:
+        where.append("nombre ILIKE :q")
+        params["q"] = f"%{q}%"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id"
+    rows = db.execute(text(sql), params).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def get_cultivo(db: Session, id: int):
+    row = db.execute(
+        text("SELECT id, nombre, grupo FROM shared.cultivo WHERE id = :id"), {"id": id}
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def get_grupos_cultivo(db: Session):
+    rows = db.execute(
+        text("SELECT grupo FROM shared.cultivo GROUP BY grupo ORDER BY grupo")
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+# ── PECUARIO (especies animales) ──
+
+def get_pecuario(db: Session, grupo: str | None = None, q: str | None = None):
+    sql = "SELECT id, nombre, grupo FROM shared.pecuario"
+    where = []
+    params = {}
+    if grupo:
+        where.append("grupo = :grupo")
+        params["grupo"] = grupo
+    if q:
+        where.append("nombre ILIKE :q")
+        params["q"] = f"%{q}%"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id"
+    rows = db.execute(text(sql), params).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def get_pecuario_by_id(db: Session, id: int):
+    row = db.execute(
+        text("SELECT id, nombre, grupo FROM shared.pecuario WHERE id = :id"), {"id": id}
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+def get_grupos_pecuario(db: Session):
+    rows = db.execute(
+        text("SELECT grupo FROM shared.pecuario GROUP BY grupo ORDER BY grupo")
+    ).mappings().all()
+    return [dict(r) for r in rows]

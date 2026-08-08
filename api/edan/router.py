@@ -1,237 +1,262 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..auth.permisos import module_permiso
-from ..response import SuccessResponse, ErrorResponse, MessageResponse
-from ..upload import save_upload_file
+from ..response import SuccessResponse, MessageResponse
 from . import service
 from .schemas import *
 
 router = APIRouter(prefix="/edan", dependencies=[Depends(module_permiso("EDAN"))])
 
+TAG_MAIN     = "EDAN > Formulario"
+TAG_LOCAL    = "EDAN > Localidades"
+TAG_REPORTES = "EDAN > Reportes"
+TAG_CATALOG  = "EDAN > Catálogos"
 
-# ──────────────────────────────────────────────
-#  Helpers
-# ──────────────────────────────────────────────
 
-def _catalog_crud_routes(parent, path, crud, Create, Update, Response, label, tag):
+def _db_error(exc: Exception) -> HTTPException:
+    """Traduce errores de BD a mensajes limpios sin filtrar el SQL."""
+    try:
+        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+    except AttributeError:
+        code = None
+    if code == "23503":
+        return HTTPException(status_code=400, detail="El registro referenciado no existe (violación de clave foránea)")
+    if code == "23505":
+        return HTTPException(status_code=400, detail="Ya existe un registro con el mismo valor (violación de unicidad)")
+    if code == "23502":
+        return HTTPException(status_code=400, detail="Falta un campo obligatorio")
+    return HTTPException(status_code=400, detail="Error al procesar la solicitud")
+
+
+def _filters_from_query(
+    q: str | None = None,
+    id_departamento: int | None = None,
+    id_provincia: int | None = None,
+    id_municipio: int | None = None,
+    id_tipo_evento: int | None = None,
+    id_estado: int | None = None,
+    estado: str | None = None,
+    id_usuario: int | None = None,
+    fecha_evento_desde: str | None = None,
+    fecha_evento_hasta: str | None = None,
+    fecha_creacion_desde: str | None = None,
+    fecha_creacion_hasta: str | None = None,
+    sincronizado: bool | None = None,
+    es_borrador: bool | None = None,
+    pendiente_eliminacion: bool | None = None,
+    pendiente_actualizacion: bool | None = None,
+    con_foto: bool | None = None,
+    sin_foto: bool | None = None,
+    imp_poblacion: bool | None = None,
+    imp_salud: bool | None = None,
+    imp_infraestructura: bool | None = None,
+    imp_servicios: bool | None = None,
+    imp_educacion: bool | None = None,
+    imp_vivienda: bool | None = None,
+    imp_agropecuario: bool | None = None,
+    imp_proteccion: bool | None = None,
+    imp_necesidades: bool | None = None,
+    tiene_agricultura: bool | None = None,
+    tiene_pecuario: bool | None = None,
+) -> dict:
+    return {
+        "q": q, "id_departamento": id_departamento, "id_provincia": id_provincia,
+        "id_municipio": id_municipio, "id_tipo_evento": id_tipo_evento,
+        "id_estado": id_estado, "estado": estado, "id_usuario": id_usuario,
+        "fecha_evento_desde": fecha_evento_desde,
+        "fecha_evento_hasta": fecha_evento_hasta,
+        "fecha_creacion_desde": fecha_creacion_desde,
+        "fecha_creacion_hasta": fecha_creacion_hasta,
+        "sincronizado": sincronizado, "es_borrador": es_borrador,
+        "pendiente_eliminacion": pendiente_eliminacion,
+        "pendiente_actualizacion": pendiente_actualizacion,
+        "con_foto": con_foto, "sin_foto": sin_foto,
+        "imp_poblacion": imp_poblacion, "imp_salud": imp_salud,
+        "imp_infraestructura": imp_infraestructura, "imp_servicios": imp_servicios,
+        "imp_educacion": imp_educacion, "imp_vivienda": imp_vivienda,
+        "imp_agropecuario": imp_agropecuario, "imp_proteccion": imp_proteccion,
+        "imp_necesidades": imp_necesidades,
+        "tiene_agricultura": tiene_agricultura, "tiene_pecuario": tiene_pecuario,
+    }
+
+
+def _filtros_dep(
+    q: str | None = Query(None),
+    id_departamento: int | None = Query(None),
+    id_provincia: int | None = Query(None),
+    id_municipio: int | None = Query(None),
+    id_tipo_evento: int | None = Query(None),
+    id_estado: int | None = Query(None),
+    estado: str | None = Query(None),
+    id_usuario: int | None = Query(None),
+    fecha_evento_desde: str | None = Query(None),
+    fecha_evento_hasta: str | None = Query(None),
+    fecha_creacion_desde: str | None = Query(None),
+    fecha_creacion_hasta: str | None = Query(None),
+    sincronizado: bool | None = Query(None),
+    es_borrador: bool | None = Query(None),
+    pendiente_eliminacion: bool | None = Query(None),
+    pendiente_actualizacion: bool | None = Query(None),
+    con_foto: bool | None = Query(None),
+    sin_foto: bool | None = Query(None),
+    imp_poblacion: bool | None = Query(None),
+    imp_salud: bool | None = Query(None),
+    imp_infraestructura: bool | None = Query(None),
+    imp_servicios: bool | None = Query(None),
+    imp_educacion: bool | None = Query(None),
+    imp_vivienda: bool | None = Query(None),
+    imp_agropecuario: bool | None = Query(None),
+    imp_proteccion: bool | None = Query(None),
+    imp_necesidades: bool | None = Query(None),
+    tiene_agricultura: bool | None = Query(None),
+    tiene_pecuario: bool | None = Query(None),
+):
+    return _filters_from_query(
+        q=q, id_departamento=id_departamento, id_provincia=id_provincia,
+        id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
+        id_estado=id_estado, estado=estado, id_usuario=id_usuario,
+        fecha_evento_desde=fecha_evento_desde, fecha_evento_hasta=fecha_evento_hasta,
+        fecha_creacion_desde=fecha_creacion_desde, fecha_creacion_hasta=fecha_creacion_hasta,
+        sincronizado=sincronizado, es_borrador=es_borrador,
+        pendiente_eliminacion=pendiente_eliminacion, pendiente_actualizacion=pendiente_actualizacion,
+        con_foto=con_foto, sin_foto=sin_foto,
+        imp_poblacion=imp_poblacion, imp_salud=imp_salud,
+        imp_infraestructura=imp_infraestructura, imp_servicios=imp_servicios,
+        imp_educacion=imp_educacion, imp_vivienda=imp_vivienda,
+        imp_agropecuario=imp_agropecuario, imp_proteccion=imp_proteccion,
+        imp_necesidades=imp_necesidades,
+        tiene_agricultura=tiene_agricultura, tiene_pecuario=tiene_pecuario,
+    )
+
+
+# ============================================================================
+#  REPORTES (antes de /{id} para no capturar rutas)
+# ============================================================================
+
+@router.get("/reportes/resumen", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def reporte_resumen(
+    f: dict = Depends(_filtros_dep),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.reporte_resumen(db, f)
+    return SuccessResponse(message="Resumen EDAN generado correctamente", data=data)
+
+
+@router.get("/reportes/geografico", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def reporte_geografico(
+    f: dict = Depends(_filtros_dep),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.reporte_geografico(db, f)
+    return SuccessResponse(message="Reporte geográfico generado correctamente", data=data, total=len(data))
+
+
+@router.get("/reportes/agricultura", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def reporte_agricultura(
+    f: dict = Depends(_filtros_dep),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.reporte_agricultura(db, f)
+    return SuccessResponse(message="Reporte de agricultura generado correctamente", data=data, total=len(data))
+
+
+@router.get("/reportes/pecuario", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def reporte_pecuario(
+    f: dict = Depends(_filtros_dep),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.reporte_pecuario(db, f)
+    return SuccessResponse(message="Reporte de pecuario generado correctamente", data=data, total=len(data))
+
+
+@router.get("/reportes/localidades", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def reporte_localidades(
+    f: dict = Depends(_filtros_dep),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data, total = service.reporte_localidades(db, f, skip=skip, limit=limit)
+    return SuccessResponse(message="Reporte de localidades generado correctamente", data=data, total=total)
+
+
+# ============================================================================
+#  CATÁLOGOS (antes de /{id} para no capturar rutas)
+# ============================================================================
+
+def _catalog_crud_routes(parent, path, crud, Create, Update, label, tag):
     get_all, get_one, create, update, delete = crud
+    s = path.replace("-", "_")
 
-    @parent.get(f"/{path}", tags=[tag], responses={200: {"model": SuccessResponse}})
+    @parent.get(f"/{path}", name=f"listar_{s}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _list(db: Session = Depends(get_db), _user=Depends(get_current_user)):
         data = get_all(db)
         return SuccessResponse(message=f"{label} listados correctamente", data=data, total=len(data))
 
-    @parent.get(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": SuccessResponse}})
+    @parent.get(f"/{path}/{{id}}", name=f"obtener_{s}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _get(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         result = get_one(db, id)
         if not result:
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
         return SuccessResponse(message=f"{label} obtenido correctamente", data=result)
 
-    @parent.post(f"/{path}", status_code=201, tags=[tag], responses={201: {"model": SuccessResponse}})
+    @parent.post(f"/{path}", name=f"crear_{s}", status_code=201, tags=[tag], responses={201: {"model": SuccessResponse}})
     def _create(data: Create, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         try:
             id = create(db, data.model_dump())
             result = get_one(db, id)
             return SuccessResponse(message=f"{label} creado correctamente", data=result)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise _db_error(e)
 
-    @parent.put(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": SuccessResponse}})
+    @parent.put(f"/{path}/{{id}}", name=f"actualizar_{s}", tags=[tag], responses={200: {"model": SuccessResponse}})
     def _update(id: int, data: Update, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         result = update(db, id, data.model_dump())
         if not result:
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
         return SuccessResponse(message=f"{label} actualizado correctamente", data=result)
 
-    @parent.delete(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": MessageResponse}})
+    @parent.delete(f"/{path}/{{id}}", name=f"eliminar_{s}", tags=[tag], responses={200: {"model": MessageResponse}})
     def _delete(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         if not delete(db, id):
             raise HTTPException(status_code=404, detail=f"{label} no encontrado")
         return MessageResponse(message=f"{label} eliminado correctamente")
 
-
-def _subtable_crud_routes(parent, path, crud, Create, Response, label, tag):
-    get_all, get_one, create, update, delete, _delete_by_edan = crud
-
-    @parent.get(f"/{{id_edan}}/{path}", tags=[tag], responses={200: {"model": SuccessResponse}})
-    def _list(id_edan: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        data = get_all(db, id_edan)
-        return SuccessResponse(message=f"{label} listados correctamente", data=data, total=len(data))
-
-    @parent.post(f"/{{id_edan}}/{path}", status_code=201, tags=[tag], responses={201: {"model": SuccessResponse}})
-    def _create(id_edan: int, data: Create, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        try:
-            payload = data.model_dump()
-            payload["id_edan"] = id_edan
-            id = create(db, payload)
-            result = get_one(db, id)
-            return SuccessResponse(message=f"{label} creado correctamente", data=result)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    @parent.put(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": SuccessResponse}})
-    def _update(id: int, data: Create, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        result = update(db, id, data.model_dump())
-        if not result:
-            raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return SuccessResponse(message=f"{label} actualizado correctamente", data=result)
-
-    @parent.delete(f"/{path}/{{id}}", tags=[tag], responses={200: {"model": MessageResponse}})
-    def _delete(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        if not delete(db, id):
-            raise HTTPException(status_code=404, detail=f"{label} no encontrado")
-        return MessageResponse(message=f"{label} eliminado correctamente")
-
-
-TAG_MAIN     = "EDAN > Formulario"
-TAG_CATALOG  = "EDAN > Catálogos"
-TAG_POBLAC   = "EDAN > Población"
-TAG_SALUD    = "EDAN > Salud"
-TAG_INFRA    = "EDAN > Infraestructura"
-TAG_EDUC     = "EDAN > Educación"
-TAG_PRODUCC  = "EDAN > Producción"
-TAG_PROTECC  = "EDAN > Protección"
-
-
-# ──────────────────────────────────────────────
-#  CATÁLOGOS
-# ──────────────────────────────────────────────
 
 _catalog_crud_routes(router, "tipo-evento", service.tipo_evento_crud,
-                     TipoEventoCreate, TipoEventoUpdate, TipoEventoResponse,
-                     "Tipo de evento", TAG_CATALOG)
+                     TipoEventoCreate, TipoEventoUpdate, "Tipo de evento", TAG_CATALOG)
 
-_catalog_crud_routes(router, "grupo-etario", service.grupo_etario_crud,
-                     GrupoEtarioCreate, GrupoEtarioUpdate, GrupoEtarioResponse,
-                     "Grupo etario", TAG_CATALOG)
-
-_catalog_crud_routes(router, "servicio-basico", service.servicio_basico_cat_crud,
-                     ServicioBasicoCreate, ServicioBasicoUpdate, ServicioBasicoResponse,
-                     "Servicio básico", TAG_CATALOG)
-
-_catalog_crud_routes(router, "categoria-proteccion", service.categoria_proteccion_cat_crud,
-                     CategoriaProteccionCreate, CategoriaProteccionUpdate, CategoriaProteccionResponse,
-                     "Categoría de protección", TAG_CATALOG)
-
-_catalog_crud_routes(router, "ayuda-humanitaria", service.ayuda_humanitaria_cat_crud,
-                     AyudaHumanitariaCreate, AyudaHumanitariaUpdate, AyudaHumanitariaResponse,
-                     "Ayuda humanitaria", TAG_CATALOG)
+_catalog_crud_routes(router, "estados", service.estado_edan_crud,
+                     EstadoEdanCreate, EstadoEdanUpdate, "Estado EDAN", TAG_CATALOG)
 
 
-# ──────────────────────────────────────────────
-#  POBLACIÓN Y EVENTOS
-# ──────────────────────────────────────────────
-
-_subtable_crud_routes(router, "poblacion-grupo", service.poblacion_grupo_crud,
-                      PoblacionGrupoCreate, PoblacionGrupoResponse,
-                      "Población por grupo etario", TAG_POBLAC)
-
-_subtable_crud_routes(router, "tipos-evento", service.edan_tipo_evento_crud,
-                      EdanTipoEventoCreate, EdanTipoEventoResponse,
-                      "Tipo de evento EDAN", TAG_POBLAC)
-
-
-# ──────────────────────────────────────────────
-#  SALUD
-# ──────────────────────────────────────────────
-
-_subtable_crud_routes(router, "primera-respuesta", service.primera_respuesta_crud,
-                      PrimeraRespuestaCreate, PrimeraRespuestaResponse,
-                      "Primera respuesta", TAG_SALUD)
-
-_subtable_crud_routes(router, "salud-establecimientos", service.salud_establecimiento_crud,
-                      SaludEstablecimientoCreate, SaludEstablecimientoResponse,
-                      "Establecimiento de salud", TAG_SALUD)
-
-_subtable_crud_routes(router, "salud-necesidades", service.salud_necesidades_crud,
-                      SaludNecesidadesCreate, SaludNecesidadesResponse,
-                      "Necesidades de salud", TAG_SALUD)
-
-
-# ──────────────────────────────────────────────
-#  INFRAESTRUCTURA
-# ──────────────────────────────────────────────
-
-_subtable_crud_routes(router, "infraestructura-vial", service.infraestructura_vial_crud,
-                      InfraestructuraVialCreate, InfraestructuraVialResponse,
-                      "Infraestructura vial", TAG_INFRA)
-
-_subtable_crud_routes(router, "infraestructura-publica", service.infraestructura_publica_crud,
-                      InfraestructuraPublicaCreate, InfraestructuraPublicaResponse,
-                      "Infraestructura pública", TAG_INFRA)
-
-_subtable_crud_routes(router, "servicios-basicos", service.servicio_basico_edan_crud,
-                      ServicioBasicoEdanCreate, ServicioBasicoEdanResponse,
-                      "Servicio básico EDAN", TAG_INFRA)
-
-
-# ──────────────────────────────────────────────
-#  EDUCACIÓN
-# ──────────────────────────────────────────────
-
-_subtable_crud_routes(router, "educacion-dano", service.educacion_dano_crud,
-                      EducacionDanoCreate, EducacionDanoResponse,
-                      "Daño educativo", TAG_EDUC)
-
-_subtable_crud_routes(router, "educacion-afectacion", service.educacion_afectacion_crud,
-                      EducacionAfectacionCreate, EducacionAfectacionResponse,
-                      "Afectación educativa", TAG_EDUC)
-
-
-# ──────────────────────────────────────────────
-#  PRODUCCIÓN (Vivienda, Agro, Pecuaria)
-# ──────────────────────────────────────────────
-
-_subtable_crud_routes(router, "vivienda", service.vivienda_crud,
-                      ViviendaCreate, ViviendaResponse,
-                      "Vivienda", TAG_PRODUCC)
-
-_subtable_crud_routes(router, "agricultura", service.agricultura_crud,
-                      AgriculturaCreate, AgriculturaResponse,
-                      "Agricultura", TAG_PRODUCC)
-
-_subtable_crud_routes(router, "pecuaria", service.pecuaria_crud,
-                      PecuariaCreate, PecuariaResponse,
-                      "Pecuaria", TAG_PRODUCC)
-
-_subtable_crud_routes(router, "infraestructura-productiva", service.infra_productiva_crud,
-                      InfraProductivaCreate, InfraProductivaResponse,
-                      "Infraestructura productiva", TAG_PRODUCC)
-
-
-# ──────────────────────────────────────────────
-#  PROTECCIÓN Y COMUNIDAD
-# ──────────────────────────────────────────────
-
-_subtable_crud_routes(router, "proteccion", service.proteccion_crud,
-                      ProteccionCreate, ProteccionResponse,
-                      "Protección", TAG_PROTECC)
-
-_subtable_crud_routes(router, "ayuda-humanitaria-edan", service.ayuda_humanitaria_edan_crud,
-                      AyudaHumanitariaEdanCreate, AyudaHumanitariaEdanResponse,
-                      "Ayuda humanitaria EDAN", TAG_PROTECC)
-
-_subtable_crud_routes(router, "comunidades", service.comunidad_crud,
-                      ComunidadCreate, ComunidadResponse,
-                      "Comunidad", TAG_PROTECC)
-
-
-# ──────────────────────────────────────────────
-#  EDAN PRINCIPAL (al final para no capturar /{id})
-# ──────────────────────────────────────────────
+# ============================================================================
+#  EDAN PRINCIPAL
+# ============================================================================
 
 @router.get("/", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
 def listar_edans(
+    f: dict = Depends(_filtros_dep),
+    order_by: str = Query("id_edan", description="Campo de orden (id_edan, fecha_evento, estado, ...)"),
+    order: str = Query("desc", description="Dirección: asc | desc"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    data = service.get_edans(db, skip=skip, limit=limit)
-    return SuccessResponse(message="EDANs listados correctamente", data=data, total=len(data))
+    f = dict(f)
+    f["order_by"] = order_by
+    f["order"] = order
+    data, total = service.get_edans(db, f, skip=skip, limit=limit)
+    return SuccessResponse(message="EDANs listados correctamente", data=data, total=total)
 
 
 @router.get("/{id}", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
@@ -243,83 +268,90 @@ def obtener_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_curre
 
 
 @router.post("/", status_code=201, tags=[TAG_MAIN], responses={201: {"model": SuccessResponse}})
-def crear_edan(data: EdanCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def crear_edan(data: EdanCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     try:
-        id = service.create_edan(db, data.model_dump())
-        result = service.get_edan(db, id)
-        return SuccessResponse(message="EDAN creado correctamente", data=result)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/con-foto", status_code=201, tags=[TAG_MAIN], responses={201: {"model": SuccessResponse}})
-async def crear_edan_con_foto(
-    file: UploadFile = File(...),
-    codigo_edan: str | None = Form(None),
-    id_departamento: int | None = Form(None),
-    id_municipio: int | None = Form(None),
-    nombre_alcalde: str | None = Form(None),
-    telefono_alcalde: str | None = Form(None),
-    fecha_llenado: str | None = Form(None),
-    fecha_evento: str | None = Form(None),
-    hora_evento: str | None = Form(None),
-    localidades_afectadas: int = Form(0),
-    total_poblacion_afectada: int = Form(0),
-    total_familias_afectadas: int = Form(0),
-    total_familias_damnificadas: int = Form(0),
-    nombre_responsable: str | None = Form(None),
-    cargo_responsable: str | None = Form(None),
-    telefono_responsable: str | None = Form(None),
-    email_responsable: str | None = Form(None),
-    usuario_registro: int | None = Form(None),
-    id_reporte_rea: int | None = Form(None),
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
-    try:
-        fotografia = await save_upload_file(file, db, id_municipio)
-
-        data = {
-            "codigo_edan": codigo_edan,
-            "id_departamento": id_departamento,
-            "id_municipio": id_municipio,
-            "nombre_alcalde": nombre_alcalde,
-            "telefono_alcalde": telefono_alcalde,
-            "fecha_llenado": fecha_llenado,
-            "fecha_evento": fecha_evento,
-            "hora_evento": hora_evento,
-            "localidades_afectadas": localidades_afectadas,
-            "total_poblacion_afectada": total_poblacion_afectada,
-            "total_familias_afectadas": total_familias_afectadas,
-            "total_familias_damnificadas": total_familias_damnificadas,
-            "nombre_responsable": nombre_responsable,
-            "cargo_responsable": cargo_responsable,
-            "telefono_responsable": telefono_responsable,
-            "email_responsable": email_responsable,
-            "usuario_registro": usuario_registro,
-            "id_reporte_rea": id_reporte_rea,
-            "fotografia": fotografia,
-        }
-
-        id = service.create_edan(db, data)
-        result = service.get_edan(db, id)
+        payload = data.model_dump(exclude_none=False)
+        if payload.get("id_usuario") is None:
+            payload["id_usuario"] = user["id_usuario"]
+        id = service.create_edan(db, payload)
+        result = service.get_edan_completo(db, id)
         return SuccessResponse(message="EDAN creado correctamente", data=result)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _db_error(e)
 
 
 @router.put("/{id}", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
 def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    result = service.update_edan(db, id, data.model_dump())
+    try:
+        result = service.update_edan(db, id, data.model_dump())
+    except Exception as e:
+        raise _db_error(e)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     return SuccessResponse(message="EDAN actualizado correctamente", data=result)
 
 
 @router.delete("/{id}", tags=[TAG_MAIN], responses={200: {"model": MessageResponse}})
-def eliminar_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    if not service.delete_edan(db, id):
+def eliminar_edan(id: int, permanente: bool = Query(False, description="Eliminación física (cascada)"),
+                  db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if permanente:
+        if not service.delete_edan(db, id):
+            raise HTTPException(status_code=404, detail="EDAN no encontrado")
+        return MessageResponse(message="EDAN eliminado permanentemente")
+    result = service.soft_delete_edan(db, id)
+    if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return MessageResponse(message="EDAN eliminado correctamente")
+    return SuccessResponse(message="EDAN marcado para eliminación", data=result)
+
+
+# ============================================================================
+#  LOCALIDADES (CRUD anidado)
+# ============================================================================
+
+@router.get("/{id}/localidades", tags=[TAG_LOCAL], responses={200: {"model": SuccessResponse}})
+def listar_localidades(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if not service.get_edan(db, id):
+        raise HTTPException(status_code=404, detail="EDAN no encontrado")
+    data = service._get_localidades(db, id)
+    return SuccessResponse(message="Localidades listadas correctamente", data=data, total=len(data))
+
+
+@router.post("/{id}/localidades", status_code=201, tags=[TAG_LOCAL], responses={201: {"model": SuccessResponse}})
+def crear_localidad(id: int, data: LocalidadCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    if not service.get_edan(db, id):
+        raise HTTPException(status_code=404, detail="EDAN no encontrado")
+    try:
+        lid = service._insert_localidad(db, id, data.model_dump())
+        db.commit()
+        result = service._build_localidad(db, lid)
+        return SuccessResponse(message="Localidad creada correctamente", data=result)
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+
+
+@router.put("/{id}/localidades/{id_localidad}", tags=[TAG_LOCAL], responses={200: {"model": SuccessResponse}})
+def actualizar_localidad(id: int, id_localidad: int, data: LocalidadUpdate,
+                         db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    try:
+        result = service.update_localidad(db, id_localidad, data.model_dump())
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+    if not result:
+        raise HTTPException(status_code=404, detail="Localidad no encontrada")
+    return SuccessResponse(message="Localidad actualizada correctamente", data=result)
+
+
+@router.delete("/{id}/localidades/{id_localidad}", tags=[TAG_LOCAL], responses={200: {"model": MessageResponse}})
+def eliminar_localidad(id: int, id_localidad: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = db.execute(
+        text("DELETE FROM edan.edan_localidades WHERE id_edan_localidad = :id"),
+        {"id": id_localidad},
+    )
+    db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Localidad no encontrada")
+    return MessageResponse(message="Localidad eliminada correctamente")

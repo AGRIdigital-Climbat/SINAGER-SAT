@@ -71,6 +71,24 @@ class MunicipioResponse(BaseModel):
         from_attributes = True
 
 
+class CultivoResponse(BaseModel):
+    id: int
+    nombre: str
+    grupo: str
+
+    class Config:
+        from_attributes = True
+
+
+class PecuarioResponse(BaseModel):
+    id: int
+    nombre: str
+    grupo: str
+
+    class Config:
+        from_attributes = True
+
+
 # ── GeoJSON schemas (RFC 7946) ──
 
 

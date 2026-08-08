@@ -35,16 +35,16 @@ Una sola base de datos `db_sinagersat` con 6 esquemas que separan responsabilida
 PostgreSQL: db_sinagersat
 ├── shared   → Geografía (catálogos INE: departamento, provincia, municipio)
 ├── usuarios → Gestión de usuarios (cuentas, roles, sesiones, permisos, auditoría)
-├── edan     → Formularios EDAN (23 tablas)
+├── edan     → Formularios EDAN (24 tablas: cabecera + localidades anidadas)
 ├── rea      → Reportes de Eventos Adversos (4 tablas)
 ├── rida     → (vacío - futuro sistema RIDA)
 ├── sinb     → (vacío - futuro sistema SINB)
 └── recursos → (vacío - futura gestión de recursos)
 ```
 
-**Total de tablas:** 38  
+**Total de tablas:** 40  
 **Foreign Keys:** 35+  
-**Índices:** 29+
+**Índices:** 45+
 
 Las consultas entre esquemas son igual de rápidas que entre tablas del mismo schema
 (una sola conexión PostgreSQL, sin overhead de BDs separadas).
@@ -235,8 +235,31 @@ Sistema global de autenticación y autorización para todas las aplicaciones del
 
 ## Schema `edan` — Formulario EDAN
 
-23 tablas que componen el formulario de Evaluación de Daños y Análisis de Necesidades.
-Incluye la tabla padre `edan`, 17 tablas hijas por sección y 5 catálogos propios.
+Arquitectura **jerárquica por localidades**: un EDAN tiene una cabecera única y
+una o varias **localidades**, cada una con sus 16 secciones de daños y necesidades
+como sub-tablas. Es el modelo que usa la app móvil `AppREA`
+(`lib/models/edan.dart`) y la API los devuelve anidados.
+
+```
+edan.edan  (cabecera 1)
+   └── edan.edan_localidades  (1:N)
+         ├── edan_grupo_etario_detalle              (1:N)
+         ├── edan_localidades_impacto_poblacion     (1:1)
+         ├── edan_localidades_primera_respuesta     (1:1)
+         ├── edan_localidades_salud_establecimientos(1:N)
+         ├── edan_localidades_salud_necesidades     (1:1)
+         ├── edan_localidades_danos_viales          (1:N)
+         ├── edan_localidades_danos_infra_publica   (1:N)
+         ├── edan_localidades_servicios_basicos     (1:N)
+         ├── edan_localidades_unidades_educativas   (1:N)
+         ├── edan_localidades_danos_vivienda        (1:N)
+         ├── edan_localidades_danos_agricultura     (1:N)
+         ├── edan_localidades_danos_pecuario        (1:N)
+         ├── edan_localidades_infra_productiva      (1:N)
+         ├── edan_localidades_proteccion            (1:1)
+         ├── edan_localidades_proteccion_grupos     (1:N)
+         └── edan_localidades_necesidades_humanitarias (1:1)
+```
 
 ### Tabla Padre: `edan.edan`
 
@@ -245,272 +268,233 @@ Incluye la tabla padre `edan`, 17 tablas hijas por sección y 5 catálogos propi
 | `id_edan` | BIGSERIAL PK | Identificador único |
 | `codigo_edan` | VARCHAR(30) | Código interno EDAN |
 | `id_departamento` | INTEGER FK | Departamento (FK → shared.departamento.id) |
+| `id_provincia` | INTEGER FK | Provincia (FK → shared.provincia.id) |
 | `id_municipio` | INTEGER FK | Municipio (FK → shared.municipio.id) |
 | `nombre_alcalde` | VARCHAR(200) | Nombre del alcalde |
-| `telefono_alcalde` | VARCHAR(30) | Teléfono del alcalde |
+| `fono_alcalde` | VARCHAR(30) | Teléfono del alcalde |
 | `fecha_llenado` | DATE | Fecha de llenado |
 | `fecha_evento` | DATE | Fecha del evento |
 | `hora_evento` | TIME | Hora del evento |
-| `localidades_afectadas` | INTEGER | Cantidad de localidades |
 | `total_poblacion_afectada` | INTEGER | Total población afectada |
 | `total_familias_afectadas` | INTEGER | Total familias afectadas |
 | `total_familias_damnificadas` | INTEGER | Total familias damnificadas |
-| `nombre_responsable` | VARCHAR(200) | Responsable del llenado |
-| `cargo_responsable` | VARCHAR(100) | Cargo |
-| `telefono_responsable` | VARCHAR(30) | Teléfono/celular |
-| `email_responsable` | VARCHAR(150) | Correo electrónico |
-| `usuario_registro` | INTEGER FK | Usuario que registró (FK → usuarios.usuario.id_usuario) |
-| `fecha_registro` | TIMESTAMP | Auditoría |
-| `fecha_actualizacion` | TIMESTAMP | Auditoría |
+| `responsable_nombre` | VARCHAR(200) | Responsable del llenado |
+| `responsable_cargo` | VARCHAR(100) | Cargo |
+| `responsable_fono` | VARCHAR(30) | Teléfono/celular |
+| `responsable_correo` | VARCHAR(150) | Correo electrónico |
+| `fecha_creacion` | TIMESTAMP | Auditoría |
+| `fecha_modificacion` | TIMESTAMP | Auditoría |
 | `id_reporte_rea` | BIGINT FK | Reporte REA origen (FK → rea.reporte_evento.id_reporte, nullable) |
+| `fotografia` | TEXT | Ruta/imagen del formulario |
+| `id_server` | INTEGER | ID del servidor de origen (sincronización) |
+| `id_usuario` | INTEGER FK | Usuario que registró (FK → usuarios.usuario.id_usuario) |
+| `id_tipo_evento` | INTEGER FK | Tipo de evento (FK → edan.tipo_evento) |
+| `id_estado` | INTEGER FK | Estado del ciclo de vida (FK → edan.estado_edan) |
+| `estado` | VARCHAR(50) | Nombre del estado (borrador, enviado, ...) |
+| `sincronizado` | BOOLEAN | Banderas de sincronización |
+| `pendiente_eliminacion` | BOOLEAN | Marca de eliminación suave |
+| `pendiente_actualizacion` | BOOLEAN | Actualización pendiente de sincronizar |
+| `es_borrador` | BOOLEAN | Formulario en borrador |
+| `intentos_sync` | INTEGER | Contador de reintentos |
+| `ultimo_error` | TEXT | Último error de sincronización |
+| `departamento_nombre` | VARCHAR(200) | Nombre denormalizado (reportes) |
+| `provincia_nombre` | VARCHAR(200) | Nombre denormalizado (reportes) |
+| `municipio_nombre` | VARCHAR(200) | Nombre denormalizado (reportes) |
+| `tipo_evento_nombre` | VARCHAR(100) | Nombre denormalizado (reportes) |
+
+> **Nota:** `id_provincia` y `id_departamento` se derivan automáticamente del
+> `id_municipio` en el backend cuando no se envían explícitamente.
 
 ### Catálogos propios del formulario
 
 | Tabla | Registros | Descripción |
 |---|---|---|
 | `tipo_evento` | 8 | Tipos de evento adverso (Inundación, Riada, etc.) |
-| `grupo_etario` | 4 | Grupos de edad (0-5, 6-18, 19-60, 60+) |
-| `servicio_basico` | 5 | Servicios básicos (Luz, Agua, Gas, etc.) |
-| `categoria_proteccion` | 7 | Categorías de vulnerabilidad (Niños, Embarazadas, etc.) |
-| `ayuda_humanitaria` | 9 | Tipos de ayuda (Alimentos, Refugio, etc.) |
+| `estado_edan` | 5 | Estados del ciclo de vida (borrador, enviado, aprobado, rechazado, cerrado) |
 
-### Tablas hijas (17)
-
-| Tabla | Sección | Relación con edan.edan |
-|---|---|---|
-| `edan_poblacion_grupo` | 2 - Población | 1:N |
-| `edan_tipo_evento` | 3.1 - Tipo de evento | 1:N (puente) |
-| `edan_primera_respuesta` | 3.3 - Primera respuesta | 1:1 |
-| `edan_salud_establecimiento` | 4.1 - Salud: establecimientos | 1:N |
-| `edan_salud_necesidades` | 4.2 - Salud: necesidades | 1:1 |
-| `edan_infraestructura_vial` | 5.1 - Infraestructura vial | 1:N |
-| `edan_infraestructura_publica` | 5.2 - Infraestructura pública | 1:N |
-| `edan_servicio_basico` | 6 - Servicios básicos | 1:N |
-| `edan_educacion_dano` | 7.1 - Educación: daños | 1:N |
-| `edan_educacion_afectacion` | 7.2 - Educación: afectación | 1:N |
-| `edan_vivienda` | 8 - Vivienda | 1:N |
-| `edan_agricultura` | 9.1 - Agricultura | 1:N |
-| `edan_pecuaria` | 9.2 - Pecuaria | 1:N |
-| `edan_infraestructura_productiva` | 9.3 - Infraestructura productiva | 1:N |
-| `edan_proteccion` | 10 - Protección | 1:N |
-| `edan_ayuda_humanitaria` | 11 - Ayuda humanitaria | 1:N |
-| `edan_comunidad` | 12 - Comunidades | 1:N |
-
-> Ver el detalle de cada tabla hija en la sección "Tablas Hijas" más abajo.
+> `grupo_etario`, `servicio_basico`, `categoria_proteccion` y `ayuda_humanitaria`
+> se eliminaron: hoy son CHECKs / columnas booleanas directas en las sub-tablas.
 
 ---
 
-## Tablas Hijas
+## Tabla intermedia: `edan.edan_localidades`
 
-### Sección 2 - `edan.edan_poblacion_grupo`
+Cada localidad afectada. Tiene 9 flags `imp_*` que indican qué secciones están
+informadas (permiten filtros rápidos tipo "EDAN con daños en educación").
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_poblacion_grupo` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `id_grupo_etario` | INTEGER FK | Grupo de edad (FK → sinagersat.grupo_etario) |
+| `id_edan_localidad` | SERIAL PK | ID |
+| `id_edan` | BIGINT FK | Referencia al EDAN (CASCADE) |
+| `tipo_localidad` | VARCHAR(50) | Tipo (Comunidad, Barrio, ...) |
+| `nombre` | VARCHAR(200) | Nombre de la localidad |
+| `imp_poblacion` | BOOLEAN | Tiene impacto en población |
+| `imp_salud` | BOOLEAN | Tiene impacto en salud |
+| `imp_infraestructura` | BOOLEAN | Tiene impacto en infraestructura |
+| `imp_servicios` | BOOLEAN | Tiene impacto en servicios |
+| `imp_educacion` | BOOLEAN | Tiene impacto en educación |
+| `imp_vivienda` | BOOLEAN | Tiene impacto en vivienda |
+| `imp_agropecuario` | BOOLEAN | Tiene impacto agropecuario |
+| `imp_proteccion` | BOOLEAN | Tiene impacto en protección |
+| `imp_necesidades` | BOOLEAN | Tiene necesidades humanitarias |
+
+## Tablas Hijas (16)
+
+Todas referencian a `edan.edan_localidades(id_edan_localidad)` con `ON DELETE CASCADE`.
+Las relaciones 1:1 usan la PK de la localidad como PK propia.
+
+### `edan.edan_grupo_etario_detalle` (1:N)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_grupo_etario_detalle` | SERIAL PK | ID |
+| `rango` | VARCHAR(100) | Rango etario (00-05, 06-18, ...) |
 | `fallecidos` | INTEGER | N° fallecidos |
 | `heridos` | INTEGER | N° heridos |
 | `desaparecidos` | INTEGER | N° desaparecidos |
 | `observaciones` | TEXT | Observaciones |
 
-### Sección 3.1 - `edan.edan_tipo_evento`
+### `edan.edan_localidades_impacto_poblacion` (1:1)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_tipo_evento_edan` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `id_tipo_evento` | INTEGER FK | Tipo de evento (FK → edan.tipo_evento) |
-
-### Sección 3.3 - `edan.edan_primera_respuesta`
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `id_primera_respuesta` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `busqueda_requerimiento` | BOOLEAN | Búsqueda (Sí/No) |
-| `busqueda_observaciones` | TEXT | Observaciones |
-| `salvamento_requerimiento` | BOOLEAN | Salvamento/Rescate |
-| `salvamento_observaciones` | TEXT | Observaciones |
-| `evacuacion_requerimiento` | BOOLEAN | Evacuación |
-| `evacuacion_observaciones` | TEXT | Observaciones |
-| `otros_requerimiento` | BOOLEAN | Otros |
-| `otros_observaciones` | TEXT | Observaciones |
-| `observaciones_generales` | TEXT | Observaciones finales |
-
-### Sección 4.1 - `edan.edan_salud_establecimiento`
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `id_salud_establecimiento` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `nombre_establecimiento` | VARCHAR(200) | Nombre del establecimiento |
-| `localidad_comunidad` | VARCHAR(200) | Localidad/Comunidad |
-| `nivel_atencion` | SMALLINT (1/2/3) | Nivel de atención |
-| `dano_parcial` | BOOLEAN | Daño parcial |
-| `dano_total` | BOOLEAN | Daño total |
-| `personal_medicos` | INTEGER | Médicos afectados |
-| `personal_enfermeras` | INTEGER | Enfermeras afectadas |
-| `personal_otros` | INTEGER | Otros personal |
+| `grupo_etario` | VARCHAR(100) | Grupo etario general |
+| `fallecidos` / `heridos` / `desaparecidos` | INTEGER | Totales |
 | `observaciones` | TEXT | Observaciones |
 
-### Sección 4.2 - `edan.edan_salud_necesidades`
+### `edan.edan_localidades_primera_respuesta` (1:1)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_salud_necesidad` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `botiquin_personas` | INTEGER | Personas que requieren atención |
+| `busqueda` / `salvamento` / `evacuacion` | BOOLEAN | Requerimientos |
+| `observaciones` | TEXT | Observaciones |
+
+### `edan.edan_localidades_salud_establecimientos` (1:N)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_establecimiento_salud` | SERIAL PK | ID |
+| `nombre_establecimiento` | VARCHAR(200) | Nombre |
+| `comunidad` | VARCHAR(200) | Localidad/Comunidad |
+| `nivel_atencion` | VARCHAR(50) | Nivel de atención |
+| `dano_parcial` / `dano_total` | BOOLEAN | Daños |
+| `medicos_afectados` / `enfermeras_afectadas` / `otros_afectados` | INTEGER | Personal afectado |
+
+### `edan.edan_localidades_salud_necesidades` (1:1)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `botiquines` | BOOLEAN | Requiere botiquines |
+| `numero_personas` | INTEGER | Personas que requieren atención |
 | `otras_necesidades` | TEXT | Otras necesidades |
 | `observaciones` | TEXT | Observaciones |
 
-### Sección 5.1 - `edan.edan_infraestructura_vial`
+### `edan.edan_localidades_danos_viales` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_infraestructura_vial` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `via_acceso_puentes` | VARCHAR(200) | Vías de acceso/puentes |
+| `id_dano_vial` | SERIAL PK | ID |
+| `via_puente` | VARCHAR(200) | Vía/puente afectado |
 | `tramo` | VARCHAR(200) | Tramo |
-| `localidad_origen` | VARCHAR(200) | Localidad origen |
-| `localidad_destino` | VARCHAR(200) | Localidad destino |
-| `dano_parcial_km` | DECIMAL(10,2) | Daño parcial en Km |
-| `dano_total_km` | DECIMAL(10,2) | Daño total en Km |
-| `necesidades_inmediatas` | TEXT | Necesidades inmediatas |
-| `observaciones` | TEXT | Observaciones |
+| `dano_parcial` / `dano_total` | BOOLEAN | Daños |
+| `km_danio` | NUMERIC(10,2) | Km de daño |
+| `necesidades_inmediatas` / `observaciones` | TEXT | Detalle |
 
-### Sección 5.2 - `edan.edan_infraestructura_publica`
+### `edan.edan_localidades_danos_infra_publica` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_infraestructura_publica` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `localidad_comunidad` | VARCHAR(200) | Localidad/Comunidad |
+| `id_dano_infra` | SERIAL PK | ID |
+| `comunidad` | VARCHAR(200) | Localidad |
 | `tipo_estructura` | VARCHAR(200) | Tipo de estructura |
-| `dano_parcial` | INTEGER | Daño parcial |
-| `dano_total` | INTEGER | Daño total |
+| `dano_parcial` / `dano_total` | BOOLEAN | Daños |
 | `observaciones` | TEXT | Observaciones |
 
-### Sección 6 - `edan.edan_servicio_basico`
+### `edan.edan_localidades_servicios_basicos` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_servicio_basico_edan` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `id_servicio_basico` | INTEGER FK | Servicio básico (FK → edan.servicio_basico) |
-| `dano_parcial` | BOOLEAN | Daño parcial |
-| `dano_total` | BOOLEAN | Daño total |
-| `necesidades_inmediatas` | TEXT | Necesidades inmediatas |
-| `observaciones` | TEXT | Observaciones |
+| `id_servicio_basico` | SERIAL PK | ID |
+| `tipo` | VARCHAR(50) | CHECK: energia_electrica, agua_potable, alcantarillado, gas_domiciliario, telecomunicaciones |
+| `afectado` | BOOLEAN | Afectado |
+| `dano_parcial` / `dano_total` | BOOLEAN | Daños |
+| `necesidades_inmediatas` / `observaciones` | TEXT | Detalle |
+| — | — | UNIQUE (id_edan_localidad, tipo) |
 
-### Sección 7.1 - `edan.edan_educacion_dano`
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `id_educacion_dano` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `nombre_establecimiento` | VARCHAR(200) | Nombre del establecimiento |
-| `comunidad` | VARCHAR(200) | Comunidad |
-| `dano_parcial` | BOOLEAN | Daño parcial |
-| `dano_total` | BOOLEAN | Daño total |
-| `suspension_clases` | BOOLEAN | Suspensión de clases |
-| `perdida_material` | BOOLEAN | Pérdida de material |
-| `funciona_albergue` | BOOLEAN | Funciona como albergue |
-| `observaciones` | TEXT | Observaciones |
-
-### Sección 7.2 - `edan.edan_educacion_afectacion`
+### `edan.edan_localidades_unidades_educativas` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_educacion_afectacion` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `id_educacion_dano` | INTEGER FK | Referencia al daño (FK → edan.educacion_dano) |
-| `nombre_establecimiento` | VARCHAR(200) | Nombre del establecimiento |
-| `estudiantes_afectados` | INTEGER | N° estudiantes |
-| `profesores_afectados` | INTEGER | N° profesores |
-| `administrativos_afectados` | INTEGER | N° administrativos |
-| `total_afectados` | INTEGER | Total |
+| `id_unidad_educativa` | SERIAL PK | ID |
+| `nombre_establecimiento` | VARCHAR(200) | Nombre |
+| `comunidad` | VARCHAR(200) | Localidad |
+| `dano_parcial` / `dano_total` | BOOLEAN | Daños |
+| `suspension_clases` / `perdida_material` / `funciona_albergue` | BOOLEAN | Estado |
+| `estudiantes` / `profesores` / `administrativos` | INTEGER | Afectados |
 | `observaciones` | TEXT | Observaciones |
 
-### Sección 8 - `edan.edan_vivienda`
+### `edan.edan_localidades_danos_vivienda` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_vivienda` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `comunidad` | VARCHAR(200) | Comunidad |
-| `viviendas_dano_parcial` | INTEGER | Viviendas con daño parcial |
-| `viviendas_dano_total` | INTEGER | Viviendas con daño total |
-| `necesidades_inmediatas` | TEXT | Necesidades inmediatas |
-| `observaciones` | TEXT | Observaciones |
+| `id_dano_vivienda` | SERIAL PK | ID |
+| `comunidad` | VARCHAR(200) | Localidad |
+| `dano_parcial` | INTEGER | Viviendas con daño parcial |
+| `dano_total` | INTEGER | Viviendas con daño total |
+| `necesidades_inmediatas` / `observaciones` | TEXT | Detalle |
 
-### Sección 9.1 - `edan.edan_agricultura`
+### `edan.edan_localidades_danos_agricultura` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_agricultura` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `tipo_cultivo` | VARCHAR(200) | Tipo de cultivo |
-| `hectareas_afectadas` | DECIMAL(10,2) | Hectáreas afectadas |
-| `hectareas_perdidas` | DECIMAL(10,2) | Hectáreas perdidas |
-| `necesidades_inmediatas` | TEXT | Necesidades inmediatas |
-| `observaciones` | TEXT | Observaciones |
+| `id_dano_agricultura` | SERIAL PK | ID |
+| `tipo_cultivo` | VARCHAR(200) | Texto libre |
+| `id_cultivo` | INTEGER FK | FK opcional → shared.cultivo(id) |
+| `hectareas_afectadas` / `hectareas_perdidas` | INTEGER | Hectáreas |
+| `necesidades_inmediatas` / `observaciones` | TEXT | Detalle |
 
-### Sección 9.2 - `edan.edan_pecuaria`
+### `edan.edan_localidades_danos_pecuario` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_pecuaria` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `tipo_especie` | VARCHAR(200) | Tipo de especie |
-| `raza` | VARCHAR(200) | Raza |
-| `animales_afectados` | INTEGER | Animales afectados |
-| `animales_muertos` | INTEGER | Animales muertos |
-| `necesidades_inmediatas` | TEXT | Necesidades inmediatas |
-| `observaciones` | TEXT | Observaciones |
+| `id_dano_pecuario` | SERIAL PK | ID |
+| `especie` | VARCHAR(100) | Texto libre |
+| `id_especie` | INTEGER FK | FK opcional → shared.pecuario(id) |
+| `raza` | VARCHAR(100) | Raza |
+| `animales_afectados` / `animales_muertos` | INTEGER | Cabezas |
+| `necesidades_inmediatas` | TEXT | Detalle |
 
-### Sección 9.3 - `edan.edan_infraestructura_productiva`
+### `edan.edan_localidades_infra_productiva` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id_infra_productiva` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
 | `tipo` | VARCHAR(200) | Tipo de infraestructura |
-| `dano_parcial` | INTEGER | Daño parcial |
-| `dano_total` | INTEGER | Daño total |
-| `observaciones` | TEXT | Observaciones |
+| `dano_parcial` / `dano_total` | INTEGER | Unidades dañadas |
 
-### Sección 10 - `edan.edan_proteccion`
+### `edan.edan_localidades_proteccion` (1:1)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_proteccion` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `id_categoria_proteccion` | INTEGER FK | Categoría (FK → sinagersat.categoria_proteccion) |
-| `mujeres` | INTEGER | N° mujeres |
-| `hombres` | INTEGER | N° hombres |
-| `total` | INTEGER | Total |
-| `apoyo_psicosocial` | BOOLEAN | Apoyo psicosocial |
-| `reposicion_documentos` | BOOLEAN | Reposición de documentos |
-| `observaciones` | TEXT | Observaciones |
+| `id_edan_localidad` | BIGINT PK | Solo existencia (marcador) |
 
-### Sección 11 - `edan.edan_ayuda_humanitaria`
+### `edan.edan_localidades_proteccion_grupos` (1:N)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_ayuda_edan` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `id_ayuda_humanitaria` | INTEGER FK | Tipo de ayuda (FK → edan.ayuda_humanitaria) |
-| `requiere` | BOOLEAN | Requiere (Sí/No) |
+| `id_grupo_vulnerable` | SERIAL PK | ID |
+| `grupo` | VARCHAR(50) | CHECK: ninos, adolescentes, mujeres_lactantes, mujeres_embarazadas, adultos_mayores, personas_discapacidad, personas_enfermedad |
+| `mujeres` / `hombres` | INTEGER | Cantidad |
+| `apoyo_psicologico` / `reposicion_documentos` | BOOLEAN | Apoyos |
 | `observaciones` | TEXT | Observaciones |
+| — | — | UNIQUE (id_edan_localidad, grupo) |
 
-### Sección 12 - `edan.edan_comunidad`
+### `edan.edan_localidades_necesidades_humanitarias` (1:1)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id_comunidad` | SERIAL PK | ID |
-| `id_edan` | BIGINT FK | Referencia a EDAN |
-| `nombre_comunidad` | VARCHAR(200) | Nombre de la comunidad/localidad/barrio |
+| `alimentos`, `refugio_vivienda`, `ropa_cama`, `articulos_higiene`, `articulos_cocina`, `prendas_vestir`, `herramientas`, `almacenamiento_agua`, `banos` | BOOLEAN | Necesidades (9) |
+| `obs_<nombre>` (9) | TEXT | Observaciones por necesidad |
 
 ---
 
@@ -612,7 +596,7 @@ SELECT e.id_edan,
 FROM edan.edan e
 JOIN shared.departamento d ON d.id = e.id_departamento
 JOIN shared.municipio m ON m.id = e.id_municipio
-JOIN usuarios.usuario u ON u.id_usuario = e.usuario_registro;
+JOIN usuarios.usuario u ON u.id_usuario = e.id_usuario;
 
 -- Obtener reportes REA con ubicación y estado
 SELECT r.id_reporte,
@@ -637,6 +621,54 @@ JOIN rea.reporte_evento r ON r.id_reporte = e.id_reporte_rea;
 
 ---
 
+## Vinculación `usuarios` ↔ `edan`
+
+### FK de integridad
+
+`edan.edan.id_usuario` referencia `usuarios.usuario(id_usuario)` mediante la
+restricción `edan_id_usuario_fkey`. La base de datos rechaza formularios cuyo
+`id_usuario` no exista (error `23503`), garantizando que todo EDAN tenga un
+registrador válido.
+
+### Autopoblado desde el token JWT
+
+Si el payload de creación no incluye `id_usuario`, la API lo asigna
+automáticamente desde el usuario autenticado (`router.py → crear_edan`):
+
+```
+POST /api/v1/edan/  { "codigo_edan": "...", "id_municipio": 20101 }
+→ id_usuario = usuario del token (ej. admin = 2)
+```
+
+En el PUT (actualización) el `id_usuario` solo se modifica si el payload lo
+envía explícitamente.
+
+### Lectura anidada
+
+El GET de un EDAN devuelve el objeto usuario completo anidado:
+
+```json
+{
+  "id_edan": 1,
+  "usuario": { "id_usuario": 2, "usuario": "admin", "nombre": "Administrador" },
+  "responsable": { "nombre": "...", "cargo": "...", "fono": "...", "correo": "..." }
+}
+```
+
+### Filtro por usuario en reportes
+
+`listar_edans` y los reportes soportan `?id_usuario=N` para acotar por
+registrador.
+
+### Permisos por módulo
+
+El acceso a todas las rutas `/api/v1/edan/*` está protegido por
+`module_permiso("EDAN")`. El rol del usuario debe tener las acciones
+CREATE/READ/UPDATE/DELETE para el módulo EDAN (ver `usuarios.permiso_aplicacion`
+y `usuarios.aplicacion`).
+
+---
+
 ## Árbol de Relaciones
 
 ```
@@ -646,25 +678,29 @@ shared.departamento
     │
     └── shared.municipio (FK: id_provincia)
         │
-        ├── edan.edan (FK: id_municipio, id_departamento)
+        ├── edan.edan (FK: id_municipio, id_provincia, id_departamento)
         │    │
-        │    ├── edan.poblacion_grupo (FK: id_grupo_etario → edan.grupo_etario)
-        │    ├── edan.tipo_evento (FK: → edan.tipo_evento)
-        │    ├── edan.primera_respuesta (1:1)
-        │    ├── edan.salud_establecimiento (1:N)
-        │    ├── edan.salud_necesidades (1:1)
-        │    ├── edan.infraestructura_vial (1:N)
-        │    ├── edan.infraestructura_publica (1:N)
-        │    ├── edan.servicio_basico (FK: → edan.servicio_basico)
-        │    ├── edan.educacion_dano (1:N)
-        │    ├── edan.educacion_afectacion (1:N, FK → edan.educacion_dano)
-        │    ├── edan.vivienda (1:N)
-        │    ├── edan.agricultura (1:N)
-        │    ├── edan.pecuaria (1:N)
-        │    ├── edan.infraestructura_productiva (1:N)
-        │    ├── edan.proteccion (FK: → edan.categoria_proteccion)
-        │    ├── edan.ayuda_humanitaria (FK: → edan.ayuda_humanitaria)
-        │    ├── edan.comunidad (1:N)
+        │    ├── edan.edan_localidades (1:N, CASCADE)
+        │    │    ├── edan_grupo_etario_detalle (1:N)
+        │    │    ├── edan_localidades_impacto_poblacion (1:1)
+        │    │    ├── edan_localidades_primera_respuesta (1:1)
+        │    │    ├── edan_localidades_salud_establecimientos (1:N)
+        │    │    ├── edan_localidades_salud_necesidades (1:1)
+        │    │    ├── edan_localidades_danos_viales (1:N)
+        │    │    ├── edan_localidades_danos_infra_publica (1:N)
+        │    │    ├── edan_localidades_servicios_basicos (1:N)
+        │    │    ├── edan_localidades_unidades_educativas (1:N)
+        │    │    ├── edan_localidades_danos_vivienda (1:N)
+        │    │    ├── edan_localidades_danos_agricultura (1:N, FK → shared.cultivo)
+        │    │    ├── edan_localidades_danos_pecuario (1:N, FK → shared.pecuario)
+        │    │    ├── edan_localidades_infra_productiva (1:N)
+        │    │    ├── edan_localidades_proteccion (1:1)
+        │    │    ├── edan_localidades_proteccion_grupos (1:N)
+        │    │    └── edan_localidades_necesidades_humanitarias (1:1)
+        │    │
+        │    ├── FK → edan.tipo_evento (id_tipo_evento)
+        │    ├── FK → edan.estado_edan (id_estado)
+        │    ├── FK → usuarios.usuario (id_usuario)
         │    └── FK → rea.reporte_evento (nullable: id_reporte_rea)
         │
         └── rea.reporte_evento (FK: id_municipio, id_departamento)
@@ -676,7 +712,7 @@ shared.departamento
              └── rea.reporte_afectacion (puente N:M)
                   └── FK → rea.afectacion_categoria
 
-usuarios.usuario ←── (FK: usuario_registro en edan.edan, id_usuario en rea.reporte_evento)
+usuarios.usuario ←── (FK: id_usuario en edan.edan, id_usuario en rea.reporte_evento)
     │
     └── usuarios.usuario_rol → usuarios.rol
 ```
@@ -689,12 +725,82 @@ usuarios.usuario ←── (FK: usuario_registro en edan.edan, id_usuario en rea
 |---|---|
 | Script SQL completo | `database/crear_db_sinagersat.sql` |
 | Script geografía | `database/insert_provincias_municipios.sql` |
-| Backup completo | `database/backup_2026_07_26.sql` (más reciente) |
+| Migración v1.4.0 | `database/migration_v1.4.0.sql` (modelo jerárquico por localidades) |
+| Migración v1.4.1 | `database/migration_v1.4.1.sql` (`descripcion` en `edan.tipo_evento`) |
+| Backup pre-migración | `database/backup_pre_v1.4.0.sql` |
+| Backup completo | `database/backup_2026_07_26.sql` |
 | Config pgAdmin4 | `database/servers.json` |
 | Iniciar BD | `database/iniciar_edan.sh` |
 | Restaurar BD | `database/restore_db.sh` |
 | Documentación | `docs/EDAN_BD.md` |
 | Formulario original | `Formulario.pdf` |
+
+---
+
+## API — Formulario EDAN (`/api/v1/edan`)
+
+Endpoints bajo `api/edan/` (router, service y schemas Pydantic anidados).
+Todos requieren token JWT (`Authorization: Bearer`) y el permiso de módulo `EDAN`.
+
+### Formulario principal
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/edan/` | Listar EDANs con filtros potentes |
+| GET | `/api/v1/edan/{id}` | Obtener EDAN completo (cabecera + localidades anidadas) |
+| POST | `/api/v1/edan/` | Crear EDAN con `localidades[]` anidadas |
+| PUT | `/api/v1/edan/{id}` | Actualizar cabecera |
+| DELETE | `/api/v1/edan/{id}` | Eliminar (soft por defecto; `?permanente=true` = físico con cascada) |
+
+### Localidades
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/edan/{id}/localidades` | Listar localidades de un EDAN |
+| POST | `/api/v1/edan/{id}/localidades` | Crear localidad con sus 16 secciones |
+| PUT | `/api/v1/edan/{id}/localidades/{id_localidad}` | Reemplazar localidad (borra y reinserta secciones) |
+| DELETE | `/api/v1/edan/{id}/localidades/{id_localidad}` | Eliminar localidad |
+
+### Reportes
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/edan/reportes/resumen` | Totales (EDANs, localidades, población) por estado y tipo de evento |
+| GET | `/api/v1/edan/reportes/geografico` | Conteos por departamento/provincia/municipio |
+| GET | `/api/v1/edan/reportes/agricultura` | Agregados de cultivos afectados |
+| GET | `/api/v1/edan/reportes/pecuario` | Agregados de especies afectadas |
+| GET | `/api/v1/edan/reportes/localidades` | Detalle paginado de localidades |
+
+### Catálogos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET/POST | `/api/v1/edan/tipo-evento`, `/api/v1/edan/tipo-evento/{id}` | CRUD tipo de evento |
+| GET/POST | `/api/v1/edan/estados`, `/api/v1/edan/estados/{id}` | CRUD estados del EDAN |
+
+### Filtros del listado y reportes (query params)
+
+`q`, `id_departamento`, `id_provincia`, `id_municipio`, `id_tipo_evento`,
+`id_estado`, `estado`, `id_usuario`, `fecha_evento_desde`, `fecha_evento_hasta`,
+`fecha_creacion_desde`, `fecha_creacion_hasta`, `sincronizado`, `es_borrador`,
+`pendiente_eliminacion`, `pendiente_actualizacion`, `con_foto`, `sin_foto`,
+`imp_poblacion`, `imp_salud`, `imp_infraestructura`, `imp_servicios`,
+`imp_educacion`, `imp_vivienda`, `imp_agropecuario`, `imp_proteccion`,
+`imp_necesidades`, `tiene_agricultura`, `tiene_pecuario`.
+
+Listado añade: `order_by` (whitelist: id_edan, codigo_edan, fecha_evento,
+fecha_creacion, fecha_modificacion, total_poblacion_afectada, id_departamento,
+id_municipio, estado, nombre_alcalde), `order` (asc/desc), `skip`, `limit`.
+
+### Contenido anidado
+
+Las respuestas devuelven **contenido** en lugar de ids cuando el id existe:
+
+- `departamento` / `provincia` / `municipio` → objeto geográfico completo.
+- `tipo_evento` / `estado` → objeto del catálogo.
+- `usuario` → objeto del usuario responsable.
+- En localidades: `danos_agricultura[].cultivo` (→ shared.cultivo) y
+  `danos_pecuarios[].especie_obj` (→ shared.pecuario).
 
 ---
 
