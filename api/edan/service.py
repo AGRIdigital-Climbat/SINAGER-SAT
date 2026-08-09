@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -98,6 +100,7 @@ def _lookup_nombre(db: Session, table: str, pk: str, id) -> str | None:
 
 def _build_header_payload(db: Session, data: dict) -> dict:
     header = {
+        "id_local": data.get("id_local"),
         "codigo_edan": data.get("codigo_edan"),
         "id_server": data.get("id_server"),
         "id_usuario": data.get("id_usuario"),
@@ -696,7 +699,31 @@ def _delete_localidad_sections(db: Session, id_localidad: int):
                    {"id": id_localidad})
 
 
+def _bump_edan_fecha(db: Session, id_edan: int):
+    db.execute(text("""
+        UPDATE edan.edan SET fecha_modificacion = NOW(),
+            sincronizado = FALSE, pendiente_actualizacion = TRUE
+        WHERE id_edan = :id
+    """), {"id": id_edan})
+
+
+def delete_localidad(db: Session, id_localidad: int) -> bool:
+    parent = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                  {"id": id_localidad})
+    if not parent:
+        return False
+    result = db.execute(text("DELETE FROM edan.edan_localidades WHERE id_edan_localidad = :id"),
+                        {"id": id_localidad})
+    _bump_edan_fecha(db, parent["id_edan"])
+    db.commit()
+    return result.rowcount > 0
+
+
 def update_localidad(db: Session, id_localidad: int, data: dict) -> dict | None:
+    parent = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                  {"id": id_localidad})
+    if not parent:
+        return None
     db.execute(text("""
         UPDATE edan.edan_localidades SET
             tipo_localidad = :tipo_localidad, nombre = :nombre,
@@ -722,6 +749,7 @@ def update_localidad(db: Session, id_localidad: int, data: dict) -> dict | None:
     })
     _delete_localidad_sections(db, id_localidad)
     _insert_sections_only(db, id_localidad, data)
+    _bump_edan_fecha(db, parent["id_edan"])
     db.commit()
     return _build_localidad(db, id_localidad)
 
@@ -967,6 +995,7 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
         return None
     resp = data.get("responsable") or {}
     fields = {
+        "id_local": data.get("id_local"),
         "codigo_edan": data.get("codigo_edan"),
         "id_server": data.get("id_server"),
         "id_usuario": data.get("id_usuario"),
@@ -1054,11 +1083,124 @@ def soft_delete_edan(db: Session, id: int) -> dict | None:
         return None
     db.execute(text("""
         UPDATE edan.edan SET pendiente_eliminacion = TRUE, sincronizado = FALSE,
-            es_borrador = FALSE, fecha_modificacion = NOW()
+            es_borrador = FALSE,
+            fecha_modificacion = GREATEST(fecha_modificacion, NOW())
         WHERE id_edan = :id
     """), {"id": id})
     db.commit()
     return get_edan_completo(db, id)
+
+
+# ============================================================================
+#  SINCRONIZACIÓN OFFLINE-FIRST (móvil <-> servidor <-> PC)
+# ============================================================================
+
+def _delete_all_localidades(db: Session, id_edan: int):
+    db.execute(text("DELETE FROM edan.edan_localidades WHERE id_edan = :id"), {"id": id_edan})
+
+
+def _replace_localidades(db: Session, id_edan: int, localidades: list):
+    _delete_all_localidades(db, id_edan)
+    for loc in localidades or []:
+        _insert_localidad(db, id_edan, loc)
+
+
+def _parse_fecha(fecha: str | None):
+    if not fecha:
+        return None
+    try:
+        return datetime.fromisoformat(str(fecha).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _edan_by_id_local(db: Session, id_local: str):
+    return _row(db, "SELECT id_edan FROM edan.edan WHERE id_local = :id_local", {"id_local": id_local})
+
+
+def sync_upsert(db: Session, data: dict, uid: int) -> dict:
+    """Push de un EDAN completo. Retorna el documento convergido y flags de sync."""
+    id_local = data.get("id_local")
+    id_server = data.get("id_server")
+    payload_fecha = _parse_fecha(data.get("fecha_modificacion"))
+
+    if data.get("id_usuario") is None:
+        data["id_usuario"] = uid
+
+    existing = None
+    if id_local:
+        existing = _edan_by_id_local(db, id_local)
+    if not existing and id_server:
+        existing = _row(db, "SELECT id_edan FROM edan.edan WHERE id_edan = :id", {"id": id_server})
+
+    # Tombstone (borrado local que debe propagarse)
+    if data.get("pendiente_eliminacion"):
+        if existing:
+            soft_delete_edan(db, existing["id_edan"])
+        return {"id_local": id_local, "id_edan": None, "sincronizado": True,
+                "aplicado": True, "tombstone": True, "data": None}
+
+    if not existing:
+        id_edan = create_edan(db, data)
+        db.execute(text("""
+            UPDATE edan.edan SET id_local = :id_local, sincronizado = TRUE,
+                pendiente_actualizacion = FALSE
+            WHERE id_edan = :id
+        """), {"id_local": id_local, "id": id_edan})
+        db.commit()
+        result = get_edan_completo(db, id_edan)
+        return {"id_local": id_local, "id_edan": id_edan, "sincronizado": True,
+                "aplicado": True, "conflicto": False, "data": result}
+
+    id_edan = existing["id_edan"]
+    row = _row(db, "SELECT fecha_modificacion, pendiente_eliminacion FROM edan.edan WHERE id_edan = :id",
+               {"id": id_edan})
+    server_fecha = row["fecha_modificacion"]
+
+    # Conflicto: el cliente envía la fecha de la última versión que conoce;
+    # si es más antigua que la del servidor, su push es una versión atrasada.
+    if payload_fecha is not None and server_fecha is not None and payload_fecha < server_fecha:
+        result = get_edan_completo(db, id_edan)
+        return {"id_local": id_local, "id_edan": id_edan, "sincronizado": True,
+                "aplicado": False, "conflicto": True, "data": result}
+
+    update_edan(db, id_edan, data)
+    if id_local:
+        db.execute(text("UPDATE edan.edan SET id_local = :id_local WHERE id_edan = :id"),
+                   {"id_local": id_local, "id": id_edan})
+    if data.get("localidades") is not None:
+        _replace_localidades(db, id_edan, data["localidades"])
+    db.execute(text("""
+        UPDATE edan.edan SET sincronizado = TRUE, pendiente_actualizacion = FALSE,
+            pendiente_eliminacion = FALSE
+        WHERE id_edan = :id
+    """), {"id": id_edan})
+    db.commit()
+    result = get_edan_completo(db, id_edan)
+    return {"id_local": id_local, "id_edan": id_edan, "sincronizado": True,
+            "aplicado": True, "conflicto": False, "data": result}
+
+
+def list_edans_sync(db: Session, id_usuario: int, fecha_desde: str | None = None,
+                    skip: int = 0, limit: int = 50):
+    conds = ["e.id_usuario = :uid"]
+    params: dict = {"uid": id_usuario}
+    if fecha_desde:
+        conds.append("e.fecha_modificacion >= :fecha_desde")
+        params["fecha_desde"] = fecha_desde
+    where = " AND ".join(conds)
+    total = db.execute(text(f"SELECT COUNT(*) FROM edan.edan e WHERE {where}"), params).scalar()
+    rows = _rows(db, f"""
+        {SQL_EDAN}
+        WHERE {where} ORDER BY e.fecha_modificacion DESC, e.id_edan DESC
+        LIMIT :limit OFFSET :skip
+    """, {**params, "limit": limit, "skip": skip})
+    data = []
+    for r in rows:
+        item = _build_edan(r)
+        item["localidades"] = _get_localidades(db, item["id_edan"])
+        data.append(item)
+    return data, total
 
 
 # ============================================================================
@@ -1181,6 +1323,31 @@ def get_edans(db: Session, f: dict | None = None, skip: int = 0, limit: int = 50
     params["skip"] = skip
     rows = _rows(db, query, params)
     return [_build_edan(r) for r in rows], total
+
+
+# ============================================================================
+#  MIS REPORTES (por usuario, patrón REA)
+# ============================================================================
+
+def get_mis_resumen_edan(db: Session, id_usuario: int):
+    return reporte_resumen(db, {"id_usuario": id_usuario})
+
+
+def get_mis_edans(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
+    total = db.execute(
+        text("SELECT COUNT(*) FROM edan.edan WHERE id_usuario = :uid"),
+        {"uid": id_usuario},
+    ).scalar()
+    rows = _rows(db, f"""
+        {SQL_EDAN}
+        WHERE e.id_usuario = :uid ORDER BY e.id_edan DESC LIMIT :limit OFFSET :skip
+    """, {"uid": id_usuario, "limit": limit, "skip": skip})
+    data = []
+    for r in rows:
+        item = _build_edan(r)
+        item["localidades"] = _get_localidades(db, item["id_edan"])
+        data.append(item)
+    return data, total
 
 
 # ============================================================================

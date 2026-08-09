@@ -15,6 +15,9 @@ TAG_LOCAL    = "EDAN > Localidades"
 TAG_REPORTES = "EDAN > Reportes"
 TAG_CATALOG  = "EDAN > Catálogos"
 
+# Roles que solo acceden a sus propios registros (patrón REA)
+ROLES_BAJOS = (6,)
+
 
 def _db_error(exc: Exception) -> HTTPException:
     """Traduce errores de BD a mensajes limpios sin filtrar el SQL."""
@@ -136,6 +139,30 @@ def _filtros_dep(
 #  REPORTES (antes de /{id} para no capturar rutas)
 # ============================================================================
 
+@router.get("/reportes/mis-resumen", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def mis_resumen(
+    id_usuario: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_BAJOS else (id_usuario or _user["id_usuario"])
+    data = service.get_mis_resumen_edan(db, uid)
+    return SuccessResponse(message="Resumen EDAN del usuario generado correctamente", data=data)
+
+
+@router.get("/reportes/mis-reportes", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
+def mis_reportes(
+    id_usuario: int | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_BAJOS else (id_usuario or _user["id_usuario"])
+    data, total = service.get_mis_edans(db, uid, skip=skip, limit=limit)
+    return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
+
+
 @router.get("/reportes/resumen", tags=[TAG_REPORTES], responses={200: {"model": SuccessResponse}})
 def reporte_resumen(
     f: dict = Depends(_filtros_dep),
@@ -239,6 +266,35 @@ _catalog_crud_routes(router, "estados", service.estado_edan_crud,
 
 
 # ============================================================================
+#  SINCRONIZACIÓN OFFLINE-FIRST (móvil <-> servidor <-> PC)
+# ============================================================================
+
+@router.post("/sync", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
+def sync_push(data: EdanSyncIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    uid = _user["id_usuario"]
+    try:
+        results = [service.sync_upsert(db, e.model_dump(), uid) for e in data.edans]
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+    return SuccessResponse(message="EDANs sincronizados correctamente", data=results)
+
+
+@router.get("/sync/pull", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
+def sync_pull(
+    id_usuario: int | None = Query(None),
+    fecha_desde: str | None = Query(None, description="Solo EDANs modificados después de esta fecha"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_BAJOS else (id_usuario or _user["id_usuario"])
+    data, total = service.list_edans_sync(db, uid, fecha_desde=fecha_desde, skip=skip, limit=limit)
+    return SuccessResponse(message="EDANs sincronizados correctamente", data=data, total=total)
+
+
+# ============================================================================
 #  EDAN PRINCIPAL
 # ============================================================================
 
@@ -324,6 +380,7 @@ def crear_localidad(id: int, data: LocalidadCreate, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     try:
         lid = service._insert_localidad(db, id, data.model_dump())
+        service._bump_edan_fecha(db, id)
         db.commit()
         result = service._build_localidad(db, lid)
         return SuccessResponse(message="Localidad creada correctamente", data=result)
@@ -347,11 +404,6 @@ def actualizar_localidad(id: int, id_localidad: int, data: LocalidadUpdate,
 
 @router.delete("/{id}/localidades/{id_localidad}", tags=[TAG_LOCAL], responses={200: {"model": MessageResponse}})
 def eliminar_localidad(id: int, id_localidad: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    result = db.execute(
-        text("DELETE FROM edan.edan_localidades WHERE id_edan_localidad = :id"),
-        {"id": id_localidad},
-    )
-    db.commit()
-    if result.rowcount == 0:
+    if not service.delete_localidad(db, id_localidad):
         raise HTTPException(status_code=404, detail="Localidad no encontrada")
     return MessageResponse(message="Localidad eliminada correctamente")

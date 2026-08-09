@@ -727,6 +727,8 @@ usuarios.usuario ←── (FK: id_usuario en edan.edan, id_usuario en rea.repor
 | Script geografía | `database/insert_provincias_municipios.sql` |
 | Migración v1.4.0 | `database/migration_v1.4.0.sql` (modelo jerárquico por localidades) |
 | Migración v1.4.1 | `database/migration_v1.4.1.sql` (`descripcion` en `edan.tipo_evento`) |
+| Migración v1.4.2 | `database/migration_v1.4.2.sql` (permisos EDAN: solo rol 6 escribe; elimina acciones/aplicaciones TEST y VERIFY) |
+| Migración v1.4.3 | `database/migration_v1.4.3.sql` (sync offline-first: `id_local` UNIQUE + índice `idx_edan_sync_pull`) |
 | Backup pre-migración | `database/backup_pre_v1.4.0.sql` |
 | Backup completo | `database/backup_2026_07_26.sql` |
 | Config pgAdmin4 | `database/servers.json` |
@@ -765,11 +767,88 @@ Todos requieren token JWT (`Authorization: Bearer`) y el permiso de módulo `EDA
 
 | Método | Ruta | Descripción |
 |---|---|---|
+| GET | `/api/v1/edan/reportes/mis-resumen` | Resumen agregado de EDANs de un usuario (totales + por estado/tipo de evento) |
+| GET | `/api/v1/edan/reportes/mis-reportes` | EDANs completos (con localidades) de un usuario, paginados |
 | GET | `/api/v1/edan/reportes/resumen` | Totales (EDANs, localidades, población) por estado y tipo de evento |
 | GET | `/api/v1/edan/reportes/geografico` | Conteos por departamento/provincia/municipio |
 | GET | `/api/v1/edan/reportes/agricultura` | Agregados de cultivos afectados |
 | GET | `/api/v1/edan/reportes/pecuario` | Agregados de especies afectadas |
 | GET | `/api/v1/edan/reportes/localidades` | Detalle paginado de localidades |
+
+`mis-resumen` y `mis-reportes` usan el patrón de REA (`ROLES_BAJOS = (6,)`):
+el rol 6 (UGR Municipio) siempre ve **sus propios** registros (ignora `id_usuario`);
+los demás roles pueden pasar `id_usuario` para consultar el de cualquier usuario
+(si no lo pasan, ven los suyos).
+
+### Permisos por rol (migración v1.4.2)
+
+| Rol | EDAN |
+|---|---|
+| 1 superadmin | CRUD completo |
+| 2 admin | CRUD completo |
+| 3 VIDECI Regional | Solo READ |
+| 4 UGR Sectores | Solo READ |
+| 5 DGR Gobernación | Solo READ |
+| 6 UGR Municipio | CRUD completo (crea/edita/elimina) |
+| 7 Responsable Local | Solo READ |
+| 8 Alcalde | Solo READ |
+| 9 VIDECI Departamental | Solo READ |
+
+### Sincronización offline-first (migración v1.4.3)
+
+Protocolo de sync **exclusivo del módulo EDAN** para flujo
+móvil → servidor → PC → móvil (el móvil captura en campo sin conexión).
+
+**Estructura:**
+
+- `edan.edan.id_local` (`VARCHAR(64)`): identificador UUID generado en el
+  dispositivo móvil, único (`edan_id_local_key`). Identifica al documento en
+  todos los dispositivos mientras el servidor solo conoce `id_server`/`id_edan`.
+- Índice `idx_edan_sync_pull (id_usuario, fecha_modificacion)`: soporta el pull
+  incremental por usuario.
+- `fecha_modificacion`: **autoridad de tiempo = servidor** (siempre `NOW()`).
+  La fecha que envía el cliente solo sirve para detectar versiones atrasadas.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/v1/edan/sync` | Push de EDANs (`EdanSyncIn {edans: [EdanCreate]}`). Crea si `id_local` no existe; actualiza si existe; responde convergido |
+| GET | `/api/v1/edan/sync/pull` | Pull incremental: `id_usuario`, `fecha_desde`, `skip`, `limit` |
+
+**Reglas de convergencia:**
+
+- *Match*: primero por `id_local`; si no, por `id_server` (móvil que aún no
+  persiste el id asignado).
+- *Idempotencia*: re-push del mismo documento no duplica.
+- *Conflicto*: last-write-wins. El cliente envía en `fecha_modificacion` la fecha
+  de la última versión que conoce; si es anterior a la del servidor, su push se
+  rechaza con `aplicado: False, conflicto: True` y recibe la versión vigente.
+- *Borrado*: tombstones. El móvil envía `pendiente_eliminacion: true` →
+  `soft_delete_edan` marca el registro y el otro dispositivo lo ve en el pull
+  (con `GREATEST` para no retroceder la fecha).
+- *Pull*: filtro `fecha_modificacion >= :fecha_desde` (el cliente guarda la mayor
+  fecha recibida como marca de último sync).
+- Crear/editar/eliminar localidades "bump" la cabecera (`_bump_edan_fecha` →
+  `NOW()`, `sincronizado = FALSE`, `pendiente_actualizacion = TRUE`) para que el
+  pull la vea como modificada.
+
+**Respuestas de sync:**
+
+| Campo | Significado |
+|---|---|
+| `id_local`, `id_edan` | Identidad del documento |
+| `aplicado`, `conflicto` | Si el push se aplicó o se rechazó por versión atrasada |
+| `tombstone` | `true` cuando el push era un borrado |
+| `sincronizado` | `true` tras aplicar |
+| `data` | Documento convergido (cabecera + localidades), el que el cliente debe guardar |
+
+**Flujo típico:**
+
+1. Móvil crea EDAN offline con `id_local = uuid4()`.
+2. Con conexión: `POST /edan/sync` → servidor crea y devuelve `id_edan`.
+3. PC hace `GET /edan/sync/pull` y completa el formulario (`PUT /edan/{id}`).
+4. Móvil hace pull → recibe la versión del PC (cabecera + localidades).
+5. Si el móvil intenta sobreescribir con una versión vieja → conflicto, gana el PC.
+6. Móvil borra el EDAN → `pendiente_eliminacion: true` → el PC lo ve en el pull.
 
 ### Catálogos
 

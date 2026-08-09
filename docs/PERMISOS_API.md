@@ -1,6 +1,6 @@
 # SINAGERSAT — Sistema de Permisos
 
-Guía completa del sistema de permisos basado en **rol-aplicación-acción**. v1.2.8.
+Guía completa del sistema de permisos basado en **rol-aplicación-acción**. v1.4.2.
 
 ---
 
@@ -31,19 +31,28 @@ ROL ──┬── PERMISO ── APLICACION
 |--------|--------|-------------|
 | 1 | superadmin | Acceso total — bypass de chequeos |
 | 2 | admin | CRUD completo + SISTEMA |
-| 3 | VIDECI Regional | EDAN/REA: CREATE, READ, UPDATE |
-| 4 | UGR Sectores | EDAN/REA: CREATE, READ, UPDATE |
-| 5 | DGR Gobernacion | EDAN/REA: CREATE, READ, UPDATE |
-| 6 | UGR Municipio | EDAN/REA: CREATE, READ, UPDATE — token eterno |
-| 7 | Responsable Local | EDAN/REA: CREATE, READ, UPDATE — token eterno |
+| 3 | VIDECI Regional | EDAN: READ; REA: CREATE, READ, UPDATE |
+| 4 | UGR Sectores | EDAN: READ; REA: CREATE, READ, UPDATE |
+| 5 | DGR Gobernación | EDAN: READ; REA: CREATE, READ, UPDATE |
+| 6 | UGR Municipio | EDAN: CREATE, READ, UPDATE, DELETE; REA/SISTEMA: CREATE, READ, UPDATE — token eterno |
+| 7 | Responsable Local | EDAN: READ; REA: CREATE, READ, UPDATE — token eterno |
+| 8 | Alcalde | EDAN/REA/RIDA/SISTEMA: READ |
+| 9 | VIDECI Departamental | EDAN: READ |
+
+> **Migración v1.4.2**: en el módulo **EDAN** solo superadmin/admin (roles 1-2) y
+> UGR Municipio (rol 6) escriben (CREATE/UPDATE/DELETE); los demás roles quedan
+> **solo lectura (READ)**. También se eliminaron las acciones/aplicaciones de
+> prueba TEST y VERIFY.
 
 ### Aplicaciones
 
 | id | Código | Nombre |
 |----|--------|--------|
 | 1 | EDAN | Evaluación de Daños y Análisis de Necesidades |
+| 2 | RIDA | Registro de Información de Daños |
+| 3 | SINB | Sistema de Información de Necesidades Básicas |
 | 4 | REA | Reportes de Eventos Adversos |
-| 9 | SISTEMA | Administración del Sistema |
+| 5 | SISTEMA | Administración del Sistema |
 
 ### Acciones
 
@@ -75,7 +84,7 @@ curl -H "Authorization: Bearer TOKEN" \
   "matriz": {
     "1": { "EDAN": ["CREATE","READ","UPDATE","DELETE"], "REA": [...], "SISTEMA": [...] },
     "2": { "EDAN": ["CREATE","READ","UPDATE","DELETE"], "SISTEMA": [...] },
-    "3": { "EDAN": ["CREATE","READ","UPDATE"], "REA": ["CREATE","READ","UPDATE"] }
+    "3": { "EDAN": ["READ"], "REA": ["CREATE","READ","UPDATE"] }
   }
 }
 ```
@@ -127,7 +136,7 @@ curl -H "Authorization: Bearer TOKEN" http://localhost:8000/api/v1/usuarios/acci
     "usuario": "encargado1",
     "id_rol": 3,
     "rol": "VIDECI Regional",
-    "permisos": { "EDAN": ["CREATE","READ","UPDATE"], "REA": ["CREATE","READ","UPDATE"] }
+    "permisos": { "EDAN": ["READ"], "REA": ["CREATE","READ","UPDATE"] }
   }
 }
 ```
@@ -154,7 +163,7 @@ curl -H "Authorization: Bearer TOKEN" \
     "usuario": "encargado1",
     "nombre": "Encargado Regional",
     "id_rol": 3,
-    "permisos": { "EDAN": ["CREATE","READ","UPDATE"], "REA": ["CREATE","READ","UPDATE"] }
+    "permisos": { "EDAN": ["READ"], "REA": ["CREATE","READ","UPDATE"] }
   }
 }
 ```
@@ -181,10 +190,12 @@ Esto permite al **UGR Municipio (rol 6)** gestionar el flujo de aprobación de l
 ---------+-----------------+-----------------+-----------------
 superadm | ■  ■  ■  ■      | ■  ■  ■  ■      | ■  ■  ■  ■
 admin    | ■  ■  ■  ■      | ■  ■  ■  ■      | ■  ■  ■  ■
-VIDECI   | ■  ■  ■  □      | ■  ■  ■  □      | □  □  □  □
-UGR Sec  | ■  ■  ■  □      | ■  ■  ■  □      | □  □  □  □
-UGR Muni | ■  ■  ■  □      | ■  ■  ■  □      | □  □  □  □
-Resp Loc | ■  ■  ■  □      | ■  ■  ■  □      | □  □  □  □
+VIDECI   | □  ■  □  □      | ■  ■  ■  □      | □  □  □  □
+UGR Sec  | □  ■  □  □      | ■  ■  ■  □      | □  □  □  □
+UGR Muni | ■  ■  ■  ■      | ■  ■  ■  □      | ■  ■  ■  □
+Resp Loc | □  ■  □  □      | ■  ■  ■  □      | □  □  □  □
+Alcalde  | □  ■  □  □      | □  ■  □  □      | □  ■  □  □
+VIDECI D | □  ■  □  □      | □  □  □  □      | □  □  □  □
 ```
 
 ---
@@ -197,6 +208,7 @@ Resp Loc | ■  ■  ■  □      | ■  ■  ■  □      | □  □  □  �
 | DELETE | ✅ | ✅ | ❌ | ❌ |
 | Acceso SISTEMA | ✅ | ✅ | ❌ | ❌ |
 | Token expira | 72h | 72h | 72h | **Nunca** |
+| Escribir EDAN (CREATE/UPDATE/DELETE) | ✅ | ✅ | ❌ (solo READ) | ✅ rol 6 / ❌ rol 7 |
 | Editar/eliminar REA ajeno | ✅ | ✅ | ✅ | ❌ solo propios |
 | Cambiar estado REA ajeno | ✅ | ✅ | ✅ | ❌ (excepción: rol 6 a reportes de rol 7 en mismo municipio) |
 | Editar su propio perfil (`PUT /usuarios/{id}` propio) | ✅ | ✅ | ✅ | ✅ sin SISTEMA |

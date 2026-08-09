@@ -200,8 +200,9 @@ class LocalidadCreate(BaseModel):
 
 
 class EdanCreate(BaseModel):
-    id_local: int | None = None
+    id_local: str | None = None
     id_server: int | None = None
+    fecha_modificacion: str | None = None
     codigo_edan: str | None = None
     id_usuario: int | None = None
     id_departamento: int | None = None
@@ -233,7 +234,9 @@ class EdanCreate(BaseModel):
 
 
 class EdanUpdate(BaseModel):
+    id_local: str | None = None
     id_server: int | None = None
+    fecha_modificacion: str | None = None
     codigo_edan: str | None = None
     id_usuario: int | None = None
     id_departamento: int | None = None
@@ -330,3 +333,7 @@ class EstadoEdanResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EdanSyncIn(BaseModel):
+    edans: list[EdanCreate] = []

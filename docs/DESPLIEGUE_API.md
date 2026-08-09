@@ -146,7 +146,11 @@ La API tiene ~170 endpoints organizados en 6 módulos.
 │   ├── GET /grupo-etario
 │   ├── GET /servicio-basico
 │   ├── GET /categoria-proteccion
-│   └── GET /ayuda-humanitaria
+│   ├── GET /ayuda-humanitaria
+│   ├── POST /sync                   # Push offline (EdanSyncIn) — móvil→servidor
+│   ├── GET /sync/pull               # Pull incremental — servidor→dispositivo
+│   ├── GET /reportes/mis-resumen    # Resumen de EDANs propios
+│   └── GET /reportes/mis-reportes   # EDANs propios completos, paginados
 │
 ├── rea/                       # Reportes de Eventos (🔒 token)
 │   ├── GET/POST /reportes
@@ -337,6 +341,16 @@ No requiere cambios en esquema de BD. Solo cambios en lógica de API:
 - `GET /auth/mis-permisos`: bugfix (500 error corregido)
 - `get_current_user` ahora incluye `id_municipio`
 
+### Migración v1.4.2
+
+- **Permisos EDAN restringidos**: solo superadmin/admin (roles 1-2) y UGR Municipio (rol 6) escriben (CREATE/UPDATE/DELETE); los demás roles (3, 4, 5, 7, 8, 9) quedan **solo lectura (READ)**.
+- **Se eliminan** las acciones/aplicaciones de prueba **TEST** y **VERIFY** (`database/migration_v1.4.2.sql`).
+
+### Migración v1.4.3
+
+- **Sync offline-first EDAN**: columna `edan.edan.id_local` (`VARCHAR(64)` UNIQUE, UUID del móvil) e índice `idx_edan_sync_pull (id_usuario, fecha_modificacion)`.
+- **Endpoints**: `POST /api/v1/edan/sync` (push) y `GET /api/v1/edan/sync/pull` (pull incremental). Servidor como autoridad de tiempo; conflictos por versión atrasada; borrados propagados como tombstones (`database/migration_v1.4.3.sql`).
+
 ### Historial de migraciones
 
 ```bash
@@ -345,7 +359,9 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 \
   -f database/migration_v1.2.1.sql \
   -f database/migration_v1.2.3.sql \
   -f database/migration_v1.2.5_permisos.sql \
-  -f database/migration_v1.3.0.sql
+  -f database/migration_v1.3.0.sql \
+  -f database/migration_v1.4.2.sql \
+  -f database/migration_v1.4.3.sql
 ```
 
 ---
@@ -540,6 +556,8 @@ SINAGER-SAT/
 │   ├── migration_v1.2.5_permisos.sql
 │   ├── migration_v1.2.7.sql
 │   ├── migration_v1.3.0.sql    # FKs compuestas geografía en usuarios.usuario
+│   ├── migration_v1.4.2.sql    # Permisos EDAN: solo rol 6+admin escriben; quita TEST/VERIFY
+│   ├── migration_v1.4.3.sql    # Sync offline: id_local UNIQUE + índice pull
 │   └── servers.json         # Config pgAdmin4
 ├── deploy/
 │   ├── desplegar_todo.sh    # Despliegue completo
