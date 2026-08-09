@@ -45,16 +45,24 @@ apt-get update -qq
 ok "Repositorios actualizados"
 
 # --------------------------------------------------
-# [2/5] Instalar PostgreSQL
+# [2/5] Instalar PostgreSQL (+ PostGIS)
 # --------------------------------------------------
 echo ""
-echo "[2/5] Instalando PostgreSQL..."
+echo "[2/5] Instalando PostgreSQL y PostGIS..."
 if command -v psql &>/dev/null; then
     PG_VER_INST=$(psql --version | grep -oP '\d+' | head -1)
     ok "PostgreSQL v$PG_VER_INST ya instalado"
 else
     apt-get install -y -qq postgresql postgresql-client
     ok "PostgreSQL instalado"
+fi
+
+# PostGIS: obligatorio para los endpoints geoespaciales (/shared/municipios/*/geojson, /geom, /ubicacion)
+if dpkg -l postgresql-${PG_VER_INST:-16}-postgis-3 &>/dev/null; then
+    ok "PostGIS ya instalado"
+else
+    apt-get install -y -qq postgresql-${PG_VER_INST:-16}-postgis-3
+    ok "PostGIS instalado"
 fi
 
 # --------------------------------------------------

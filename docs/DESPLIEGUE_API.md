@@ -351,6 +351,20 @@ No requiere cambios en esquema de BD. Solo cambios en lógica de API:
 - **Sync offline-first EDAN**: columna `edan.edan.id_local` (`VARCHAR(64)` UNIQUE, UUID del móvil) e índice `idx_edan_sync_pull (id_usuario, fecha_modificacion)`.
 - **Endpoints**: `POST /api/v1/edan/sync` (push) y `GET /api/v1/edan/sync/pull` (pull incremental). Servidor como autoridad de tiempo; conflictos por versión atrasada; borrados propagados como tombstones (`database/migration_v1.4.3.sql`).
 
+### Migración v1.5.0
+
+- **Restaura la funcionalidad geoespacial**: crea la extensión **PostGIS** (en el schema `public`), agrega `shared.municipio.geom` (`geometry(MultiPolygon, 4326)`) y el índice GiST `idx_municipio_geom`.
+- Los datos geométricos (340 polígonos) se restauran aparte con **`database/restaurar_geom.sh`** (extrae el bloque COPY de un backup completo, sin tocar otras tablas).
+- **Motivo**: la BD perdió PostGIS/`geom` al restaurarse desde un dump parcial (`backup_pre_*.sql`), rompiendo `/shared/municipios/*/geojson|geom|ubicacion` con `column m.geom does not exist` (`database/migration_v1.5.0.sql`).
+
+### Manejo de backups (regla anti-pérdida)
+
+- **Siempre restaurar desde el backup COMPLETO más reciente** (`database/backup_*.sql`, p. ej. `backup_v1.5.0.sql`).
+- **Nunca usar como base**: `backup_pre_*.sql` (dump parcial de schemas sueltos), `crear_edan_db.sql` (solo estructura), `edan_db_backup.sql` (antiguo), `insert_provincias_municipios.sql` (solo catálogo).
+- **Backup automático**: `database/hacer_backup.sh` genera un `pg_dump` completo (con PostGIS) y conserva los 14 más recientes. Cron diario configurado: `0 3 * * *`.
+- **Verificación de integridad**: el script comprueba que el backup contenga `CREATE EXTENSION ... postgis`; los scripts de restauración (`restore_db.sh`, `deploy/desplegar_bd.sh`) eligen el backup más reciente automáticamente y avisan si falta PostGIS.
+- **Antes de aplicar una migración**: ejecutar `bash database/hacer_backup.sh` para tener punto de retorno.
+
 ### Historial de migraciones
 
 ```bash
@@ -361,8 +375,13 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 \
   -f database/migration_v1.2.5_permisos.sql \
   -f database/migration_v1.3.0.sql \
   -f database/migration_v1.4.2.sql \
-  -f database/migration_v1.4.3.sql
+  -f database/migration_v1.4.3.sql \
+  -f database/migration_v1.5.0.sql
 ```
+
+> Nota: las migraciones v1.4.x aplican sobre la estructura EDAN jerárquica. En un
+> despliegue desde cero, `deploy/desplegar_bd.sh` ejecuta **todas** las
+> `migration_*.sql` en orden automáticamente.
 
 ---
 
@@ -548,8 +567,9 @@ SINAGER-SAT/
 ├── start_api.sh             # Iniciar API local
 ├── stop.sh                  # Detener todo
 ├── database/
-│   ├── backup_v1.2.7.sql    # Backup completo (Jul 2026)
-│   ├── backup_v1.2.8.sql    # Backup completo v1.2.8 (Ago 2026)
+│   ├── backup_v1.2.8.sql    # Backup completo con PostGIS (fuente de geometría)
+│   ├── backup_v1.5.0.sql    # Backup completo de referencia MÁS RECIENTE
+│   ├── backup_YYYY_MM_DD_HHMMSS.sql   # Backups automáticos (cron diario 03:00)
 │   ├── migration_v1.2.0.sql
 │   ├── migration_v1.2.1.sql
 │   ├── migration_v1.2.3.sql
@@ -558,6 +578,9 @@ SINAGER-SAT/
 │   ├── migration_v1.3.0.sql    # FKs compuestas geografía en usuarios.usuario
 │   ├── migration_v1.4.2.sql    # Permisos EDAN: solo rol 6+admin escriben; quita TEST/VERIFY
 │   ├── migration_v1.4.3.sql    # Sync offline: id_local UNIQUE + índice pull
+│   ├── migration_v1.5.0.sql    # PostGIS + shared.municipio.geom + índice GiST
+│   ├── hacer_backup.sh         # Backup completo (cron diario, conserva 14)
+│   ├── restaurar_geom.sh       # Recupera geom de municipios sin tocar otras tablas
 │   └── servers.json         # Config pgAdmin4
 ├── deploy/
 │   ├── desplegar_todo.sh    # Despliegue completo

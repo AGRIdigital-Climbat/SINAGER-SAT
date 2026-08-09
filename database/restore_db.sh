@@ -12,16 +12,17 @@ DB="db_sinagersat"
 USER="sinagersat"
 PW="12345678"
 
+# Buscar el backup MÁS RECIENTE (backup_*.sql de tamaño completo)
+# Los dumps parciales (crear_edan_db.sql, edan_db_backup.sql, backup_pre_*.sql)
+# se ignoran para no perder datos.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Buscar backup (preferir el más reciente)
 BACKUP=""
-for CANDIDATO in \
-    "$SCRIPT_DIR/backup_v1.2.7.sql" \
-    "$SCRIPT_DIR/backup_v1.2.6.sql" \
-    "$SCRIPT_DIR/backup_2026_07_21.sql" \
-    "$SCRIPT_DIR/edan_db_backup.sql"; do
-    if [ -f "$CANDIDATO" ]; then
+for CANDIDATO in $(ls -1t "$SCRIPT_DIR"/backup_*.sql 2>/dev/null); do
+    case "$(basename "$CANDIDATO")" in
+        backup_pre_*.sql) continue ;;  # dump parcial, no usar como base
+    esac
+    if [ -s "$CANDIDATO" ]; then
         BACKUP="$CANDIDATO"
         break
     fi
@@ -48,6 +49,13 @@ if [ ! -f "$BACKUP" ]; then
     exit 1
 fi
 ok "Backup encontrado: $(du -h "$BACKUP" | cut -f1)"
+
+# Validar que el backup sea COMPLETO (contenga PostGIS/geom si aplica)
+if ! grep -q "CREATE EXTENSION IF NOT EXISTS postgis" "$BACKUP"; then
+    warn "El backup NO contiene PostGIS. Si es un dump parcial (ej. backup_pre_*.sql)"
+    warn "o muy antiguo, la geometría (geom) de shared.municipio no se restaurará."
+    warn "Usa database/restaurar_geom.sh con un backup que sí lo incluya."
+fi
 
 # Copiar a /tmp para evitar problemas de permisos en medios externos
 BACKUP_TMP="/tmp/edan_db_backup.sql"

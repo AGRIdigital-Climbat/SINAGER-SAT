@@ -1,11 +1,46 @@
 # Geoespaciales — GeoJSON, WKT y Ubicación
 
-Guía de los endpoints geoespaciales de SINAGERSAT (v1.2.8) para uso con herramientas de mapas y GPS.
+Guía de los endpoints geoespaciales de SINAGERSAT (v1.5.0) para uso con herramientas de mapas y GPS.
 
 ## Requisitos
 
 - PostgreSQL 16+ con extensión **PostGIS**
 - 340 municipios con geometrías `MULTIPOLYGON` en SRID 4326 (WGS 84)
+
+### ⚠️ PostGIS y la columna `geom`
+
+La extensión **PostGIS** y la columna `shared.municipio.geom` son **indispensables**
+para estos endpoints (todos los SQL usan `ST_Transform`/`ST_AsGeoJSON`/`ST_Contains`).
+Si la BD se restauró desde un **dump parcial** (`backup_pre_*.sql`, `crear_edan_db.sql`,
+`edan_db_backup.sql`) o muy antiguo, la geometría se pierde y los endpoints devuelven
+`500` con `column m.geom does not exist`.
+
+**Instalar / reparar:**
+
+```bash
+# 1. Paquete PostGIS (deploy/instalar_postgresql.sh lo hace automáticamente)
+sudo apt-get install -y postgresql-16-postgis-3
+
+# 2. Extensión + columna + índice (idempotente)
+sudo -u postgres psql -d db_sinagersat -f database/migration_v1.5.0.sql
+
+# 3. Restaurar los 340 polígonos desde un backup completo SIN tocar otras tablas
+bash database/restaurar_geom.sh            # usa backup_v1.2.8.sql por defecto
+bash database/restaurar_geom.sh database/backup_v1.5.0.sql
+```
+
+**Verificar:**
+
+```sql
+SELECT count(*) FROM shared.municipio WHERE geom IS NOT NULL;   -- → 340
+SELECT ST_SRID(geom) FROM shared.municipio WHERE id = 70101;    -- → 4326
+SELECT extname FROM pg_extension WHERE extname = 'postgis';     -- → postgis
+```
+
+> **Regla para backups**: siempre restaurar desde el backup **completo más reciente**
+> (`database/backup_*.sql` completo, p. ej. `backup_v1.5.0.sql`). Nunca usar un dump
+> parcial como base. `database/hacer_backup.sh` (cron diario 03:00) genera los backups
+> completos con PostGIS incluido.
 
 ## Endpoints
 

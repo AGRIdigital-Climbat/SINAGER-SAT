@@ -39,42 +39,37 @@ fi
 ok "PostgreSQL corriendo"
 
 # --------------------------------------------------
-# Buscar backup
-# --------------------------------------------------
+# Buscar el backup MÁS RECIENTE (backup_*.sql de tamaño completo)
+# Los dumps parciales (crear_edan_db.sql, edan_db_backup.sql, backup_pre_*.sql)
+# se ignoran para no perder datos.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DATABASE_DIR="$SCRIPT_DIR/../database"
 
-# Buscar en varias ubicaciones posibles (preferir el más reciente)
 BACKUP=""
-for CANDIDATO in \
-    "$SCRIPT_DIR/../database/backup_v1.2.7.sql" \
-    "$SCRIPT_DIR/../database/backup_v1.2.6.sql" \
-    "$SCRIPT_DIR/../database/backup_2026_07_26.sql" \
-    "$SCRIPT_DIR/../database/backup_2026_07_21.sql" \
-    "$SCRIPT_DIR/../database/edan_db_backup.sql" \
-    "$SCRIPT_DIR/database/backup_v1.2.7.sql" \
-    "$SCRIPT_DIR/database/backup_v1.2.6.sql" \
-    "$SCRIPT_DIR/database/backup_2026_07_26.sql" \
-    "$SCRIPT_DIR/database/backup_2026_07_21.sql" \
-    "$SCRIPT_DIR/database/edan_db_backup.sql" \
-    "$SCRIPT_DIR/backup_v1.2.7.sql" \
-    "$SCRIPT_DIR/backup_v1.2.6.sql" \
-    "$SCRIPT_DIR/backup_2026_07_26.sql" \
-    "$SCRIPT_DIR/backup_2026_07_21.sql" \
-    "$SCRIPT_DIR/edan_db_backup.sql"; do
-    if [ -f "$CANDIDATO" ]; then
+for CANDIDATO in $(ls -1t "$DATABASE_DIR"/backup_*.sql 2>/dev/null); do
+    case "$(basename "$CANDIDATO")" in
+        backup_pre_*.sql) continue ;;  # dump parcial, no usar como base
+    esac
+    if [ -s "$CANDIDATO" ]; then
         BACKUP="$CANDIDATO"
         break
     fi
 done
 
 if [ -z "$BACKUP" ]; then
-    fail "No se encuentra archivo de backup"
-    echo "  Buscado en:"
-    echo "    - $SCRIPT_DIR/../database/"
-    echo "    - $SCRIPT_DIR/database/"
+    fail "No se encuentra archivo de backup en $DATABASE_DIR"
+    echo "  Esperado: database/backup_*.sql (p. ej. backup_v1.5.0.sql)"
     exit 1
 fi
 ok "Backup encontrado: $BACKUP ($(du -h "$BACKUP" | cut -f1))"
+
+# Validar que el backup sea COMPLETO (contenga PostGIS)
+if grep -q "CREATE EXTENSION IF NOT EXISTS postgis" "$BACKUP"; then
+    ok "Backup completo: incluye PostGIS"
+else
+    warn "El backup NO incluye PostGIS (puede ser un dump parcial o muy antiguo)."
+    warn "La geometría (geom) de shared.municipio se restaurará con database/restaurar_geom.sh."
+fi
 
 # Copiar backup a /tmp para evitar problemas de permisos en medios externos
 BACKUP_TMP="/tmp/edan_db_backup.sql"
@@ -141,63 +136,24 @@ for SCHEMA in $SCHEMAS; do
 done
 
 # --------------------------------------------------
-# [6/6] Ejecutar migraciones
+# [6/6] Ejecutar migraciones (todas en orden)
 # --------------------------------------------------
 echo ""
 echo "[6/6] Ejecutando migraciones..."
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+MIGRATIONS_DIR="$PROJECT_DIR/database"
 
-# Ejecutar migración v1.2.0
-MIGRATION_120="$PROJECT_DIR/database/migration_v1.2.0.sql"
-if [ -f "$MIGRATION_120" ]; then
-    echo "  Ejecutando migración v1.2.0..."
-    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_120" 2>/dev/null || true
-    ok "Migración v1.2.0 ejecutada"
-else
-    warn "Archivo migration_v1.2.0.sql no encontrado"
-fi
-
-# Ejecutar migración v1.2.1
-MIGRATION_121="$PROJECT_DIR/database/migration_v1.2.1.sql"
-if [ -f "$MIGRATION_121" ]; then
-    echo "  Ejecutando migración v1.2.1..."
-    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_121" 2>/dev/null || true
-    ok "Migración v1.2.1 ejecutada"
-else
-    warn "Archivo migration_v1.2.1.sql no encontrado"
-fi
-
-# Ejecutar migración v1.2.3
-MIGRATION_123="$PROJECT_DIR/database/migration_v1.2.3.sql"
-if [ -f "$MIGRATION_123" ]; then
-    echo "  Ejecutando migración v1.2.3..."
-    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_123" 2>/dev/null || true
-    ok "Migración v1.2.3 ejecutada"
-else
-    warn "Archivo migration_v1.2.3.sql no encontrado"
-fi
-
-# Ejecutar migración v1.2.5
-MIGRATION_125="$PROJECT_DIR/database/migration_v1.2.5_permisos.sql"
-if [ -f "$MIGRATION_125" ]; then
-    echo "  Ejecutando migración v1.2.5..."
-    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_125" 2>/dev/null || true
-    ok "Migración v1.2.5 ejecutada"
-else
-    warn "Archivo migration_v1.2.5_permisos.sql no encontrado"
-fi
-
-# Ejecutar migración v1.2.7
-MIGRATION_127="$PROJECT_DIR/database/migration_v1.2.7.sql"
-if [ -f "$MIGRATION_127" ]; then
-    echo "  Ejecutando migración v1.2.7..."
-    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION_127" 2>/dev/null || true
-    ok "Migración v1.2.7 ejecutada"
-else
-    warn "Archivo migration_v1.2.7.sql no encontrado"
-fi
+# Todas las migraciones en orden numérico de versión.
+# Los backups (backup_*.sql) y dumps (crear_edan_db.sql, etc.) NO son migraciones.
+for MIGRATION in $(ls -1v "$MIGRATIONS_DIR"/migration_*.sql 2>/dev/null); do
+    NAME="$(basename "$MIGRATION")"
+    echo "  Ejecutando migración $NAME ..."
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -f "$MIGRATION" 2>/dev/null \
+        && ok "Migración $NAME ejecutada" \
+        || warn "Migración $NAME falló (revisar)."
+done
 
 ok "Migraciones completadas"
 
