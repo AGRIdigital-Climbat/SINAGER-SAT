@@ -8,6 +8,7 @@ from ..dependencies import get_current_user
 from ..auth.permisos import module_permiso
 from ..response import SuccessResponse, MessageResponse
 from ..upload import save_upload_file
+from ..edan import service as edan_service
 from .schemas import *
 from . import service
 
@@ -65,6 +66,14 @@ def obtener_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_cu
     if not result:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     return SuccessResponse(message="Reporte obtenido correctamente", data=result)
+
+
+@router.get("/reportes/{id}/edan", tags=[TAG_REP], responses={200: {"model": SuccessResponse}})
+def edan_de_reporte(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = edan_service.get_edan_por_reporte(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Este reporte REA aún no tiene un EDAN vinculado")
+    return SuccessResponse(message="EDAN vinculado al reporte obtenido correctamente", data=result)
 
 
 @router.post("/reportes", status_code=201, tags=[TAG_REP], responses={201: {"model": SuccessResponse}})

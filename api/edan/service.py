@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -17,6 +18,10 @@ SQL_EDAN = """
            es.id_estado as es_id, es.nombre as es_nombre,
            es.descripcion as es_descripcion, es.orden as es_orden,
            u.id_usuario as u_id, u.usuario as u_usuario, u.nombre as u_nombre,
+           r.id_reporte as r_id_reporte, r.comunidad as r_comunidad,
+           r.fecha_evento as r_fecha_evento, r.hora_evento as r_hora_evento,
+           r.id_municipio as r_id_municipio, rm.nombre as r_municipio_nombre,
+           r.id_tipo_evento as r_id_tipo_evento, r.descripcion as r_descripcion,
            (SELECT COUNT(*) FROM edan.edan_localidades lc
              WHERE lc.id_edan = e.id_edan) AS num_localidades
     FROM edan.edan e
@@ -26,6 +31,8 @@ SQL_EDAN = """
     LEFT JOIN edan.tipo_evento te ON e.id_tipo_evento = te.id_tipo_evento
     LEFT JOIN edan.estado_edan es ON e.id_estado = es.id_estado
     LEFT JOIN usuarios.usuario u ON e.id_usuario = u.id_usuario
+    LEFT JOIN rea.reporte_evento r ON e.id_reporte_rea = r.id_reporte
+    LEFT JOIN shared.municipio rm ON r.id_municipio = rm.id
 """
 
 
@@ -71,6 +78,21 @@ def _build_edan(row):
         "fono": data.pop("responsable_fono", None) or "",
         "correo": data.pop("responsable_correo", None) or "",
     }
+    if data.get("id_reporte_rea"):
+        data["reporte_rea"] = {
+            "id_reporte": data.pop("r_id_reporte", None),
+            "comunidad": data.pop("r_comunidad", None),
+            "fecha_evento": data.pop("r_fecha_evento", None),
+            "hora_evento": data.pop("r_hora_evento", None),
+            "id_municipio": data.pop("r_id_municipio", None),
+            "municipio_nombre": data.pop("r_municipio_nombre", None),
+            "id_tipo_evento": data.pop("r_id_tipo_evento", None),
+            "descripcion": data.pop("r_descripcion", None),
+        } if data.get("r_id_reporte") else None
+    else:
+        for k in ("r_id_reporte", "r_comunidad", "r_fecha_evento", "r_hora_evento",
+                  "r_id_municipio", "r_municipio_nombre", "r_id_tipo_evento", "r_descripcion"):
+            data.pop(k, None)
     return data
 
 
@@ -383,7 +405,22 @@ def get_edan_completo(db: Session, id: int):
     if not edan:
         return None
     edan["localidades"] = _get_localidades(db, id)
+    edan["reportes_rea"] = [dict(r) for r in _rows(db, """
+        SELECT id_reporte, comunidad, fecha_evento, hora_evento,
+               id_municipio, id_tipo_evento, descripcion
+        FROM rea.reporte_evento WHERE id_edan = :id_edan ORDER BY id_reporte
+    """, {"id_edan": id})]
     return edan
+
+
+def get_edan_por_reporte(db: Session, id_reporte: int):
+    """Devuelve el EDAN generado desde un reporte REA (o None si no está vinculado)."""
+    row = _row(db, "SELECT id_edan FROM edan.edan WHERE id_reporte_rea = :id", {"id": id_reporte})
+    if not row or row["id_edan"] is None:
+        row = _row(db, "SELECT id_edan FROM rea.reporte_evento WHERE id_reporte = :id", {"id": id_reporte})
+    if not row or row["id_edan"] is None:
+        return None
+    return get_edan_completo(db, row["id_edan"])
 
 
 def _get_localidades(db: Session, id_edan: int) -> list:
@@ -976,7 +1013,37 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
 #  CRUD PRINCIPAL (transaccional)
 # ============================================================================
 
+def _validar_reporte_rea(db: Session, id_reporte_rea):
+    """Valida que el REA de origen exista. NULL (sin vínculo) siempre es válido."""
+    if id_reporte_rea is None:
+        return None
+    row = _row(db, "SELECT id_reporte FROM rea.reporte_evento WHERE id_reporte = :id",
+               {"id": id_reporte_rea})
+    if not row:
+        raise HTTPException(status_code=404, detail=f"El reporte REA {id_reporte_rea} no existe")
+    return id_reporte_rea
+
+
+def _sync_reporte_edan(db: Session, id_reporte_rea: int | None, id_edan: int | None,
+                       prev_id_reporte_rea: int | None = None):
+    """Mantiene el vínculo inverso rea.reporte_evento.id_edan en sincronía con el EDAN.
+
+    - Si el REA cambió o se desvinculó (NULL), se limpia el id_edan del REA anterior.
+    - Si hay REA nuevo, se apunta rea.id_edan hacia este EDAN.
+    """
+    if prev_id_reporte_rea is not None and prev_id_reporte_rea != id_reporte_rea:
+        db.execute(text("""
+            UPDATE rea.reporte_evento SET id_edan = NULL
+            WHERE id_reporte = :id AND id_edan = :id_edan
+        """), {"id": prev_id_reporte_rea, "id_edan": id_edan})
+    if id_reporte_rea is not None:
+        db.execute(text("""
+            UPDATE rea.reporte_evento SET id_edan = :id_edan WHERE id_reporte = :id_reporte
+        """), {"id_edan": id_edan, "id_reporte": id_reporte_rea})
+
+
 def create_edan(db: Session, data: dict) -> int:
+    _validar_reporte_rea(db, data.get("id_reporte_rea"))
     header = _build_header_payload(db, data)
     cols = ", ".join(header.keys())
     ph = ", ".join(f":{k}" for k in header.keys())
@@ -984,6 +1051,8 @@ def create_edan(db: Session, data: dict) -> int:
         INSERT INTO edan.edan ({cols}) VALUES ({ph}) RETURNING id_edan
     """), header)
     id_edan = result.scalar()
+    if data.get("id_reporte_rea"):
+        _sync_reporte_edan(db, data["id_reporte_rea"], id_edan)
     for loc in data.get("localidades") or []:
         _insert_localidad(db, id_edan, loc)
     db.commit()
@@ -993,6 +1062,8 @@ def create_edan(db: Session, data: dict) -> int:
 def update_edan(db: Session, id: int, data: dict) -> dict | None:
     if not get_edan(db, id):
         return None
+    prev_rea = (_row(db, "SELECT id_reporte_rea FROM edan.edan WHERE id_edan = :id",
+                     {"id": id}) or {}).get("id_reporte_rea")
     resp = data.get("responsable") or {}
     fields = {
         "id_local": data.get("id_local"),
@@ -1021,10 +1092,15 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
         "responsable_cargo": resp.get("cargo"),
         "responsable_fono": resp.get("fono"),
         "responsable_correo": resp.get("correo"),
-        "id_reporte_rea": data.get("id_reporte_rea"),
         "fotografia": data.get("fotografia"),
     }
-    fields = {k: v for k, v in fields.items() if v is not None}
+    # id_reporte_rea se maneja aparte para poder vaciarlo a NULL explícitamente
+    if "id_reporte_rea" in data:
+        _validar_reporte_rea(db, data.get("id_reporte_rea"))
+        fields["id_reporte_rea"] = data.get("id_reporte_rea")
+    else:
+        fields["id_reporte_rea"] = data.get("id_reporte_rea")
+    fields = {k: v for k, v in fields.items() if v is not None or k == "id_reporte_rea"}
     if fields.get("id_estado") is not None and fields.get("estado") is None:
         st = _row(db, "SELECT id_estado, nombre FROM edan.estado_edan WHERE id_estado = :id",
                   {"id": fields["id_estado"]})
@@ -1068,6 +1144,8 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
     fields["id_edan"] = id
     set_clause = ", ".join(f"{k} = :{k}" for k in fields)
     db.execute(text(f"UPDATE edan.edan SET {set_clause}, fecha_modificacion = NOW() WHERE id_edan = :id_edan"), fields)
+    if "id_reporte_rea" in data:
+        _sync_reporte_edan(db, data.get("id_reporte_rea"), id, prev_rea)
     db.commit()
     return get_edan_completo(db, id)
 

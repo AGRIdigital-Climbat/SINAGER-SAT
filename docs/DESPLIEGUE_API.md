@@ -357,6 +357,14 @@ No requiere cambios en esquema de BD. Solo cambios en lógica de API:
 - Los datos geométricos (340 polígonos) se restauran aparte con **`database/restaurar_geom.sh`** (extrae el bloque COPY de un backup completo, sin tocar otras tablas).
 - **Motivo**: la BD perdió PostGIS/`geom` al restaurarse desde un dump parcial (`backup_pre_*.sql`), rompiendo `/shared/municipios/*/geojson|geom|ubicacion` con `column m.geom does not exist` (`database/migration_v1.5.0.sql`).
 
+### Migración v1.5.1
+
+- **Conexión EDAN ↔ REA bidireccional**:
+  - `edan.edan.id_reporte_rea` → `INTEGER`, **FK** hacia `rea.reporte_evento.id_reporte` `ON DELETE SET NULL` (REA de origen, nullable).
+  - `rea.reporte_evento.id_edan` → `BIGINT`, **FK** hacia `edan.edan.id_edan` `ON DELETE SET NULL` (permite que un EDAN agrupe varios REAs).
+  - Índices `idx_edan_id_reporte_rea` y `idx_reporte_id_edan`.
+- **API**: `id_reporte_rea` opcional en POST/PUT (puede ir vacío), validado contra `rea.reporte_evento`; `PUT` con `null` desvincula; GET devuelve `reporte_rea` anidado (solo si está lleno) y `reportes_rea` (REAs agrupados). Nuevo endpoint `GET /api/v1/rea/reportes/{id}/edan` (`database/migration_v1.5.1.sql`).
+
 ### Manejo de backups (regla anti-pérdida)
 
 - **Siempre restaurar desde el backup COMPLETO más reciente** (`database/backup_*.sql`, p. ej. `backup_v1.5.0.sql`).
@@ -376,7 +384,8 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1 \
   -f database/migration_v1.3.0.sql \
   -f database/migration_v1.4.2.sql \
   -f database/migration_v1.4.3.sql \
-  -f database/migration_v1.5.0.sql
+  -f database/migration_v1.5.0.sql \
+  -f database/migration_v1.5.1.sql
 ```
 
 > Nota: las migraciones v1.4.x aplican sobre la estructura EDAN jerárquica. En un
@@ -579,6 +588,7 @@ SINAGER-SAT/
 │   ├── migration_v1.4.2.sql    # Permisos EDAN: solo rol 6+admin escriben; quita TEST/VERIFY
 │   ├── migration_v1.4.3.sql    # Sync offline: id_local UNIQUE + índice pull
 │   ├── migration_v1.5.0.sql    # PostGIS + shared.municipio.geom + índice GiST
+│   ├── migration_v1.5.1.sql    # Conexión EDAN<->REA: FK id_reporte_rea + rea.id_edan
 │   ├── hacer_backup.sh         # Backup completo (cron diario, conserva 14)
 │   ├── restaurar_geom.sh       # Recupera geom de municipios sin tocar otras tablas
 │   └── servers.json         # Config pgAdmin4

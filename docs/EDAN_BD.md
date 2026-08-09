@@ -284,7 +284,7 @@ edan.edan  (cabecera 1)
 | `responsable_correo` | VARCHAR(150) | Correo electrónico |
 | `fecha_creacion` | TIMESTAMP | Auditoría |
 | `fecha_modificacion` | TIMESTAMP | Auditoría |
-| `id_reporte_rea` | BIGINT FK | Reporte REA origen (FK → rea.reporte_evento.id_reporte, nullable) |
+| `id_reporte_rea` | INTEGER FK | Reporte REA origen (FK → rea.reporte_evento.id_reporte, ON DELETE SET NULL, nullable) |
 | `fotografia` | TEXT | Ruta/imagen del formulario |
 | `id_server` | INTEGER | ID del servidor de origen (sincronización) |
 | `id_usuario` | INTEGER FK | Usuario que registró (FK → usuarios.usuario.id_usuario) |
@@ -554,11 +554,19 @@ Permite registrar eventos desde el campo con información básica, que luego pue
 
 ### Relación REA → EDAN
 
-Un reporte REA puede generar un formulario EDAN completo. La relación se establece mediante el campo `edan.edan.id_reporte_rea`:
-- **NULL**: El EDAN fue creado directamente (sin reporte REA previo)
-- **Con valor**: El EDAN fue creado a partir del reporte REA indicado
+Un reporte REA puede generar un formulario EDAN completo. La relación es **bidireccional** (migración v1.5.1):
 
-No se copia información del REA al EDAN; solo se establece la trazabilidad para saber de qué reporte surgió cada evaluación.
+- `edan.edan.id_reporte_rea` (`INTEGER FK`) → **REA de origen** (el que generó el EDAN). FK hacia `rea.reporte_evento.id_reporte` con `ON DELETE SET NULL`.
+- `rea.reporte_evento.id_edan` (`BIGINT FK`) → **vínculo inverso** (a qué EDAN pertenece el REA). FK hacia `edan.edan.id_edan` con `ON DELETE SET NULL`.
+
+Reglas de negocio:
+- **NULL**: el EDAN fue creado directamente, sin reporte REA previo (el campo puede ir vacío).
+- **Con valor**: el EDAN fue creado a partir del reporte REA indicado.
+- **Cardinalidad**: un REA solo puede generar **un** EDAN; un EDAN puede **agrupar varios** REAs (por lo general solo uno). La API mantiene ambos vínculos sincronizados automáticamente (crear/actualizar/desvincular).
+- Si se borra un REA o un EDAN, el vínculo se pone en NULL (nunca se elimina el registro que sobrevive).
+- Si el REA de origen cambia, el `id_edan` del REA anterior se limpia.
+
+No se copia información del REA al EDAN; solo se establece la trazabilidad para saber de qué reporte surgió cada evaluación. En la respuesta GET del EDAN, el objeto anidado `reporte_rea` (detalle del REA de origen) solo aparece cuando `id_reporte_rea` está lleno; si está vacío, no se incluye.
 
 ### Árbol de relaciones REA
 
@@ -749,10 +757,18 @@ Todos requieren token JWT (`Authorization: Bearer`) y el permiso de módulo `EDA
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/v1/edan/` | Listar EDANs con filtros potentes |
-| GET | `/api/v1/edan/{id}` | Obtener EDAN completo (cabecera + localidades anidadas) |
-| POST | `/api/v1/edan/` | Crear EDAN con `localidades[]` anidadas |
-| PUT | `/api/v1/edan/{id}` | Actualizar cabecera |
+| GET | `/api/v1/edan/{id}` | Obtener EDAN completo (cabecera + localidades anidadas + `reporte_rea`/`reportes_rea`) |
+| POST | `/api/v1/edan/` | Crear EDAN con `localidades[]` anidadas (opcional `id_reporte_rea`) |
+| PUT | `/api/v1/edan/{id}` | Actualizar cabecera (`id_reporte_rea: null` desvincula el REA) |
 | DELETE | `/api/v1/edan/{id}` | Eliminar (soft por defecto; `?permanente=true` = físico con cascada) |
+
+**Campo `id_reporte_rea`**: opcional en POST/PUT (puede ir vacío). Si se envía un valor, debe existir en `rea.reporte_evento` (404 si no); al crear/actualizar la API sincroniza el vínculo inverso `rea.reporte_evento.id_edan`. Respuesta GET: `reporte_rea` (detalle anidado del REA de origen, solo si está lleno) y `reportes_rea` (lista de REAs agrupados bajo el EDAN).
+
+### Vinculación REA → EDAN
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/rea/reportes/{id}/edan` | Obtener el EDAN generado desde un reporte REA (404 si aún no tiene) |
 
 ### Localidades
 

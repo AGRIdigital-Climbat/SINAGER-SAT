@@ -274,6 +274,9 @@ def sync_push(data: EdanSyncIn, db: Session = Depends(get_db), _user=Depends(get
     uid = _user["id_usuario"]
     try:
         results = [service.sync_upsert(db, e.model_dump(), uid) for e in data.edans]
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise _db_error(e)
@@ -341,7 +344,9 @@ def crear_edan(data: EdanCreate, db: Session = Depends(get_db), user=Depends(get
 @router.put("/{id}", tags=[TAG_MAIN], responses={200: {"model": SuccessResponse}})
 def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
-        result = service.update_edan(db, id, data.model_dump())
+        result = service.update_edan(db, id, data.model_dump(exclude_unset=True))
+    except HTTPException:
+        raise
     except Exception as e:
         raise _db_error(e)
     if not result:
