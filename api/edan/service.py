@@ -1400,7 +1400,12 @@ def get_edans(db: Session, f: dict | None = None, skip: int = 0, limit: int = 50
     params["limit"] = limit
     params["skip"] = skip
     rows = _rows(db, query, params)
-    return [_build_edan(r) for r in rows], total
+    data = []
+    for r in rows:
+        item = _build_edan(r)
+        item["localidades"] = _get_localidades(db, item["id_edan"])
+        data.append(item)
+    return data, total
 
 
 # ============================================================================
