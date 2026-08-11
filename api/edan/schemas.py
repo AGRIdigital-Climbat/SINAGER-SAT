@@ -3,18 +3,22 @@ from pydantic import BaseModel, Field
 
 # ============================================================================
 #  MODELOS ANIDADOS DEL FORMULARIO EDAN
-#  Espejo de lib/models/edan.dart (nombres JSON exactos de la app).
+#  Reflejan EXACTAMENTE el esquema de las tablas edan.edan_localidades_*
+#  Los IDs (id_edan_localidad, id_establecimiento_salud, etc.) los asigna
+#  el servicio al insertar — el cliente NO los envía.
 # ============================================================================
 
 class ImpactoPoblacion(BaseModel):
-    rango: str = ''
-    fallecidos: int = 0
-    heridos: int = 0
-    desaparecidos: int = 0
+    """→ edan.edan_localidades_impacto_poblacion (1:N por rango etario)."""
+    rango: str = Field('', description="Ej: 'Niño 0-5', 'Adulto 19-60', 'Adulto mayor 60+'")
+    fallecidos: int = Field(0, ge=0)
+    heridos: int = Field(0, ge=0)
+    desaparecidos: int = Field(0, ge=0)
     observaciones: str = ''
 
 
 class PrimeraRespuesta(BaseModel):
+    """→ edan.edan_localidades_primera_respuesta (1:1 por localidad)."""
     busqueda: bool = False
     salvamento: bool = False
     evacuacion: bool = False
@@ -22,32 +26,35 @@ class PrimeraRespuesta(BaseModel):
 
 
 class EstablecimientoSalud(BaseModel):
+    """→ edan.edan_localidades_salud_establecimientos (1:N)."""
     nombre_establecimiento: str = ''
     comunidad: str = ''
-    nivel_atencion: str = ''
+    nivel_atencion: str = Field('', description="Ej: '1er Nivel', '2do Nivel', '3er Nivel'")
     dano_parcial: bool = False
     dano_total: bool = False
-    medicos_afectados: int = 0
-    enfermeras_afectados: int = 0
-    otros_afectados: int = 0
-    fotografia: str | None = None
+    medicos_afectados: int = Field(0, ge=0)
+    enfermeras_afectadas: int = Field(0, ge=0, description="Columna BD: enfermeras_afectadas")
+    otros_afectados: int = Field(0, ge=0)
+    fotografia: str | None = Field(None, description="Path: /uploads/reports/{codigo_ine}/...")
     coordenada_lat: float | None = None
     coordenada_lon: float | None = None
 
 
 class NecesidadSalud(BaseModel):
-    numero_personas: int = 0
+    """→ edan.edan_localidades_salud_necesidades (1:1)."""
+    numero_personas: int = Field(0, ge=0)
     otras_necesidades: str = ''
     observaciones: str = ''
 
 
 class DanoVial(BaseModel):
-    via: bool = False
-    puente: bool = False
+    """→ edan.edan_localidades_danos_viales (1:N)."""
+    via: bool = Field(False, description="Daño en vía/carretera")
+    puente: bool = Field(False, description="Daño en puente")
     tramo: str = ''
     dano_parcial: bool = False
     dano_total: bool = False
-    km_danio: float | None = 0
+    km_danio: float = Field(0, ge=0, description="Kilómetros de daño")
     necesidades_inmediatas: str = ''
     observaciones: str = ''
     fotografia: str | None = None
@@ -56,8 +63,9 @@ class DanoVial(BaseModel):
 
 
 class DanoInfraPublica(BaseModel):
+    """→ edan.edan_localidades_danos_infra_publica (1:N)."""
     comunidad: str = ''
-    tipo_estructura: str = ''
+    tipo_estructura: str = Field('', description="Ej: 'Alcaldía', 'Iglesia', 'Plaza'")
     dano_parcial: bool = False
     dano_total: bool = False
     observaciones: str = ''
@@ -67,7 +75,11 @@ class DanoInfraPublica(BaseModel):
 
 
 class ServicioBasicoDetalle(BaseModel):
-    tipo: str = ''
+    """→ edan.edan_localidades_servicios_basicos (1:N).
+    Valores válidos de tipo (CHECK constraint):
+    'energia_electrica', 'agua_potable', 'alcantarillado', 'gas_domiciliario', 'telecomunicaciones'
+    """
+    tipo: str = Field('', description="energia_electrica|agua_potable|alcantarillado|gas_domiciliario|telecomunicaciones")
     dano_parcial: bool = False
     dano_total: bool = False
     necesidades_inmediatas: str = ''
@@ -78,6 +90,7 @@ class ServicioBasicoDetalle(BaseModel):
 
 
 class UnidadEducativa(BaseModel):
+    """→ edan.edan_localidades_unidades_educativas (1:N)."""
     nombre_establecimiento: str = ''
     comunidad: str = ''
     dano_parcial: bool = False
@@ -85,9 +98,9 @@ class UnidadEducativa(BaseModel):
     suspension_clases: bool | None = None
     perdida_material: bool | None = None
     funciona_albergue: bool | None = None
-    estudiantes: int = 0
-    profesores: int = 0
-    administrativos: int = 0
+    estudiantes: int = Field(0, ge=0)
+    profesores: int = Field(0, ge=0)
+    administrativos: int = Field(0, ge=0)
     observaciones: str = ''
     fotografia: str | None = None
     coordenada_lat: float | None = None
@@ -95,9 +108,12 @@ class UnidadEducativa(BaseModel):
 
 
 class DanoVivienda(BaseModel):
+    """→ edan.edan_localidades_danos_vivienda (1:N).
+    Cantidades de viviendas con daño parcial/total.
+    """
     comunidad: str = ''
-    dano_parcial: int = 0
-    dano_total: int = 0
+    dano_parcial: int = Field(0, ge=0)
+    dano_total: int = Field(0, ge=0)
     necesidades_inmediatas: str = ''
     observaciones: str = ''
     fotografia: str | None = None
@@ -106,10 +122,13 @@ class DanoVivienda(BaseModel):
 
 
 class DanoAgricultura(BaseModel):
+    """→ edan.edan_localidades_danos_agricultura (1:N).
+    Si id_cultivo está presente, se vincula al catálogo shared.cultivo.
+    """
     tipo_cultivo: str = ''
-    id_cultivo: int | None = None
-    hectareas_afectadas: int = 0
-    hectareas_perdidas: int = 0
+    id_cultivo: int | None = Field(None, description="FK a shared.cultivo (opcional)")
+    hectareas_afectadas: int = Field(0, ge=0)
+    hectareas_perdidas: int = Field(0, ge=0)
     necesidades_inmediatas: str = ''
     observaciones: str = ''
     fotografia: str | None = None
@@ -118,11 +137,14 @@ class DanoAgricultura(BaseModel):
 
 
 class DanoPecuario(BaseModel):
+    """→ edan.edan_localidades_danos_pecuario (1:N).
+    Si id_especie está presente, se vincula al catálogo shared.pecuario.
+    """
     especie: str = ''
-    id_especie: int | None = None
+    id_especie: int | None = Field(None, description="FK a shared.pecuario (opcional)")
     raza: str = ''
-    animales_afectados: int = 0
-    animales_muertos: int = 0
+    animales_afectados: int = Field(0, ge=0)
+    animales_muertos: int = Field(0, ge=0)
     necesidades_inmediatas: str = ''
     fotografia: str | None = None
     coordenada_lat: float | None = None
@@ -130,26 +152,31 @@ class DanoPecuario(BaseModel):
 
 
 class InfraProductiva(BaseModel):
-    tipo: str = ''
-    dano_parcial: int = 0
-    dano_total: int = 0
+    """→ edan.edan_localidades_infra_productiva (1:N)."""
+    tipo: str = Field('', description="Ej: 'Molino', 'Almacén', 'Tienda comunitaria'")
+    dano_parcial: int = Field(0, ge=0)
+    dano_total: int = Field(0, ge=0)
 
 
 class GrupoVulnerable(BaseModel):
+    """→ edan.edan_localidades_proteccion (1:N por grupo vulnerable).
+    Valores típicos de grupo: 'ninos', 'adolescentes', 'mujeres_lactantes',
+    'mujeres_embarazadas', 'adultos_mayores', 'personas_discapacidad',
+    'personas_enfermedad'.
+    """
     grupo: str = ''
-    mujeres: int = 0
-    hombres: int = 0
-    total: int = 0
+    mujeres: int = Field(0, ge=0)
+    hombres: int = Field(0, ge=0)
+    total: int = Field(0, ge=0, description="Calculado: mujeres + hombres (lo asigna el servicio)")
     apoyo_psicologico: bool | None = None
     reposicion_documentos: bool | None = None
     observaciones: str = ''
 
 
-class Proteccion(BaseModel):
-    proteccion: list[GrupoVulnerable] = []
-
-
 class NecesidadHumanitaria(BaseModel):
+    """→ edan.edan_localidades_necesidades_humanitarias (1:1).
+    Cada bool indica si se requiere esa ayuda. Cada obs_* es texto libre.
+    """
     alimentos: bool = False
     refugio_vivienda: bool = False
     ropa_cama: bool = False
@@ -171,6 +198,7 @@ class NecesidadHumanitaria(BaseModel):
 
 
 class Responsable(BaseModel):
+    """Datos del responsable del EDAN (cabecera del formulario)."""
     nombre: str = ''
     cargo: str = ''
     fono: str = ''
@@ -178,26 +206,33 @@ class Responsable(BaseModel):
 
 
 class LocalidadCreate(BaseModel):
-    id_tipo_localidad: int | None = None
-    id_edan_localidad_estado: int | None = None
-    tipo_localidad: str | None = None
-    id_tipo_evento: int | None = None
-    id_departamento: int | None = None
-    id_provincia: int | None = None
-    id_municipio: int | None = None
-    fecha_llenado: str | None = None
-    fecha_evento: str | None = None
-    hora_evento: str | None = None
-    total_poblacion_afectada: int = 0
-    total_familias_afectadas: int = 0
-    total_familias_damnificadas: int = 0
-    id_local: str | None = None
-    id_usuario: int | None = None
-    fecha_modificacion: str | None = None
+    """Schema para CREAR una EDAN localidad.
+    → edan.edan_localidades (cabecera) + secciones 1:N / 1:1 opcionales.
+
+    IDs locales (id_edan_localidad, id_local, id_usuario) los asigna el servicio.
+    Las secciones son OPCIONALES: una granizada puede afectar solo agricultura
+    y no daños_vivienda. Si una sección no se envía, simplemente no se crea.
+    """
+    id_tipo_localidad: int | None = Field(None, description="FK a edan.tipo_localidad")
+    id_edan_localidad_estado: int | None = Field(None, description="FK a edan.edan_localidades_estado")
+    tipo_localidad: str | None = Field(None, description="Nombre libre (alternativa al id)")
+    id_tipo_evento: int | None = Field(None, description="FK a edan.tipo_evento")
+    id_departamento: int | None = Field(None, description="FK a shared.departamento")
+    id_provincia: int | None = Field(None, description="FK a shared.provincia")
+    id_municipio: int | None = Field(None, description="FK a shared.municipio")
+    fecha_llenado: str | None = Field(None, description="ISO date YYYY-MM-DD")
+    fecha_evento: str | None = Field(None, description="ISO date YYYY-MM-DD")
+    hora_evento: str | None = Field(None, description="HH:MM:SS")
+    total_poblacion_afectada: int = Field(0, ge=0)
+    total_familias_afectadas: int = Field(0, ge=0)
+    total_familias_damnificadas: int = Field(0, ge=0)
+    id_local: str | None = Field(None, description="UUID del móvil (offline-first dedupe)")
+    id_usuario: int | None = Field(None, description="Asignado por el servidor si no se envía")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp")
     pendiente_actualizacion: bool = False
     pendiente_eliminacion: bool = False
-    localidad: str = ''
-    imp_poblacion: bool = False
+    localidad: str = Field('', description="Nombre de la comunidad/barrio/ciudad")
+    imp_poblacion: bool = Field(False, description="¿Hubo impacto en población?")
     imp_salud: bool = False
     imp_infraestructura: bool = False
     imp_servicios: bool = False

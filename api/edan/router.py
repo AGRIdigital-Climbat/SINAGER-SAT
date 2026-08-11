@@ -171,23 +171,33 @@ def mis_reportes(
     return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
 
 
-@router.get("/localidades/mis-resumen", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.get("/localidades/mis-resumen", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                    summary="Resumen de mis EDAN localidades",
+                    description="Devuelve conteos agregados de las EDAN localidades del usuario autenticado:\n"
+                                "- `total_localidades`, `total_huerfanas` (id_edan IS NULL), `total_consolidadas`\n"
+                                "- totales de poblacion, familias afectadas/damnificadas\n"
+                                "- conteo con estado asignado\n\n"
+                                "**Roles con scope propio:** 6 (UGR municipio), 7 (Responsable local) — solo ven las propias.\n"
+                                "Otros roles (1-5, 8, 9) pueden consultar por id_usuario.")
 def mis_localidades_resumen(
     id_usuario: int | None = Query(None),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Resumen de TODAS las localidades del usuario (huérfanas + consolidadas).
-
-    Permite que un usuario que perdió su celular recupere sus localidades,
-    incluso las que ya fueron consolidadas en un EDAN.
-    """
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
     data = service.get_mis_localidades_resumen(db, uid)
-    return SuccessResponse(message="Resumen de localidades listado correctamente", data=data or {})
+    return SuccessResponse(message="Resumen de mis EDAN localidades generado correctamente", data=data or {})
 
 
-@router.get("/localidades/mis-reportes", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.get("/localidades/mis-reportes", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                    summary="Listar mis EDAN localidades",
+                    description="Lista las EDAN localidades del usuario autenticado.\n\n"
+                                "Por defecto devuelve TODAS (huérfanas + consolidadas). Use `solo_huerfanas=true`\n"
+                                "para listar solo las que aún no fueron consolidadas en un EDAN, o\n"
+                                "`solo_huerfanas=false` para listar solo las consolidadas.\n\n"
+                                "Cada item incluye la estructura completa anidada con TODAS las secciones\n"
+                                "(fotografia, coordenadas, IDs desagregados).\n\n"
+                                "**Roles con scope propio:** 6 (UGR municipio), 7 (Responsable local).")
 def mis_localidades_reportes(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
@@ -196,11 +206,10 @@ def mis_localidades_reportes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Lista localidades del usuario. Por defecto TODAS (huérfanas + consolidadas)."""
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
     data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit,
                                               solo_huerfanas=solo_huerfanas)
-    return SuccessResponse(message="Localidades listadas correctamente", data=data, total=total)
+    return SuccessResponse(message="Mis EDAN localidades listadas correctamente", data=data, total=total)
 
 
 @router.get("/reportes/resumen", tags=[TAG_EDAN], responses={200: {"model": SuccessResponse}})
@@ -349,7 +358,14 @@ def sync_pull(
 #  SINCRONIZACIÓN DE LOCALIDADES (unidad de reporte) + CONSOLIDACIÓN
 # ============================================================================
 
-@router.post("/localidades/sync", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.post("/localidades/sync", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                  summary="Sincronizar EDAN localidades (push desde móvil)",
+                  description="Recibe un lote de EDAN localidades desde la app móvil (offline-first).\n\n"
+                              "Por cada item:\n"
+                              "- Si `pendiente_eliminacion=true` → tombstone (DELETE físico en servidor)\n"
+                              "- Si `id_local` ya existe → UPSERT (última escritura gana por timestamp)\n"
+                              "- Si `id_local` no existe → INSERT nuevo\n\n"
+                              "Cada item en la respuesta incluye la localidad convergida con TODAS sus secciones.")
 def localidad_sync_push(data: LocalidadSyncIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     uid = _user["id_usuario"]
     results = []
@@ -363,10 +379,15 @@ def localidad_sync_push(data: LocalidadSyncIn, db: Session = Depends(get_db), _u
                 "sincronizado": False, "aplicado": False,
                 "error": _db_error(exc).detail,
             })
-    return SuccessResponse(message="Localidades sincronizadas correctamente", data=results)
+    return SuccessResponse(message="EDAN localidades sincronizadas correctamente", data=results)
 
 
-@router.get("/localidades/sync/pull", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.get("/localidades/sync/pull", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                    summary="Descargar EDAN localidades para móvil (pull)",
+                    description="Devuelve las EDAN localidades del usuario (incluye cambios de estado hechos por\n"
+                                "el UGR). El móvil usa esto para convergencia offline-first.\n\n"
+                                "Query `fecha_desde` (ISO timestamp) filtra por `fecha_modificacion >= fecha_desde`\n"
+                                "para sincronización incremental.")
 def localidad_sync_pull(
     id_usuario: int | None = Query(None),
     fecha_desde: str | None = Query(None, description="Solo localidades modificadas después de esta fecha"),
@@ -377,10 +398,15 @@ def localidad_sync_pull(
 ):
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
     data, total = service.list_localidades_sync(db, uid, fecha_desde=fecha_desde, skip=skip, limit=limit)
-    return SuccessResponse(message="Localidades sincronizadas correctamente", data=data, total=total)
+    return SuccessResponse(message="EDAN localidades para sincronización listadas correctamente", data=data, total=total)
 
 
-@router.get("/consolidar/pendientes", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.get("/consolidar/pendientes", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                    summary="Listar EDAN localidades listas para consolidar",
+                    description="Devuelve las EDAN localidades con estado='aprobado' que aún NO han sido\n"
+                                "consolidadas en un EDAN (id_edan IS NULL). El UGR municipio usa esto\n"
+                                "para decidir cuáles agrupar en un nuevo EDAN consolidado.\n\n"
+                                "Query `estado` permite filtrar por otro estado (default: aprobado).")
 def consolidar_pendientes(
     id_municipio: int | None = Query(None, description="Municipio del UGR (opcional)"),
     estado: str = Query("aprobado", description="Estado de localidad a agrupar"),
@@ -388,11 +414,16 @@ def consolidar_pendientes(
     _user=Depends(get_current_user),
 ):
     data = service.listar_consolidables(db, id_municipio=id_municipio, estado_nombre=estado)
-    return SuccessResponse(message="Localidades consolidadas listadas correctamente",
+    return SuccessResponse(message="EDAN localidades consolidadas listadas correctamente",
                            data=data, total=len(data))
 
 
-@router.post("/consolidar", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.post("/consolidar", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                  summary="Consolidar EDAN localidades en un nuevo EDAN",
+                  description="Agrupa varias EDAN localidades (huérfanas aprobadas) en un nuevo EDAN consolidado.\n\n"
+                              "Crea la fila en `edan.edan` y actualiza `id_edan` en cada `edan.edan_localidades`\n"
+                              "involucrada. Los items de las secciones se mantienen vinculados.\n\n"
+                              "**Roles permitidos:** 6 (UGR municipio).")
 def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         result = service.consolidar(db, data.id_municipio, data.id_tipo_evento,
@@ -406,7 +437,14 @@ def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(
     return SuccessResponse(message="EDAN consolidado correctamente", data=result)
 
 
-@router.put("/localidades/{id_localidad}/estado", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.put("/localidades/{id_localidad}/estado", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                    summary="Cambiar estado de una EDAN localidad",
+                    description="Actualiza `id_edan_localidad_estado` de la localidad `id_localidad`.\n\n"
+                                "Estados disponibles en `edan.edan_localidades_estado`:\n"
+                                "- 'borrador' (creación inicial)\n"
+                                "- 'revision' (en revisión por UGR)\n"
+                                "- 'aprobado' (aprobada para consolidar)\n"
+                                "- 'rechazado' (rechazada por UGR)")
 def cambiar_estado_localidad(id_localidad: int, data: LocalidadEstadoUpdate,
                              db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
@@ -418,15 +456,19 @@ def cambiar_estado_localidad(id_localidad: int, data: LocalidadEstadoUpdate,
         db.rollback()
         raise _db_error(e)
     if not result:
-        raise HTTPException(status_code=404, detail="Localidad no encontrada")
-    return SuccessResponse(message="Estado de localidad actualizado correctamente", data=result)
+        raise HTTPException(status_code=404, detail="EDAN localidad no encontrada")
+    return SuccessResponse(message="Estado de EDAN localidad actualizado correctamente", data=result)
 
 
-@router.delete("/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": MessageResponse}})
+@router.delete("/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": MessageResponse}},
+                    summary="Eliminar EDAN localidad huérfana (standalone)",
+                    description="Elimina físicamente la EDAN localidad huérfana `id_localidad` y todas sus secciones.\n\n"
+                                "Si la localidad ya está consolidada en un EDAN (id_edan NOT NULL), debe eliminarse\n"
+                                "desde `DELETE /edan/{id}/localidades/{id_localidad}`.")
 def eliminar_localidad_standalone(id_localidad: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_localidad(db, id_localidad):
-        raise HTTPException(status_code=404, detail="Localidad no encontrada")
-    return MessageResponse(message="Localidad eliminada correctamente")
+        raise HTTPException(status_code=404, detail="EDAN localidad no encontrada")
+    return MessageResponse(message="EDAN localidad eliminada correctamente")
 
 
 # ============================================================================
@@ -524,16 +566,26 @@ def eliminar_edan(id: int, permanente: bool = Query(False, description="Eliminac
 #  LOCALIDADES (CRUD anidado)
 # ============================================================================
 
-@router.get("/{id}/localidades", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}})
+@router.get("/{id}/localidades", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+                    summary="Listar EDAN localidades de un EDAN consolidado",
+                    description="Devuelve la lista completa de localidades que pertenecen al EDAN `id`.\n\n"
+                                "Cada localidad incluye TODAS sus secciones (impacto_poblacion, establecimientos_salud,\n"
+                                "danos_viales, servicios_basicos, unidades_educativas, etc.) con sus items completos\n"
+                                "(incluyendo fotografia, coordenada_lat, coordenada_lon).")
 def listar_localidades(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.get_edan(db, id):
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     data = service._get_localidades(db, id)
-    return SuccessResponse(message="Localidades listadas correctamente", data=data, total=len(data))
+    return SuccessResponse(message="EDAN localidades listadas correctamente", data=data, total=len(data))
 
 
 @router.post("/{id}/localidades", status_code=201, tags=[TAG_EDAN_LOCALIDADES], responses={201: {"model": SuccessResponse}},
-                  dependencies=[Depends(_require_rol(*ROLES_LOCALES))])
+                  dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                  summary="Crear EDAN localidad dentro de un EDAN consolidado",
+                  description="Inserta una nueva localidad en el EDAN `id`. Crea la fila en edan.edan_localidades\n"
+                              "más todas las secciones 1:N / 1:1 que se incluyan en el body. Las secciones son\n"
+                              "OPCIONALES — se puede omitir cualquier sección.\n\n"
+                              "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).")
 def crear_localidad(id: int, data: LocalidadCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.get_edan(db, id):
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
@@ -542,14 +594,17 @@ def crear_localidad(id: int, data: LocalidadCreate, db: Session = Depends(get_db
         service._bump_edan_fecha(db, id)
         db.commit()
         result = service._build_localidad(db, lid)
-        return SuccessResponse(message="Localidad creada correctamente", data=result)
+        return SuccessResponse(message="EDAN localidad creada correctamente", data=result)
     except Exception as e:
         db.rollback()
         raise _db_error(e)
 
 
 @router.put("/{id}/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))])
+             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             summary="Actualizar EDAN localidad existente",
+             description="Actualiza los campos de la localidad `id_localidad` dentro del EDAN `id`.\n\n"
+                         "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).")
 def actualizar_localidad(id: int, id_localidad: int, data: LocalidadUpdate,
                          db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
@@ -558,16 +613,19 @@ def actualizar_localidad(id: int, id_localidad: int, data: LocalidadUpdate,
         db.rollback()
         raise _db_error(e)
     if not result:
-        raise HTTPException(status_code=404, detail="Localidad no encontrada")
-    return SuccessResponse(message="Localidad actualizada correctamente", data=result)
+        raise HTTPException(status_code=404, detail="EDAN localidad no encontrada")
+    return SuccessResponse(message="EDAN localidad actualizada correctamente", data=result)
 
 
 @router.delete("/{id}/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": MessageResponse}},
-                dependencies=[Depends(_require_rol(*ROLES_LOCALES))])
+                dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                summary="Eliminar EDAN localidad del EDAN consolidado",
+                description="Elimina físicamente la localidad `id_localidad` del EDAN `id` y todas sus secciones.\n\n"
+                            "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).")
 def eliminar_localidad(id: int, id_localidad: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if not service.delete_localidad(db, id_localidad):
-        raise HTTPException(status_code=404, detail="Localidad no encontrada")
-    return MessageResponse(message="Localidad eliminada correctamente")
+        raise HTTPException(status_code=404, detail="EDAN localidad no encontrada")
+    return MessageResponse(message="EDAN localidad eliminada correctamente")
 
 
 # ============================================================================
@@ -586,7 +644,11 @@ async def _upload_to_localidad(file: UploadFile, db: Session, id_localidad: int,
     return await save_upload_file(file, db, row["id_municipio"], _user.get("id_usuario"))
 
 
-@router.post("/localidades/{id_localidad}/danos-viales/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/danos-viales/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear daño vial con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_danos_viales`.\n\n"
+                              "Multipart: `file` (JPG/PNG, max 5MB) + form fields.\n"
+                              "Patrón de archivo: `/uploads/reports/{codigo_ine}/{codigo_ine}_{id_usuario}_{ts}.jpg`")
 async def crear_danos_viales_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -623,7 +685,9 @@ async def crear_danos_viales_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/danos-infra-publica/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/danos-infra-publica/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear daño infraestructura pública con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_danos_infra_publica`.")
 async def crear_danos_infra_publica_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -655,7 +719,10 @@ async def crear_danos_infra_publica_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/danos-vivienda/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/danos-vivienda/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear daño vivienda con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_danos_vivienda`.\n\n"
+                              "`dano_parcial` y `dano_total` son CANTIDADES de viviendas (no booleanos).")
 async def crear_danos_vivienda_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -687,7 +754,10 @@ async def crear_danos_vivienda_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/danos-agricultura/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/danos-agricultura/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear daño agricultura con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_danos_agricultura`.\n\n"
+                              "Si `id_cultivo` está presente, se vincula al catálogo `shared.cultivo`.")
 async def crear_danos_agricultura_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -722,7 +792,10 @@ async def crear_danos_agricultura_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/danos-pecuarios/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/danos-pecuarios/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear daño pecuario con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_danos_pecuario`.\n\n"
+                              "Si `id_especie` está presente, se vincula al catálogo `shared.pecuario`.")
 async def crear_danos_pecuarios_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -756,7 +829,10 @@ async def crear_danos_pecuarios_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/salud-establecimientos/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/salud-establecimientos/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear establecimiento de salud con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_salud_establecimientos`.\n\n"
+                              "**Columna BD enfermeras se llama `enfermeras_afectadas`** (no `enfermeras_afectados`).")
 async def crear_salud_establecimiento_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -766,7 +842,7 @@ async def crear_salud_establecimiento_con_foto(
     dano_parcial: bool = Form(False),
     dano_total: bool = Form(False),
     medicos_afectados: int = Form(0),
-    enfermeras_afectados: int = Form(0),
+    enfermeras_afectadas: int = Form(0),
     otros_afectados: int = Form(0),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
@@ -780,7 +856,7 @@ async def crear_salud_establecimiento_con_foto(
             "nivel_atencion": nivel_atencion,
             "dano_parcial": dano_parcial, "dano_total": dano_total,
             "medicos_afectados": medicos_afectados,
-            "enfermeras_afectados": enfermeras_afectados,
+            "enfermeras_afectadas": enfermeras_afectadas,
             "otros_afectados": otros_afectados,
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
@@ -794,7 +870,10 @@ async def crear_salud_establecimiento_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/servicios-basicos/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/servicios-basicos/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear servicio básico con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_servicios_basicos`.\n\n"
+                              "Valores válidos de `tipo`: energia_electrica | agua_potable | alcantarillado | gas_domiciliario | telecomunicaciones.")
 async def crear_servicio_basico_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
@@ -827,7 +906,9 @@ async def crear_servicio_basico_con_foto(
         raise _db_error(e)
 
 
-@router.post("/localidades/{id_localidad}/unidades-educativas/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES])
+@router.post("/localidades/{id_localidad}/unidades-educativas/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear unidad educativa con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_unidades_educativas`.")
 async def crear_unidad_educativa_con_foto(
     id_localidad: int,
     file: UploadFile = File(...),
