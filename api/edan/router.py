@@ -1098,31 +1098,40 @@ def listar_fotos_por_municipio(
     id_municipio: int,
     tipo: str | None = Query(None, description="Filtrar por tipo de daño/servicio (claves de TABLAS_CON_FOTO). Si None, devuelve todos."),
     con_coordenadas: bool | None = Query(None, description="Solo items con coordenada_lat Y coordenada_lon no nulos."),
+    con_foto: bool = Query(True, description="Solo items con fotografía cargada (default). False para listar sin foto."),
     skip: int = 0, limit: int = 200,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
-    """Devuelve todas las evidencias fotográficas del municipio, agrupadas por
-    tabla. Cada item incluye: id, tipo (nombre lógico), id_localidad, comunidad,
-    fotografia (path), coordenada_lat, coordenada_lon."""
+    """Devuelve todas las evidencias del municipio, agrupadas por tabla.
+    Cada item incluye: id, tipo (nombre lógico), id_localidad, localidad,
+    comunidad, fotografia (path), coordenada_lat, coordenada_lon."""
     tablas = {tipo: TABLAS_CON_FOTO[tipo]} if tipo and tipo in TABLAS_CON_FOTO else TABLAS_CON_FOTO
-    conds = ["l.id_municipio = :m", "t.fotografia IS NOT NULL", "t.fotografia <> ''"]
+    conds = ["l.id_municipio = :m"]
+    if con_foto:
+        conds.append("t.fotografia IS NOT NULL AND t.fotografia <> ''")
     if con_coordenadas is True:
         conds.append("t.coordenada_lat IS NOT NULL AND t.coordenada_lon IS NOT NULL")
     where = " AND ".join(conds)
 
     resultados: list[dict] = []
     for tipo_nombre, (tabla, pk) in tablas.items():
-        tabla_q = tabla.replace("edan.", "edan.")
-        rows = service._rows(db, f"""
-            SELECT t.{pk} AS id_item, '{tipo_nombre}' AS tipo, l.id_edan_localidad,
-                   l.localidad, l.comunidad_id, t.fotografia,
-                   t.coordenada_lat, t.coordenada_lon
-            FROM edan.{tabla_q} t
-            JOIN edan.edan_localidades l ON l.id_edan_localidad = t.id_edan_localidad
-            WHERE {where}
-            ORDER BY t.{pk} DESC LIMIT :limit OFFSET :skip
-        """, {"m": id_municipio, "limit": limit, "skip": skip})
-        resultados.extend(dict(r) for r in rows)
+        tabla_q = tabla if tabla.startswith("edan.") else f"edan.{tabla}"
+        try:
+            rows = service._rows(db, f"""
+                SELECT t.{pk} AS id_item, '{tipo_nombre}' AS tipo, l.id_edan_localidad,
+                       l.localidad, t.fotografia,
+                       t.coordenada_lat, t.coordenada_lon,
+                       (SELECT nombre FROM shared.departamento WHERE id = l.id_departamento) AS departamento,
+                       (SELECT nombre FROM shared.municipio WHERE id = l.id_municipio) AS municipio
+                FROM {tabla_q} t
+                JOIN edan.edan_localidades l ON l.id_edan_localidad = t.id_edan_localidad
+                WHERE {where}
+                ORDER BY t.{pk} DESC LIMIT :limit OFFSET :skip
+            """, {"m": id_municipio, "limit": limit, "skip": skip})
+            resultados.extend(dict(r) for r in rows)
+        except Exception as e:
+            print(f"Error en tabla {tabla_q}: {e}")
+            continue
 
     resultados.sort(key=lambda x: x["id_item"], reverse=True)
     return SuccessResponse(
