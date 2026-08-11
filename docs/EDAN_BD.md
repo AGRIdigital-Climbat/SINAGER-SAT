@@ -398,8 +398,8 @@ Localidades del EDAN (CRUD anidado), sync móvil, mis-*, items con foto y coorde
 | GET / POST / PUT / DELETE | `/api/v1/edan/{id}/localidades/{,/{id_localidad}}` | CRUD localidades |
 | POST / GET | `/api/v1/edan/localidades/sync`, `/localidades/sync/pull` | Sync offline |
 | PUT | `/api/v1/edan/localidades/{id_localidad}/estado` | Cambiar estado de localidad (roles 6, 7, 8) |
-| **GET** | **`/api/v1/edan/localidades/mis-resumen`** | **Resumen de localidades huérfanas del usuario** |
-| **GET** | **`/api/v1/edan/localidades/mis-reportes`** | **Lista de localidades huérfanas del usuario** |
+| **GET** | **`/api/v1/edan/localidades/mis-resumen`** | **Resumen de TODAS las localidades del usuario (huérfanas + consolidadas)** |
+| **GET** | **`/api/v1/edan/localidades/mis-reportes`** | **Lista de TODAS las localidades del usuario. Query `?solo_huerfanas=true\|false\|None`** |
 | POST | `/api/v1/edan/localidades/{id_localidad}/{tipo}/con-foto` | Crear daño/servicio con foto+GPS (8 endpoints) |
 | GET | `/api/v1/edan/localidades/{id_localidad}/{tipo}` | Listar items (8 endpoints) |
 
@@ -449,6 +449,97 @@ Constantes en `api/edan/router.py`:
 - `ROLES_LECTURA = (6, 7, 8)` — Lectura (incluye alcalde)
 
 Helper: `_require_rol(*roles)` lanza 403 si el rol no está en la lista.
+
+---
+
+## Estructura de respuesta de Localidad (GET)
+
+Toda respuesta de una localidad completa (vía `_build_localidad` en `api/edan/service.py`)
+tiene la siguiente estructura. Es la misma para:
+- `GET /edan/{id}/localidades/{id_localidad}` (nested GET)
+- `GET /edan/localidades/{id_localidad}` (standalone GET)
+- `GET /edan/localidades/mis-reportes` (lista)
+- `GET /edan/localidades/sync/pull` (sincronización)
+- `POST /edan/{id}/localidades` (al crear)
+- `PUT /edan/{id}/localidades/{id_localidad}` (al actualizar)
+
+### IDs desagregados (nested)
+
+Cada ID de FK viene DUPLICADO en forma anidada con el objeto relacionado:
+- `id_departamento` + `departamento: { id, codigo_ine, nombre }`
+- `id_provincia` + `provincia: { id, codigo_ine, nombre }`
+- `id_municipio` + `municipio: { id, codigo_ine, nombre }`
+- `id_tipo_evento` + `tipo_evento: { id_tipo_evento, nombre }`
+- `id_tipo_localidad` + `tipo_localidad: { id_tipo_localidad, nombre, descripcion, orden }`
+- `id_edan_localidad_estado` + `estado_localidad: { id_edan_localidad_estado, nombre, descripcion, orden }`
+- `id_edan` + `edan: { id_edan, codigo_edan, estado, fechas, ... }` (solo si consolidada)
+- `id_cultivo` + `cultivo: { id, nombre, grupo }` (dentro de cada item de `danos_agricultura`)
+- `id_especie` + `especie: { id, nombre, grupo }` (dentro de cada item de `danos_pecuarios`)
+
+### Flag `es_huerfana`
+
+Booleano calculado: `true` si `id_edan IS NULL`, `false` si consolidada.
+Útil para el frontend para diferenciar visualmente.
+
+### Secciones OPCIONALES (no required)
+
+Una localidad NO necesita tener todas las secciones llenas. Ejemplo:
+una **granizada** puede afectar agricultura pero no daños_vivienda ni
+infraestructura educativa. En esos casos:
+
+- **Secciones 1:N (arrays)**: devuelven `[]` si no hay datos
+  - `impacto_poblacion`, `establecimientos_salud`, `danos_viales`,
+    `danos_infra_publica`, `servicios_basicos`, `unidades_educativas`,
+    `danos_vivienda`, `danos_agricultura`, `danos_pecuarios`,
+    `infra_productiva`, `proteccion`
+- **Secciones 1:1 (objetos)**: devuelven un dict con valores por defecto
+  - `necesidad_primera_respuesta: { busqueda:false, salvamento:false, evacuacion:false, observaciones:'' }`
+  - `necesidad_salud: { numero_personas:0, otras_necesidades:'', observaciones:'' }`
+  - `necesidad_humanitaria: { alimentos:false, refugio_vivienda:false, ..., obs_*: '' }`
+
+### Ejemplo de respuesta
+
+```json
+{
+  "id_edan_localidad": 14,
+  "id_edan": 29,
+  "es_huerfana": false,
+  "id_tipo_localidad": 2,
+  "id_edan_localidad_estado": 3,
+  "id_tipo_evento": 1,
+  "id_departamento": 2,
+  "id_provincia": 201,
+  "id_municipio": 20101,
+  "localidad": "Ixiamas",
+  "tipo_localidad": { "id_tipo_localidad": 2, "nombre": "Comunidad", ... },
+  "estado_localidad": { "id_edan_localidad_estado": 3, "nombre": "Aprobado", ... },
+  "tipo_evento": { "id_tipo_evento": 1, "nombre": "Granizada" },
+  "departamento": { "id": 2, "codigo_ine": "02", "nombre": "La Paz" },
+  "provincia": { "id": 201, "codigo_ine": "0201", "nombre": "Murillo" },
+  "municipio": { "id": 20101, "codigo_ine": "020101", "nombre": "La Paz" },
+  "edan": {
+    "id_edan": 29, "codigo_edan": "020101/2026/003",
+    "estado": { "id_estado": 1, "nombre": "Borrador", "orden": 1 },
+    "fecha_evento": "2026-08-10", ...
+  },
+  "impacto_poblacion": [ {...}, {...} ],
+  "necesidad_primera_respuesta": { "busqueda": false, "salvamento": true, "evacuacion": false, "observaciones": "" },
+  "establecimientos_salud": [],          // ← vacío (granizada no afecta salud)
+  "necesidad_salud": { "numero_personas": 0, "otras_necesidades": "", "observaciones": "" },
+  "danos_viales": [ {...} ],
+  "danos_infra_publica": [],             // ← vacío (granizada no afecta infra)
+  "servicios_basicos": [],
+  "unidades_educativas": [],
+  "danos_vivienda": [ {...} ],
+  "danos_agricultura": [ { "id_dano_agricola": 1, "tipo_cultivo": "Papa", "id_cultivo": 5,
+                            "cultivo": { "id": 5, "nombre": "Papa", "grupo": "Tubérculos" },
+                            "hectareas_afectadas": 10, ... } ],
+  "danos_pecuarios": [],
+  "infra_productiva": [],
+  "proteccion": [],
+  "necesidad_humanitaria": { "alimentos": true, "refugio_vivienda": false, ..., "obs_alimentos": "Falta víveres" }
+}
+```
 
 ---
 

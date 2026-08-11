@@ -222,6 +222,78 @@ class LocalidadCreate(BaseModel):
     necesidad_humanitaria: NecesidadHumanitaria | None = None
 
 
+class LocalidadNestedResponse(BaseModel):
+    """Estructura completa anidada de una localidad (respuesta de GET).
+
+    Las secciones (impacto_poblacion, establecimientos_salud, danos_viales, etc.)
+    son OPCIONALES: si no hay datos para esa sección, devuelve una lista vacía []
+    o un dict con valores por defecto. Ejemplo: una granizada puede afectar
+    agricultura pero no daños_vivienda.
+
+    Todos los IDs vienen DESAGREGADOS en forma anidada:
+    - id_departamento + departamento: { id, codigo_ine, nombre }
+    - id_provincia + provincia: { id, codigo_ine, nombre }
+    - id_municipio + municipio: { id, codigo_ine, nombre }
+    - id_tipo_evento + tipo_evento: { id_tipo_evento, nombre }
+    - id_tipo_localidad + tipo_localidad: { id_tipo_localidad, nombre, ... }
+    - id_edan_localidad_estado + estado_localidad: { id, nombre, ... }
+    - id_edan + edan: { id_edan, codigo_edan, estado, ... }
+    - id_cultivo + cultivo (dentro de danos_agricultura[i])
+    - id_especie + especie (dentro de danos_pecuarios[i])
+    """
+    id_edan_localidad: int
+    id_edan: int | None = None
+    es_huerfana: bool = True
+    id_tipo_localidad: int | None = None
+    id_edan_localidad_estado: int | None = None
+    id_tipo_evento: int | None = None
+    id_departamento: int | None = None
+    id_provincia: int | None = None
+    id_municipio: int | None = None
+    fecha_llenado: str | None = None
+    fecha_evento: str | None = None
+    hora_evento: str | None = None
+    total_poblacion_afectada: int = 0
+    total_familias_afectadas: int = 0
+    total_familias_damnificadas: int = 0
+    id_local: str | None = None
+    id_usuario: int | None = None
+    fecha_modificacion: str | None = None
+    pendiente_actualizacion: bool = False
+    pendiente_eliminacion: bool = False
+    localidad: str = ''
+    imp_poblacion: bool = False
+    imp_salud: bool = False
+    imp_infraestructura: bool = False
+    imp_servicios: bool = False
+    imp_educacion: bool = False
+    imp_vivienda: bool = False
+    imp_agropecuario: bool = False
+    imp_proteccion: bool = False
+    imp_necesidades: bool = False
+    tipo_localidad: dict | None = None
+    estado_localidad: dict | None = None
+    tipo_evento: dict | None = None
+    departamento: dict | None = None
+    provincia: dict | None = None
+    municipio: dict | None = None
+    edan: dict | None = None
+    impacto_poblacion: list[dict] = []
+    necesidad_primera_respuesta: dict = {}
+    establecimientos_salud: list[dict] = []
+    necesidad_salud: dict = {}
+    danos_viales: list[dict] = []
+    danos_infra_publica: list[dict] = []
+    servicios_basicos: list[dict] = []
+    unidades_educativas: list[dict] = []
+    danos_vivienda: list[dict] = []
+    danos_agricultura: list[dict] = []
+    danos_pecuarios: list[dict] = []
+    infra_productiva: list[dict] = []
+    proteccion: list[dict] = []
+    necesidad_humanitaria: dict = {}
+
+
 class EdanCreate(BaseModel):
     id_local: str | None = None
     fecha_modificacion: str | None = None

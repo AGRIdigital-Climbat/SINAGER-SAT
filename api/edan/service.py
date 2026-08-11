@@ -173,6 +173,7 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
     loc = {
         "id_edan_localidad": id_localidad,
         "id_edan": None,
+        "es_huerfana": True,
         "id_tipo_localidad": None,
         "id_edan_localidad_estado": None,
         "id_tipo_evento": None,
@@ -208,6 +209,9 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
     for k in loc.keys():
         if k in row and k != "id_edan_localidad":
             loc[k] = row[k]
+
+    # Marcar si es huérfana o consolidada
+    loc["es_huerfana"] = loc["id_edan"] is None
 
     tl = None
     if loc["id_tipo_localidad"]:
@@ -252,6 +256,39 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
     else:
         loc["municipio"] = None
 
+    # EDAN cabecera (si está consolidada)
+    if loc["id_edan"]:
+        edan = _row(db, """
+            SELECT e.id_edan, e.codigo_edan, e.id_estado,
+                   es.nombre AS estado_nombre, es.orden AS estado_orden,
+                   e.fecha_evento, e.hora_evento, e.fecha_llenado,
+                   e.fecha_modificacion, e.id_usuario_ugr, e.id_usuario_alcalde
+            FROM edan.edan e
+            LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado
+            WHERE e.id_edan = :id
+        """, {"id": loc["id_edan"]})
+        if edan:
+            loc["edan"] = {
+                "id_edan": edan["id_edan"],
+                "codigo_edan": edan["codigo_edan"],
+                "id_estado": edan["id_estado"],
+                "estado": {
+                    "id_estado": edan["id_estado"],
+                    "nombre": edan["estado_nombre"],
+                    "orden": edan["estado_orden"],
+                } if edan["id_estado"] else None,
+                "fecha_evento": edan["fecha_evento"],
+                "hora_evento": edan["hora_evento"],
+                "fecha_llenado": edan["fecha_llenado"],
+                "fecha_modificacion": edan["fecha_modificacion"],
+                "id_usuario_ugr": edan["id_usuario_ugr"],
+                "id_usuario_alcalde": edan["id_usuario_alcalde"],
+            }
+        else:
+            loc["edan"] = None
+    else:
+        loc["edan"] = None
+
     # 1. Impacto en población (1:N por rango etario)
     loc["impacto_poblacion"] = _impacto_poblacion(db, id_localidad)
 
@@ -264,7 +301,7 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         "observaciones": pr["observaciones"] if pr else "",
     }
 
-    # 3. Establecimientos de salud (1:N)
+# 3. Establecimientos de salud (1:N)
     est = _all(db, "edan_localidades_salud_establecimientos", id_localidad,
                "ORDER BY id_establecimiento_salud")
     loc["establecimientos_salud"] = [
@@ -278,8 +315,11 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
             "medicos_afectados": r["medicos_afectados"],
             "enfermeras_afectados": r["enfermeras_afectadas"],
             "otros_afectados": r["otros_afectados"],
+            "fotografia": r.get("fotografia"),
+            "coordenada_lat": r.get("coordenada_lat"),
+            "coordenada_lon": r.get("coordenada_lon"),
         } for r in est
-    ]
+    ]   
 
     # 4. Necesidades de salud (1:1)
     ns = _one(db, "edan_localidades_salud_necesidades", id_localidad)
@@ -341,7 +381,7 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         pe = item.pop("pe_id", None)
         item.pop("pe_nombre", None)
         item.pop("pe_grupo", None)
-        item["especie_obj"] = {
+        item["especie"] = {
             "id": pe,
             "nombre": r.get("pe_nombre"),
             "grupo": r.get("pe_grupo"),
@@ -1597,38 +1637,67 @@ def get_mis_edans(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
 
 
 def get_mis_localidades_resumen(db: Session, id_usuario: int):
-    """Resumen de localidades HUÉRFANAS (id_edan IS NULL) del usuario."""
-    return _row(db, """
+    """Resumen de TODAS las localidades del usuario (huérfanas + consolidadas).
+
+    Permite que un usuario con rol 7 (responsable local) o 6 (UGR) recupere
+    sus localidades tras perder el celular: si ya consolidó, también las ve.
+    """
+    row = _row(db, """
         SELECT COUNT(*) AS total_localidades,
+               COUNT(*) FILTER (WHERE id_edan IS NULL) AS total_huerfanas,
+               COUNT(*) FILTER (WHERE id_edan IS NOT NULL) AS total_consolidadas,
                COALESCE(SUM(total_poblacion_afectada), 0) AS total_poblacion,
                COALESCE(SUM(total_familias_afectadas), 0) AS total_familias,
                COALESCE(SUM(total_familias_damnificadas), 0) AS total_familias_damnificadas,
-               COUNT(*) FILTER (WHERE id_edan_localidad_estado IS NOT NULL) AS total_con_estado
+               COUNT(*) FILTER (WHERE id_edan_localidad_estado IS NOT NULL) AS total_con_estado,
+               COUNT(*) FILTER (WHERE id_edan IS NULL AND id_edan_localidad_estado IS NOT NULL)
+                   AS total_huerfanas_con_estado,
+               COUNT(*) FILTER (WHERE id_edan IS NOT NULL AND id_edan_localidad_estado IS NOT NULL)
+                   AS total_consolidadas_con_estado
         FROM edan.edan_localidades
-        WHERE id_usuario = :uid AND id_edan IS NULL
+        WHERE id_usuario = :uid
     """, {"uid": id_usuario})
+    return dict(row) if row else {}
 
 
-def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
-    """Lista localidades HUÉRFANAS (id_edan IS NULL) del usuario."""
-    total = db.execute(text("""
-        SELECT COUNT(*) FROM edan.edan_localidades
-        WHERE id_usuario = :uid AND id_edan IS NULL
+def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int = 50,
+                       solo_huerfanas: bool | None = None):
+    """Lista TODAS las localidades del usuario (huérfanas + consolidadas).
+
+    Args:
+        id_usuario: Usuario solicitante.
+        skip/limit: Paginación.
+        solo_huerfanas: Si True, solo id_edan IS NULL. Si False, solo consolidadas.
+                        Si None, devuelve todas.
+    """
+    where_extra = ""
+    if solo_huerfanas is True:
+        where_extra = "AND l.id_edan IS NULL"
+    elif solo_huerfanas is False:
+        where_extra = "AND l.id_edan IS NOT NULL"
+
+    total = db.execute(text(f"""
+        SELECT COUNT(*) FROM edan.edan_localidades l
+        WHERE l.id_usuario = :uid {where_extra}
     """), {"uid": id_usuario}).scalar()
-    rows = _rows(db, """
+    rows = _rows(db, f"""
         SELECT l.*,
                te.nombre AS tipo_evento_nombre,
                ele.nombre AS estado_localidad_nombre,
                d.nombre AS departamento_nombre,
                p.nombre AS provincia_nombre,
-               m.nombre AS municipio_nombre
+               m.nombre AS municipio_nombre,
+               e.id_edan AS edan_id, e.codigo_edan, e.id_estado AS edan_id_estado,
+               es_e.nombre AS edan_estado_nombre
         FROM edan.edan_localidades l
         LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = l.id_tipo_evento
         LEFT JOIN edan.edan_localidades_estado ele ON ele.id_edan_localidad_estado = l.id_edan_localidad_estado
         LEFT JOIN shared.departamento d ON d.id = l.id_departamento
         LEFT JOIN shared.provincia p ON p.id = l.id_provincia
         LEFT JOIN shared.municipio m ON m.id = l.id_municipio
-        WHERE l.id_usuario = :uid AND l.id_edan IS NULL
+        LEFT JOIN edan.edan e ON e.id_edan = l.id_edan
+        LEFT JOIN edan.estado_edan es_e ON es_e.id_estado = e.id_estado
+        WHERE l.id_usuario = :uid {where_extra}
         ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
         LIMIT :limit OFFSET :skip
     """, {"uid": id_usuario, "limit": limit, "skip": skip})

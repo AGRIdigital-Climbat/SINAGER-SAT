@@ -177,7 +177,11 @@ def mis_localidades_resumen(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Resumen de localidades HUÉRFANAS (id_edan IS NULL) del usuario."""
+    """Resumen de TODAS las localidades del usuario (huérfanas + consolidadas).
+
+    Permite que un usuario que perdió su celular recupere sus localidades,
+    incluso las que ya fueron consolidadas en un EDAN.
+    """
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
     data = service.get_mis_localidades_resumen(db, uid)
     return SuccessResponse(message="Resumen de localidades listado correctamente", data=data or {})
@@ -188,12 +192,14 @@ def mis_localidades_reportes(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
+    solo_huerfanas: bool | None = Query(None, description="True=huérfanas, False=consolidadas, None=todas"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Lista localidades HUÉRFANAS (id_edan IS NULL) del usuario."""
+    """Lista localidades del usuario. Por defecto TODAS (huérfanas + consolidadas)."""
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit)
+    data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit,
+                                              solo_huerfanas=solo_huerfanas)
     return SuccessResponse(message="Localidades listadas correctamente", data=data, total=total)
 
 
