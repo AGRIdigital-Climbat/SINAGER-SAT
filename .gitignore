@@ -1,0 +1,48 @@
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de backup
+*.bak
+*.backup
+*.dump
+*.sql.gz
+
+# Scripts que generan backups localmente
+uploads/
+
+# Archivos temporales
+/tmp/
+*.tmp
+
+# Archivos de logs
+*.log
+logs/
+
+# Archivos de configuración local
+.env
+.env.local
+
+# Dependencias
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backups de BD local
+database/backup_*.sql
+database/edan_db_backup*.sql
+database/backup_pre_*.sql
+database/backup_v*.sql
+database/servers.json
+database/dbeaver-data-sources.xml
+database/iniciar_edan.sh
+database/restaurar_geom.sh

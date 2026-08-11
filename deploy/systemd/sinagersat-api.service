@@ -1,0 +1,18 @@
+[Unit]
+Description=SINAGERSAT API REST (FastAPI)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=prosuco
+Group=prosuco
+WorkingDirectory=/home/prosuco/SINAGERSAT/BaseData
+ExecStart=/home/prosuco/SINAGERSAT/BaseData/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+Environment=PATH=/home/prosuco/SINAGERSAT/BaseData/venv/bin:/usr/bin:/bin
+EnvironmentFile=/home/prosuco/SINAGERSAT/BaseData/.env
+
+[Install]
+WantedBy=multi-user.target
