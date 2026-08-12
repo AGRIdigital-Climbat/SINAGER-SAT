@@ -29,9 +29,12 @@ TAG_DOCS     = "Repositorio > Documentos"
 #  CATÁLOGO: tipos de documento (CRUD completo)
 # ============================================================================
 
-@router.get("/tipos", tags=[TAG_CATALOGO])
+@router.get("/tipos", tags=[TAG_CATALOGO],
+        summary="Listar tipos de documento del catálogo",
+        description="Retorna los tipos de documento disponibles para subir al repositorio.\n\n"
+                    "Por defecto solo retorna tipos activos. Pasar `include_inactive=true` para ver todos.")
 def listar_tipos_documento(
-    include_inactive: bool = Query(False),
+    include_inactive: bool = Query(False, description="Si TRUE, incluye tipos con activo=FALSE"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -40,7 +43,9 @@ def listar_tipos_documento(
     return SuccessResponse(message="Tipos de documento listados", data=data, total=len(data))
 
 
-@router.get("/tipos/{id_tipo}", tags=[TAG_CATALOGO])
+@router.get("/tipos/{id_tipo}", tags=[TAG_CATALOGO],
+        summary="Obtener un tipo de documento específico",
+        description="Retorna metadata del tipo: codigo, nombre, extensiones permitidas, tamaño máximo.")
 def obtener_tipo_documento(
     id_tipo: int,
     db: Session = Depends(get_db),
@@ -53,7 +58,11 @@ def obtener_tipo_documento(
     return SuccessResponse(message="Tipo de documento obtenido", data=dict(data))
 
 
-@router.post("/tipos", status_code=201, tags=[TAG_CATALOGO])
+@router.post("/tipos", status_code=201, tags=[TAG_CATALOGO],
+        summary="Crear tipo de documento en el catálogo",
+        description="Crea una entrada nueva en `repositorio.tipo_documento`.\n\n"
+                    "Defaults: `activo=TRUE`, `requiere_versionado=FALSE`, `extensiones_permitidas='pdf'`, "
+                    "`tamano_maximo_bytes=52428800` (50MB).")
 def crear_tipo_documento(
     data: TipoDocumentoCreate,
     db: Session = Depends(get_db),
@@ -65,7 +74,9 @@ def crear_tipo_documento(
     return SuccessResponse(message="Tipo de documento creado", data=dict(created))
 
 
-@router.put("/tipos/{id_tipo}", tags=[TAG_CATALOGO])
+@router.put("/tipos/{id_tipo}", tags=[TAG_CATALOGO],
+        summary="Actualizar tipo de documento (PUT completo)",
+        description="Actualiza任意 subset de campos. Solo los campos enviados (no None) se modifican.")
 def actualizar_tipo_documento(
     id_tipo: int,
     data: TipoDocumentoUpdate,
@@ -78,7 +89,9 @@ def actualizar_tipo_documento(
     return SuccessResponse(message="Tipo de documento actualizado", data=dict(updated))
 
 
-@router.delete("/tipos/{id_tipo}", tags=[TAG_CATALOGO])
+@router.delete("/tipos/{id_tipo}", tags=[TAG_CATALOGO],
+        summary="Eliminar tipo de documento",
+        description="Soft delete por defecto (activo=FALSE). Pasar `hard=true` para DELETE físico.")
 def eliminar_tipo_documento(
     id_tipo: int,
     hard: bool = Query(False, description="True = DELETE físico, False = soft delete (activo=FALSE)"),
@@ -97,7 +110,16 @@ def eliminar_tipo_documento(
 #  SUBIR DOCUMENTOS (solo PDF, sin versionado)
 # ============================================================================
 
-@router.post("/edan/{id_edan}/documentos", status_code=201, tags=[TAG_DOCS])
+@router.post("/edan/{id_edan}/documentos", status_code=201, tags=[TAG_DOCS],
+             summary="Subir PDF al repositorio de un EDAN",
+             description="Sube un archivo PDF y crea una fila en `repositorio.documentos`.\n\n"
+                         "**Multipart**: `file` (PDF, max 50MB) + form fields.\n\n"
+                         "Validaciones:\n"
+                         "- MIME debe ser `application/pdf`\n"
+                         "- Extensión debe ser `.pdf`\n"
+                         "- El EDAN debe existir en `edan.edan`\n"
+                         "- El tipo de documento debe existir y estar `activo=TRUE`\n\n"
+                         "Path de almacenamiento: `/uploads/edan/documentos/{id_edan}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`")
 async def subir_documento(
     id_edan: int,
     file: UploadFile = File(...),
@@ -145,11 +167,14 @@ async def subir_documento(
 #  CONSULTAR DOCUMENTOS
 # ============================================================================
 
-@router.get("/edan/{id_edan}/documentos", tags=[TAG_DOCS])
+@router.get("/edan/{id_edan}/documentos", tags=[TAG_DOCS],
+            summary="Listar documentos de un EDAN específico",
+            description="Retorna todos los PDFs del repositorio vinculados a `id_edan`.\n\n"
+                        "Filtros opcionales: `id_tipo_documento` y `include_inactive`.")
 def listar_documentos_edan(
     id_edan: int,
-    id_tipo_documento: int | None = Query(None),
-    include_inactive: bool = Query(False),
+    id_tipo_documento: int | None = Query(None, description="Filtrar por tipo de catálogo"),
+    include_inactive: bool = Query(False, description="Incluir documentos con activo=FALSE"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -158,15 +183,24 @@ def listar_documentos_edan(
     return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=len(data))
 
 
-@router.get("/documentos/filtrar", tags=[TAG_DOCS])
+@router.get("/documentos/filtrar", tags=[TAG_DOCS],
+            summary="Filtrar documentos por metadata estructurada",
+            description="Filtra documentos del repositorio combinando任意 de los parámetros:\n\n"
+                        "- **id_edan**: documentos de un EDAN específico\n"
+                        "- **id_departamento/id_provincia/id_municipio**: por ubicación\n"
+                        "- **id_tipo_documento**: por tipo de catálogo\n"
+                        "- **fecha_desde/fecha_hasta**: rango sobre `fecha_documento` (YYYY-MM-DD)\n"
+                        "- **nombre_documento_like**: búsqueda parcial en `nombre_documento`\n\n"
+                        "Retorna `{data: [...], total: N}` con paginación `skip`/`limit`.")
 def filtrar_documentos(
+    id_edan: int | None = Query(None, description="FK a edan.edan.id_edan"),
     id_departamento: int | None = Query(None),
     id_provincia: int | None = Query(None),
     id_municipio: int | None = Query(None),
     id_tipo_documento: int | None = Query(None),
     fecha_desde: str | None = Query(None, description="YYYY-MM-DD"),
     fecha_hasta: str | None = Query(None, description="YYYY-MM-DD"),
-    nombre_documento: str | None = Query(None, description="ILIKE match"),
+    nombre_documento_like: str | None = Query(None, description="ILIKE match"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -175,13 +209,14 @@ def filtrar_documentos(
     """Filtra documentos por metadata estructurada (departamento, provincia, municipio, tipo, fecha, nombre)."""
     data, total = service.list_documentos_filtrados(
         db,
+        id_edan=id_edan,
         id_departamento=id_departamento,
         id_provincia=id_provincia,
         id_municipio=id_municipio,
         id_tipo_documento=id_tipo_documento,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
-        nombre_documento_like=nombre_documento,
+        nombre_documento_like=nombre_documento_like,
         limit=limit,
         skip=skip,
     )
@@ -190,13 +225,21 @@ def filtrar_documentos(
         data=[dict(r) for r in data],
         total=total,
     )
+    return SuccessResponse(
+        message="Documentos filtrados correctamente",
+        data=[dict(r) for r in data],
+        total=total,
+    )
 
 
-@router.get("/documentos/buscar", tags=[TAG_DOCS])
+@router.get("/documentos/buscar", tags=[TAG_DOCS],
+            summary="Buscar documentos por nombre (ILIKE)",
+            description="Búsqueda parcial en `nombre_documento` y `nombre_original`.\n\n"
+                        "Retorna documentos activos ordenados por `fecha_documento` DESC.")
 def buscar_documentos(
     q: str = Query(..., description="Término a buscar en nombre_documento o nombre_original"),
-    id_municipio: int | None = Query(None),
-    limit: int = Query(50, le=200),
+    id_municipio: int | None = Query(None, description="Limitar búsqueda a un municipio"),
+    limit: int = Query(50, le=200, description="Máximo 200 resultados"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -209,7 +252,9 @@ def buscar_documentos(
     )
 
 
-@router.get("/documentos/{id_documento}", tags=[TAG_DOCS])
+@router.get("/documentos/{id_documento}", tags=[TAG_DOCS],
+        summary="Obtener metadata de un documento",
+        description="Retorna todos los campos del documento + datos del tipo (codigo, nombre).")
 def obtener_documento(
     id_documento: int,
     db: Session = Depends(get_db),
@@ -222,7 +267,10 @@ def obtener_documento(
     return SuccessResponse(message="Documento obtenido", data=dict(data))
 
 
-@router.get("/documentos/{id_documento}/descargar", tags=[TAG_DOCS])
+@router.get("/documentos/{id_documento}/descargar", tags=[TAG_DOCS],
+        summary="Descargar el PDF físico",
+        description="Retorna el archivo PDF con `Content-Type: application/pdf`.\n\n"
+                    "El documento debe existir y estar activo.")
 def descargar_documento(
     id_documento: int,
     db: Session = Depends(get_db),
@@ -252,7 +300,9 @@ def descargar_documento(
 #  ACTUALIZAR / ELIMINAR
 # ============================================================================
 
-@router.put("/documentos/{id_documento}", tags=[TAG_DOCS])
+@router.put("/documentos/{id_documento}", tags=[TAG_DOCS],
+        summary="Actualizar metadata del documento",
+        description="Solo `observaciones` y `activo` son modificables (PUT parcial).")
 def actualizar_documento(
     id_documento: int,
     data: DocumentoUpdate,
@@ -267,7 +317,9 @@ def actualizar_documento(
     return SuccessResponse(message="Documento actualizado", data=dict(updated))
 
 
-@router.delete("/documentos/{id_documento}", tags=[TAG_DOCS])
+@router.delete("/documentos/{id_documento}", tags=[TAG_DOCS],
+        summary="Eliminar documento (soft delete)",
+        description="Marca `activo=FALSE`. El archivo físico permanece en disco.")
 def eliminar_documento(
     id_documento: int,
     db: Session = Depends(get_db),
@@ -279,7 +331,9 @@ def eliminar_documento(
     return MessageResponse(message="Documento eliminado correctamente")
 
 
-@router.delete("/documentos/{id_documento}/hard", tags=[TAG_DOCS])
+@router.delete("/documentos/{id_documento}/hard", tags=[TAG_DOCS],
+        summary="Eliminar documento físicamente (hard delete)",
+        description="DELETE irreversible: borra fila en BD **Y** archivo del servidor.")
 def eliminar_documento_hard(
     id_documento: int,
     db: Session = Depends(get_db),

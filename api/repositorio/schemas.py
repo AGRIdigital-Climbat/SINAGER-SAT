@@ -8,28 +8,39 @@ from datetime import datetime, date
 # ============================================================================
 
 class TipoDocumentoCreate(BaseModel):
-    codigo: str = Field(..., max_length=50)
-    nombre: str = Field(..., max_length=100)
-    descripcion: Optional[str] = None
-    orden: int = 0
-    activo: bool = True
+    """→ repositorio.tipo_documento."""
+    codigo: str = Field(..., max_length=50, description="Código único. Ej: 'informe_legal', 'resolucion_alcaldicia'")
+    nombre: str = Field(..., max_length=100, description="Nombre legible. Ej: 'Informe Legal'")
+    descripcion: Optional[str] = Field(None, description="Descripción larga del tipo de documento")
+    orden: int = Field(0, ge=0, description="Orden de presentación en listados")
+    activo: bool = Field(True, description="Si FALSE, no aparece en catálogos activos")
+    requiere_versionado: bool = Field(False, description="Si TRUE, cada nueva versión genera una fila (futuro)")
+    extensiones_permitidas: Optional[str] = Field('pdf', description="CSV extensiones permitidas. Default: 'pdf'")
+    tamano_maximo_bytes: Optional[int] = Field(52428800, ge=1, description="Tamaño máximo en bytes. Default: 50MB")
 
 
 class TipoDocumentoUpdate(BaseModel):
-    codigo: Optional[str] = None
-    nombre: Optional[str] = None
+    codigo: Optional[str] = Field(None, max_length=50)
+    nombre: Optional[str] = Field(None, max_length=100)
     descripcion: Optional[str] = None
-    orden: Optional[int] = None
+    orden: Optional[int] = Field(None, ge=0)
     activo: Optional[bool] = None
+    requiere_versionado: Optional[bool] = None
+    extensiones_permitidas: Optional[str] = None
+    tamano_maximo_bytes: Optional[int] = Field(None, ge=1)
 
 
 class TipoDocumentoResponse(BaseModel):
+    """→ repositorio.tipo_documento (catálogo completo)."""
     id_tipo_documento: int
     codigo: str
     nombre: str
     descripcion: Optional[str] = None
     orden: int
     activo: bool
+    requiere_versionado: Optional[bool] = None
+    extensiones_permitidas: Optional[str] = None
+    tamano_maximo_bytes: Optional[int] = None
 
     class Config:
         from_attributes = True

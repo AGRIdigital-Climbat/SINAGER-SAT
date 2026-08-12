@@ -36,12 +36,24 @@ def get_tipo_documento(db: Session, id_tipo: int):
 
 
 def create_tipo_documento(db: Session, data: dict) -> int:
+    payload = {
+        "codigo": data["codigo"],
+        "nombre": data["nombre"],
+        "descripcion": data.get("descripcion"),
+        "orden": data.get("orden", 0),
+        "activo": data.get("activo", True),
+        "requiere_versionado": data.get("requiere_versionado", False),
+        "extensiones_permitidas": data.get("extensiones_permitidas", "pdf"),
+        "tamano_maximo_bytes": data.get("tamano_maximo_bytes", 52428800),
+    }
     result = db.execute(text("""
         INSERT INTO repositorio.tipo_documento
-            (codigo, nombre, descripcion, orden, activo)
-        VALUES (:codigo, :nombre, :descripcion, :orden, :activo)
+            (codigo, nombre, descripcion, orden, activo,
+             requiere_versionado, extensiones_permitidas, tamano_maximo_bytes)
+        VALUES (:codigo, :nombre, :descripcion, :orden, :activo,
+                :requiere_versionado, :extensiones_permitidas, :tamano_maximo_bytes)
         RETURNING id_tipo_documento
-    """), data).scalar()
+    """), payload).scalar()
     db.commit()
     return result
 
