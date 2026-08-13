@@ -566,6 +566,30 @@ def eliminar_edan(id: int, permanente: bool = Query(False, description="Eliminac
 #  LOCALIDADES (CRUD anidado)
 # ============================================================================
 
+@router.post("/localidades", status_code=201, tags=[TAG_EDAN_LOCALIDADES], responses={201: {"model": SuccessResponse}},
+             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             summary="Crear EDAN localidad independiente (huérfana)",
+             description="Crea una EDAN localidad SIN necesidad de un EDAN cabecera. Queda con `id_edan=NULL`\n"
+                         "(`es_huerfana=true`) y NO hereda geografía/fecha de ningún padre: el body debe incluir\n"
+                         "`id_departamento`, `id_provincia`, `id_municipio`, `id_tipo_evento`.\n\n"
+                         "Las secciones 1:N / 1:1 son OPCIONALES — se puede omitir cualquier sección.\n\n"
+                         "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).\n\n"
+                         "Después puede consolidarse con otras localidades del mismo municipio/tipo de evento\n"
+                         "en un EDAN vía `POST /edan/consolidar` (las actualiza a `id_edan=<nuevo>`).")
+def crear_localidad_independiente(data: LocalidadCreate, db: Session = Depends(get_db),
+                                  _user=Depends(get_current_user)):
+    try:
+        payload = data.model_dump()
+        payload["id_usuario"] = _user["id_usuario"]
+        lid = service._insert_localidad(db, None, payload)
+        db.commit()
+        result = service._build_localidad(db, lid)
+        return SuccessResponse(message="EDAN localidad creada correctamente", data=result)
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+
+
 @router.get("/{id}/localidades", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
                     summary="Listar EDAN localidades de un EDAN consolidado",
                     description="Devuelve la lista completa de localidades que pertenecen al EDAN `id`.\n\n"
@@ -590,7 +614,9 @@ def crear_localidad(id: int, data: LocalidadCreate, db: Session = Depends(get_db
     if not service.get_edan(db, id):
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     try:
-        lid = service._insert_localidad(db, id, data.model_dump())
+        payload = data.model_dump()
+        payload["id_usuario"] = _user["id_usuario"]
+        lid = service._insert_localidad(db, id, payload)
         service._bump_edan_fecha(db, id)
         db.commit()
         result = service._build_localidad(db, lid)
