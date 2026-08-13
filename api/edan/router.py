@@ -460,6 +460,30 @@ def cambiar_estado_localidad(id_localidad: int, data: LocalidadEstadoUpdate,
     return SuccessResponse(message="Estado de EDAN localidad actualizado correctamente", data=result)
 
 
+@router.put("/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             summary="Actualizar EDAN localidad huérfana (standalone)",
+             description="Actualiza cabecera + secciones de la localidad `id_localidad` SIN requerir un EDAN.\n"
+                         "Solo aplica a huérfanas (`id_edan IS NULL`).\n\n"
+                         "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).\n\n"
+                         "Alternativa offline-first: `POST /localidades/sync` (upsert por `id_local`).")
+def actualizar_localidad_standalone(id_localidad: int, data: LocalidadUpdate,
+                                    db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    row = service._row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                       {"id": id_localidad})
+    if not row:
+        raise HTTPException(status_code=404, detail="EDAN localidad no encontrada")
+    if row["id_edan"] is not None:
+        raise HTTPException(status_code=400,
+                            detail="La localidad está consolidada en un EDAN. Usa PUT /edan/{id}/localidades/{id_localidad}")
+    try:
+        result = service.update_localidad(db, id_localidad, data.model_dump())
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+    return SuccessResponse(message="EDAN localidad actualizada correctamente", data=result)
+
+
 @router.delete("/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": MessageResponse}},
                     summary="Eliminar EDAN localidad huérfana (standalone)",
                     description="Elimina físicamente la EDAN localidad huérfana `id_localidad` y todas sus secciones.\n\n"
