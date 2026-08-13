@@ -156,6 +156,9 @@ class InfraProductiva(BaseModel):
     tipo: str = Field('', description="Ej: 'Molino', 'Almacén', 'Tienda comunitaria'")
     dano_parcial: int = Field(0, ge=0)
     dano_total: int = Field(0, ge=0)
+    fotografia: str | None = None
+    coordenada_lat: float | None = None
+    coordenada_lon: float | None = None
 
 
 class GrupoVulnerable(BaseModel):

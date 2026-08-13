@@ -851,11 +851,16 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
     for i in loc.get("infra_productiva") or []:
         db.execute(text("""
             INSERT INTO edan.edan_localidades_infra_productiva
-                (id_edan_localidad, tipo, dano_parcial, dano_total)
-            VALUES (:id, :tipo, :dano_parcial, :dano_total)
+                (id_edan_localidad, tipo, dano_parcial, dano_total,
+                 fotografia, coordenada_lat, coordenada_lon)
+            VALUES (:id, :tipo, :dano_parcial, :dano_total,
+                    :fotografia, :coordenada_lat, :coordenada_lon)
         """), {
             "id": lid, "tipo": i.get("tipo", ""),
             "dano_parcial": i.get("dano_parcial", 0), "dano_total": i.get("dano_total", 0),
+            "fotografia": i.get("fotografia") or None,
+            "coordenada_lat": i.get("coordenada_lat") or None,
+            "coordenada_lon": i.get("coordenada_lon") or None,
         })
 
     for p in loc.get("proteccion") or []:
@@ -968,6 +973,13 @@ def create_unidad_educativa(db: Session, id_localidad: int, data: dict) -> dict:
          "suspension_clases", "perdida_material", "funciona_albergue",
          "estudiantes", "profesores", "administrativos", "observaciones",
          "fotografia", "coordenada_lat", "coordenada_lon"], data)
+
+
+def create_infra_productiva(db: Session, id_localidad: int, data: dict) -> dict:
+    data["_id"] = id_localidad
+    return _insert_single_row(db, "edan_localidades_infra_productiva",
+        ["tipo", "dano_parcial", "dano_total", "fotografia",
+         "coordenada_lat", "coordenada_lon"], data)
 
 
 # ============================================================================

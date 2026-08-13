@@ -1001,6 +1001,39 @@ async def crear_unidad_educativa_con_foto(
         raise _db_error(e)
 
 
+@router.post("/localidades/{id_localidad}/infra-productiva/con-foto", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+                  summary="Crear infraestructura productiva con foto+GPS (multipart)",
+                  description="Sube una imagen y crea una fila en `edan.edan_localidades_infra_productiva`.\n\n"
+                              "Multipart: `file` (JPG/PNG, max 5MB) + form fields.\n"
+                              "Patrón de archivo: `/uploads/reports/{codigo_ine}/{codigo_ine}_{id_usuario}_{ts}.jpg`")
+async def crear_infra_productiva_con_foto(
+    id_localidad: int,
+    file: UploadFile = File(...),
+    tipo: str = Form(""),
+    dano_parcial: int = Form(0),
+    dano_total: int = Form(0),
+    coordenada_lat: float | None = Form(None),
+    coordenada_lon: float | None = Form(None),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        fotografia = await _upload_to_localidad(file, db, id_localidad, _user)
+        result = service.create_infra_productiva(db, id_localidad, {
+            "tipo": tipo,
+            "dano_parcial": dano_parcial, "dano_total": dano_total,
+            "fotografia": fotografia,
+            "coordenada_lat": coordenada_lat,
+            "coordenada_lon": coordenada_lon,
+        })
+        return SuccessResponse(message="Infraestructura productiva creada con foto", data=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+
+
 # ============================================================================
 #  GET: listar items con foto por municipio / filtros
 #  Cada endpoint devuelve el item completo (incluye path de la foto).
@@ -1206,6 +1239,31 @@ def listar_unidades_educativas(
     return SuccessResponse(message="Unidades educativas listadas", data=[dict(r) for r in rows], total=total)
 
 
+@router.get("/localidades/{id_localidad}/infra-productiva", tags=[TAG_EDAN_LOCALIDADES])
+def listar_infra_productiva(
+    id_localidad: int,
+    con_foto: bool | None = Query(None),
+    skip: int = 0, limit: int = 100,
+    db: Session = Depends(get_db), _user=Depends(get_current_user),
+):
+    conds = ["id_edan_localidad = :id"]
+    params: dict = {"id": id_localidad}
+    if con_foto is True:
+        conds.append("fotografia IS NOT NULL AND fotografia <> ''")
+    elif con_foto is False:
+        conds.append("(fotografia IS NULL OR fotografia = '')")
+    rows = service._rows(db, f"""
+        SELECT * FROM edan.edan_localidades_infra_productiva
+        WHERE {' AND '.join(conds)}
+        ORDER BY id_infra_productiva DESC LIMIT :limit OFFSET :skip
+    """, {**params, "limit": limit, "skip": skip})
+    total = service._row(db, f"""
+        SELECT COUNT(*) AS c FROM edan.edan_localidades_infra_productiva
+        WHERE {' AND '.join(conds)}
+    """, params)["c"]
+    return SuccessResponse(message="Infraestructura productiva listada", data=[dict(r) for r in rows], total=total)
+
+
 # ============================================================================
 #  GET: todas las fotos de un municipio (para galería de evidencia)
 #  Agrupa por id_localidad y retorna cada item con su foto, geolocalización
@@ -1216,11 +1274,12 @@ TABLAS_CON_FOTO = {
     "danos_viales": ("edan_localidades_danos_viales", "id_dano_vial"),
     "danos_infra_publica": ("edan_localidades_danos_infra_publica", "id_dano_infra"),
     "danos_vivienda": ("edan_localidades_danos_vivienda", "id_dano_vivienda"),
-    "danos_agricultura": ("edan_localidades_danos_agricultura", "id_dano_agricola"),
+    "danos_agricultura": ("edan_localidades_danos_agricultura", "id_dano_agricultura"),
     "danos_pecuarios": ("edan.edan_localidades_danos_pecuario", "id_dano_pecuario"),
     "salud_establecimientos": ("edan_localidades_salud_establecimientos", "id_establecimiento_salud"),
     "servicios_basicos": ("edan_localidades_servicios_basicos", "id_servicio_basico"),
     "unidades_educativas": ("edan_localidades_unidades_educativas", "id_unidad_educativa"),
+    "infra_productiva": ("edan_localidades_infra_productiva", "id_infra_productiva"),
 }
 
 

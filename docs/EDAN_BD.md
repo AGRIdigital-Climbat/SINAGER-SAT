@@ -222,9 +222,11 @@ A partir de la migración v2.6.0, las 8 sub-tablas de daños/servicios tienen
 | `coordenada_lat` | DECIMAL(10,8) | Latitud GPS |
 | `coordenada_lon` | DECIMAL(11,8) | Longitud GPS |
 
-Las 8 tablas son: `danos_viales`, `danos_infra_publica`, `danos_vivienda`,
+Las 9 tablas son: `danos_viales`, `danos_infra_publica`, `danos_vivienda`,
 `danos_agricultura`, `danos_pecuario`, `salud_establecimientos`,
-`servicios_basicos`, `unidades_educativas`.
+`servicios_basicos`, `unidades_educativas`, `infra_productiva`.
+`infra_productiva` (sección 9.3) recibió estos campos en la migración v2.8.0,
+ya que se omitió en v2.6.0.
 
 ### Catálogos propios de EDAN
 
@@ -365,12 +367,13 @@ Validaciones al subir (`api/upload.py:save_documento_pdf`):
 | **v2.7.1** | Tabla `repositorio.documentos` (con full-text TSVECTOR+GIN, versionado, metadata JSONB) |
 | **v2.7.2** | Metadata estructurada: `id_departamento`, `id_provincia`, `fecha_documento`, `nombre_documento` + remoción de full-text |
 | **v2.7.3** | Simplificación: removidos `mime_type`, `version`, `id_documento_padre`, `metadata`, `ip_origen`, `vw_documentos_activos` |
+| **v2.8.0** | Geolocalización en `infra_productiva`: `fotografia` + `coordenada_lat`/`coordenada_lon` (sección 9.3; faltó en v2.6.0) |
 
 ---
 
 ## API REST — Endpoints consolidados (v1.3.0)
 
-**Total: 163 endpoints** distribuidos en **20 grupos Swagger**.
+**Total: 166 endpoints** distribuidos en **25 grupos Swagger**.
 
 ### Tag `EDAN` (36 endpoints — colapsable)
 
@@ -389,23 +392,26 @@ Cabecera EDAN, reportes agregados, catálogos, sincronización, consolidar, foto
 | GET | `/api/v1/edan/municipios/{id}/fotos` | Galería de evidencias fotográficas |
 | GET | `/api/v1/rea/reportes/{id}/edan` | EDAN generado desde REA |
 
-### Tag `EDAN_LOCALIDADES` (28 endpoints — colapsable)
+### Tag `EDAN_LOCALIDADES` (32 endpoints — colapsable)
 
 Localidades del EDAN (CRUD anidado), sync móvil, mis-*, items con foto y coordenadas.
 
 | Método | Ruta | Descripción |
 |---|---|---|
+| POST | `/api/v1/edan/localidades` | Crear localidad huérfana independiente (sin EDAN) |
+| PUT / DELETE | `/api/v1/edan/localidades/{id_localidad}` | Actualizar / eliminar localidad huérfana (standalone) |
 | GET / POST / PUT / DELETE | `/api/v1/edan/{id}/localidades/{,/{id_localidad}}` | CRUD localidades |
 | POST / GET | `/api/v1/edan/localidades/sync`, `/localidades/sync/pull` | Sync offline |
 | PUT | `/api/v1/edan/localidades/{id_localidad}/estado` | Cambiar estado de localidad (roles 6, 7, 8) |
 | **GET** | **`/api/v1/edan/localidades/mis-resumen`** | **Resumen de TODAS las localidades del usuario (huérfanas + consolidadas)** |
 | **GET** | **`/api/v1/edan/localidades/mis-reportes`** | **Lista de TODAS las localidades del usuario. Query `?solo_huerfanas=true\|false\|None`** |
-| POST | `/api/v1/edan/localidades/{id_localidad}/{tipo}/con-foto` | Crear daño/servicio con foto+GPS (8 endpoints) |
-| GET | `/api/v1/edan/localidades/{id_localidad}/{tipo}` | Listar items (8 endpoints) |
+| POST | `/api/v1/edan/localidades/{id_localidad}/{tipo}/con-foto` | Crear daño/servicio con foto+GPS (9 endpoints) |
+| GET | `/api/v1/edan/localidades/{id_localidad}/{tipo}` | Listar items (9 endpoints) |
 
-Los 8 tipos de daño/servicio con foto son: `danos-viales`, `danos-infra-publica`,
+Los 9 tipos de daño/servicio con foto son: `danos-viales`, `danos-infra-publica`,
 `danos-vivienda`, `danos-agricultura`, `danos-pecuarios`,
-`salud-establecimientos`, `servicios-basicos`, `unidades-educativas`.
+`salud-establecimientos`, `servicios-basicos`, `unidades-educativas`,
+`infra-productiva`.
 
 ### Tag `Repositorio > Catálogo` (5 endpoints)
 
