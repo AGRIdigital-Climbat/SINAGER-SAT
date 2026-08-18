@@ -8,13 +8,23 @@
 
 ## 1. Esquema en PostgreSQL/PostGIS operativo
 
-Backend API REST desplegado y operativo con **166 endpoints** documentados vía OpenAPI (accesibles en `/docs`). Soporte geoespacial PostGIS 3.4 para polígonos de límite municipal y consultas espaciales. Base de datos relacional con **38 tablas de usuario** distribuidas en **6 esquemas** lógicos.
+Backend API REST desplegado y operativo con **144 endpoints** documentados vía OpenAPI (accesibles en `/docs`). Soporte geoespacial PostGIS 3.4 para polígonos de límite municipal y consultas espaciales. Base de datos relacional con **34 tablas de usuario** distribuidas en **5 esquemas** lógicos.
 
-**8 módulos funcionales (24 tags Swagger):**
+### Esquemas de base de datos
+
+| Esquema | Tablas | Descripción |
+|---------|--------|-------------|
+| `edan` | 20 | Evaluaciones, localidades, 14 sub-tablas de secciones, catálogos |
+| `shared` | 5 | Geografía (departamento, provincia, municipio) + catálogos agropecuarios |
+| `usuarios` | 7 | Cuentas, roles, permisos, auditoría, sesiones, acciones, aplicaciones |
+| `repositorio` | 2 | Documentos del GRD, tipos de documento |
+| `public` | 1 | `spatial_ref_sys` (extensión PostGIS) |
+| **Total** | **35** | |
+
+### Módulos funcionales de la API (21 tags Swagger)
 
 - **Autenticación** (5 endpoints) — Login JWT, verificación de identidad, cambio de contraseña, registro de usuarios
 - **Evaluación de Daños — EDAN** (68 endpoints) — Evaluaciones con 14 secciones, consolidación, estados, localidades, sync, fotos con GPS
-- **REA — Reportes de Eventos** (20 endpoints) — Reportes de campo con estados, categorías de afectación, fotos georeferenciadas
 - **Geografía** (20 endpoints) — Departamentos, provincias, municipios con polígonos GeoJSON, consultas GEOM/WKT, ubicación por coordenadas
 - **Catálogos** (6 endpoints) — Tipos de cultivo (73 registros), especies pecuarias (29 registros), tipos de evento, estados
 - **Repositorio de GRD** (14 endpoints) — Gestión documental con full-text search, versionado, catálogo de 7 tipos de documento
@@ -22,18 +32,6 @@ Backend API REST desplegado y operativo con **166 endpoints** documentados vía 
 - **Upload** (2 endpoints) — Subida y descarga de imágenes vía multipart
 
 Esquema de base de datos relacional documentado con tablas de auditoría y trazabilidad de operaciones por cada registro. 30 migraciones SQL versionadas (v1.2.0 → v2.8.0) garantizan la integridad del esquema en cada actualización.
-
-### Distribución por esquema
-
-| Esquema | Tablas | Descripción |
-|---------|--------|-------------|
-| `edan` | 20 | Evaluaciones, localidades, 14 sub-tablas de secciones, catálogos |
-| `shared` | 5 | Geografía (departamento, provincia, municipio) + catálogos agropecuarios |
-| `usuarios` | 7 | Cuentas, roles, permisos, auditoría, sesiones, acciones, aplicaciones |
-| `rea` | 4 | Reportes de eventos agropecuarios, categorías de afectación |
-| `repositorio` | 2 | Documentos del GRD, tipos de documento |
-| `public` | 1 | `spatial_ref_sys` (extension PostGIS) |
-| **Total** | **39** | |
 
 ---
 
@@ -146,7 +144,7 @@ Autenticación JWT con hash bcrypt de contraseñas. Tokens con expiración confi
 
 Los permisos se gestionan por tripla **(rol × aplicación × acción)**, lo que permite un control de acceso extremadamente fino:
 
-- **Aplicaciones**: EDAN, REA, Repositorio, Shared, Usuarios, Auth, Upload (registradas en `usuarios.aplicacion`)
+- **Aplicaciones**: EDAN, Repositorio, Shared, Usuarios, Auth, Upload (registradas en `usuarios.aplicacion`)
 - **Acciones**: CREATE, READ, UPDATE, DELETE, EXPORT, CONSOLIDATE (registradas en `usuarios.accion`)
 - **Ejemplo**: el rol 7 (Responsable Local) tiene CREATE en EDAN pero no CONSOLIDATE; el rol 6 (UGR Municipio) tiene CONSOLIDATE
 
@@ -155,7 +153,7 @@ Los permisos se gestionan por tripla **(rol × aplicación × acción)**, lo que
 El sistema cuenta con un middleware (`AuditMiddleware`) que intercepta automáticamente todas las peticiones POST, PUT y DELETE. Cada operación se registra en la tabla `usuarios.auditoria` con:
 
 - **id_usuario**: quién realizó la operación
-- **id_aplicacion**: a qué módulo pertenece (EDAN=1, REA=4, Usuarios=9)
+- **id_aplicacion**: a qué módulo pertenece (EDAN=1, Usuarios=9)
 - **acción**: CREATE, UPDATE o DELETE
 - **detalle**: JSON con path, method, body y parámetros de la petición
 - **ip_origen**: dirección IP del cliente
@@ -169,7 +167,7 @@ El sistema cuenta con un middleware (`AuditMiddleware`) que intercepta automáti
 | Primera operación registrada | 2026-08-05 15:37:05 |
 | Última operación registrada | 2026-08-17 11:23:50 |
 | Días con actividad | 12 días |
-| Distribución por módulo | Usuarios: 190, EDAN: 131, REA: 17 |
+| Distribución por módulo | Usuarios: 190, EDAN: 131, Otros: 17 |
 
 El endpoint `GET /api/v1/usuarios/auditoria` permite consultar los logs con filtros por: usuario, aplicación, acción, rango de fechas, rol y municipio.
 
@@ -294,7 +292,7 @@ Guía oficial de evaluación de daños y necesidades integrada en la aplicación
 
 | Entregable (contrato 4.2) | Estado | Registros/Avance |
 |----------------------------|--------|-----------------|
-| Esquema PostgreSQL/PostGIS operativo | ✅ **Implementado** | 38 tablas, 6 schemas, PostGIS 3.4 |
+| Esquema PostgreSQL/PostGIS operativo | ✅ **Implementado** | 34 tablas, 5 schemas, PostGIS 3.4 |
 | Observatorio Nacional de Desastres cargado | ✅ **Implementado** | 340 municipios, 73 cultivos, 29 especies, 8 eventos |
 | Módulo municipal con sincronización | ✅ **Implementado** | 4 endpoints sync, patrón offline-first |
 | Registro de usuarios y trazabilidad | ✅ **Implementado** | 9 roles, 338 registros de auditoría |
@@ -335,7 +333,7 @@ La generación de PDF/Excel se implementará en la siguiente fase de desarrollo,
 
 | Entregable (contrato 4.2) | Estado | Detalle |
 |----------------------------|--------|---------|
-| Esquema PostgreSQL/PostGIS operativo | ✅ Implementado | 166 endpoints, 38 tablas, PostGIS 3.4 |
+| Esquema PostgreSQL/PostGIS operativo | ✅ Implementado | 144 endpoints, 34 tablas, PostGIS 3.4 |
 | Observatorio Nacional de Desastres cargado | ✅ Implementado | 340 municipios con geometría, catálogos completos |
 | Módulo municipal con sincronización | ✅ Implementado | 4 endpoints sync, patrón offline-first |
 | Registro de usuarios y trazabilidad | ✅ Implementado | 9 roles, 338 registros de auditoría, middleware automático |
@@ -350,11 +348,11 @@ La generación de PDF/Excel se implementará en la siguiente fase de desarrollo,
 
 | Categoría | Métrica | Valor |
 |-----------|---------|-------|
-| **API** | Endpoints totales | **166** |
-| | Tags Swagger | **24** |
-| | Módulos funcionales | **8** |
-| **Base de datos** | Tablas de usuario | **38** |
-| | Esquemas lógicos | **6** |
+| **API** | Endpoints totales | **144** |
+| | Tags Swagger | **21** |
+| | Módulos funcionales | **7** |
+| **Base de datos** | Tablas de usuario | **34** |
+| | Esquemas lógicos | **5** |
 | | Migraciones SQL | **30** (v1.2.0 → v2.8.0) |
 | | Extensión | PostGIS **3.4** |
 | **Datos geográficos** | Departamentos | **8** |
