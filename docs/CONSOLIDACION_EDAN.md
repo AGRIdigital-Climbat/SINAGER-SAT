@@ -588,6 +588,19 @@ Secciones (`<seccion>`): `danos-viales`, `danos-infra-publica`, `danos-vivienda`
 
 ## 7. Sincronización offline (app móvil)
 
+### Endpoints de sincronización
+
+| Método | Path | Rol | Función |
+|--------|------|-----|---------|
+| POST | `/api/v1/edan/localidades/sync` | 6, 7 | Push: subir localidades desde la app móvil |
+| GET | `/api/v1/edan/localidades/sync/pull` | 6, 7 | Pull: descargar localidades del servidor |
+| POST | `/api/v1/edan/sync` | 6, 7 | Push: subir EDANs (cabeceras) desde la app |
+| GET | `/api/v1/edan/sync/pull` | 6, 7 | Pull: descargar EDANs del servidor |
+
+> **Documentación completa** del contrato HTTP (request, response, curl examples, valores
+> permitidos de cada campo, CHECK constraints): ver `docs/SINCRONIZACION.md` sección
+> "Contrato HTTP de los endpoints de sincronización".
+
 ### Flujo offline-first
 
 1. App móvil crea localidad con `id_local = UUID` (generado en cliente).
@@ -598,17 +611,24 @@ Secciones (`<seccion>`): `danos-viales`, `danos-infra-publica`, `danos-vivienda`
    body: { "localidades": [LocalidadCreate, ...] }
    ```
 4. Server:
-   - Si `id_local` no existe → INSERT con `pendiente_actualizacion=TRUE`
-   - Si `id_local` existe → UPDATE
-   - Devuelve las localidades convergidas con `id_edan_localidad` real.
+   - Si `pendiente_eliminacion=true` → DELETE físico + tombstone
+   - Si `id_local` no existe → INSERT con `pendiente_actualizacion=false`
+   - Si `id_local` existe → UPDATE por LWW (last-write-wins)
+   - Si `fecha_modificacion` del payload es más vieja → conflicto (no aplica)
+   - Devuelve las localidades convergidas con `id_edan_localidad` real
+5. Las secciones se reemplazan completamente en cada UPDATE (DELETE + INSERT).
+   El cliente debe enviar siempre el set completo de secciones.
 
-### Pull (caché inicial)
+### Pull (caché inicial e incremental)
 
 ```
-GET /api/v1/edan/localidades/sync/pull?since=2026-08-01T00:00:00Z
+GET /api/v1/edan/localidades/sync/pull
+GET /api/v1/edan/localidades/sync/pull?fecha_desde=2026-08-01T00:00:00
+GET /api/v1/edan/localidades/sync/pull?skip=0&limit=50
 ```
 
-Retorna TODAS las localidades del usuario modificadas después de `since`.
+Parámetros: `fecha_desde` (ISO timestamp), `skip` (offset), `limit` (1-1000, default 50).
+Retorna las localidades del usuario modificadas después de `fecha_desde`, con paginación.
 
 ---
 
