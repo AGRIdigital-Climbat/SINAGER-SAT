@@ -403,19 +403,68 @@ def localidad_sync_pull(
 
 @router.get("/consolidar/pendientes", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
                     summary="Listar EDAN localidades listas para consolidar",
-                    description="Devuelve las EDAN localidades con estado='aprobado' que aún NO han sido\n"
-                                "consolidadas en un EDAN (id_edan IS NULL). El UGR municipio usa esto\n"
-                                "para decidir cuáles agrupar en un nuevo EDAN consolidado.\n\n"
-                                "Query `estado` permite filtrar por otro estado (default: aprobado).")
+                    description="Devuelve las EDAN localidades huérfanas (id_edan IS NULL) agrupadas por\n"
+                                "(municipio, tipo_evento), con conteos y totales agregados.\n\n"
+                                "Por defecto muestra TODOS los estados. Use `estado` para filtrar\n"
+                                "(ILIKE: 'aprobado' matchea 'Aprobado UGR' y 'Aprobado Ajuste UGR')\n"
+                                "o `id_estado` para un estado específico.\n\n"
+                                "El UGR municipio usa esto para decidir cuáles agrupar en un nuevo EDAN.")
 def consolidar_pendientes(
     id_municipio: int | None = Query(None, description="Municipio del UGR (opcional)"),
-    estado: str = Query("aprobado", description="Estado de localidad a agrupar"),
+    estado: str | None = Query(None, description="Estado de localidad (ILIKE, ej: 'aprobado')"),
+    id_estado: int | None = Query(None, description="ID de estado específico"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    data = service.listar_consolidables(db, id_municipio=id_municipio, estado_nombre=estado)
+    data = service.listar_consolidables(db, id_municipio=id_municipio,
+                                         estado_nombre=estado, id_estado=id_estado)
     return SuccessResponse(message="EDAN localidades consolidadas listadas correctamente",
                            data=data, total=len(data))
+
+
+@router.get("/localidades/municipio/{id_municipio}", tags=[TAG_EDAN_LOCALIDADES],
+            responses={200: {"model": SuccessResponse}},
+            summary="Todas las localidades de un municipio",
+            description="Devuelve TODAS las localidades de un municipio (huérfanas + consolidadas),\n"
+                        "de TODOS los usuarios, con la estructura completa (14 secciones anidadas).\n\n"
+                        "El UGR municipality usa esto para ver todo lo que se está reportando en su zona.\n\n"
+                        "Filtros opcionales: tipo de evento, estado, solo huérfanas/consolidadas,\n"
+                        "usuario creador, con/sin foto.")
+def listar_localidades_municipio(
+    id_municipio: int,
+    id_tipo_evento: int | None = Query(None, description="Filtrar por tipo de evento"),
+    id_estado: int | None = Query(None, description="ID de estado de localidad"),
+    estado: str | None = Query(None, description="Nombre de estado (ILIKE, ej: 'aprobado')"),
+    solo_huerfanas: bool | None = Query(None, description="True=solo huérfanas, False=solo consolidadas, None=todas"),
+    id_usuario: int | None = Query(None, description="Filtrar por usuario creador"),
+    con_foto: bool | None = Query(None, description="True=solo con foto, False=solo sin foto, None=todas"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data, total = service.listar_localidades_municipio(
+        db, id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
+        id_estado=id_estado, estado_nombre=estado, solo_huerfanas=solo_huerfanas,
+        id_usuario=id_usuario, con_foto=con_foto, skip=skip, limit=limit)
+    return SuccessResponse(message="Localidades del municipio listadas correctamente",
+                           data=data, total=total)
+
+
+@router.get("/localidades/municipio/{id_municipio}/resumen",
+            tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
+            summary="Resumen ejecutivo de localidades por municipio",
+            description="Conteos agregados de todas las localidades de un municipio:\n"
+                        "total, huérfanas vs consolidadas, por estado, por tipo de evento,\n"
+                        "totales de población/familias afectadas.")
+def resumen_localidades_municipio(
+    id_municipio: int,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.resumen_localidades_municipio(db, id_municipio)
+    return SuccessResponse(message="Resumen de localidades del municipio generado correctamente",
+                           data=data)
 
 
 @router.post("/consolidar", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},

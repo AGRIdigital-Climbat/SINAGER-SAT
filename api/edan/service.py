@@ -1370,20 +1370,30 @@ def cambiar_estado_edan(db: Session, id_edan: int, id_estado: int) -> dict | Non
 
 
 def listar_consolidables(db: Session, id_municipio: int | None = None,
-                         estado_nombre: str = "aprobado"):
-    """Localidades aprobadas sin EDAN, agrupadas por (tipo_evento, municipio),
-    listas para consolidar."""
+                         estado_nombre: str | None = None,
+                         id_estado: int | None = None):
+    """Localidades huérfanas sin EDAN, agrupadas por (tipo_evento, municipio),
+    listas para consolidar.
+
+    Filtros:
+      - estado_nombre: ILIKE contra edan_localidades_estado.nombre (ej: "aprobado"
+        matchea "Aprobado UGR" y "Aprobado Ajuste UGR"). None = todos los estados.
+      - id_estado: ID exacto de edan_localidad_estado. Tiene prioridad sobre estado_nombre.
+    """
     conds = ["l.id_edan IS NULL"]
     params: dict = {}
     if id_municipio is not None:
         conds.append("l.id_municipio = :id_municipio")
         params["id_municipio"] = id_municipio
-    if estado_nombre:
+    if id_estado is not None:
+        conds.append("l.id_edan_localidad_estado = :id_estado")
+        params["id_estado"] = id_estado
+    elif estado_nombre:
         conds.append("""l.id_edan_localidad_estado IN (
             SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
-            WHERE nombre = :estado_nombre
+            WHERE LOWER(nombre) LIKE LOWER(:estado_patron)
         )""")
-        params["estado_nombre"] = estado_nombre
+        params["estado_patron"] = f"{estado_nombre}%"
     where = " AND ".join(conds)
     rows = _rows(db, f"""
         SELECT l.id_municipio, m.nombre AS municipio_nombre,
@@ -1407,6 +1417,128 @@ def listar_consolidables(db: Session, id_municipio: int | None = None,
         ORDER BY te.nombre, m.nombre
     """, params)
     return [dict(r) for r in rows]
+
+
+def listar_localidades_municipio(db: Session, id_municipio: int,
+                                  id_tipo_evento: int | None = None,
+                                  id_estado: int | None = None,
+                                  estado_nombre: str | None = None,
+                                  solo_huerfanas: bool | None = None,
+                                  id_usuario: int | None = None,
+                                  con_foto: bool | None = None,
+                                  skip: int = 0, limit: int = 50):
+    """Todas las localidades de un municipio (huérfanas + consolidadas),
+    de todos los usuarios. Retorna la estructura completa con 14 secciones."""
+    conds = ["l.id_municipio = :id_municipio"]
+    params: dict = {"id_municipio": id_municipio}
+    if id_tipo_evento is not None:
+        conds.append("l.id_tipo_evento = :id_tipo_evento")
+        params["id_tipo_evento"] = id_tipo_evento
+    if id_estado is not None:
+        conds.append("l.id_edan_localidad_estado = :id_estado")
+        params["id_estado"] = id_estado
+    elif estado_nombre:
+        conds.append("""l.id_edan_localidad_estado IN (
+            SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
+            WHERE LOWER(nombre) LIKE LOWER(:estado_patron)
+        )""")
+        params["estado_patron"] = f"{estado_nombre}%"
+    if solo_huerfanas is True:
+        conds.append("l.id_edan IS NULL")
+    elif solo_huerfanas is False:
+        conds.append("l.id_edan IS NOT NULL")
+    if id_usuario is not None:
+        conds.append("l.id_usuario = :id_usuario")
+        params["id_usuario"] = id_usuario
+    if con_foto is True:
+        conds.append("""EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_viales v WHERE v.id_edan_localidad = l.id_edan_localidad AND v.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_infra_publica ip WHERE ip.id_edan_localidad = l.id_edan_localidad AND ip.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_vivienda vi WHERE vi.id_edan_localidad = l.id_edan_localidad AND vi.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_agricultura ag WHERE ag.id_edan_localidad = l.id_edan_localidad AND ag.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_pecuario pe WHERE pe.id_edan_localidad = l.id_edan_localidad AND pe.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_salud_establecimientos sa WHERE sa.id_edan_localidad = l.id_edan_localidad AND sa.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_servicios_basicos sb WHERE sb.id_edan_localidad = l.id_edan_localidad AND sb.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_unidades_educativas ue WHERE ue.id_edan_localidad = l.id_edan_localidad AND ue.fotografia IS NOT NULL
+        ) OR EXISTS (
+            SELECT 1 FROM edan.edan_localidades_infra_productiva ip2 WHERE ip2.id_edan_localidad = l.id_edan_localidad AND ip2.fotografia IS NOT NULL
+        )""")
+    elif con_foto is False:
+        conds.append("""NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_viales v WHERE v.id_edan_localidad = l.id_edan_localidad AND v.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_infra_publica ip WHERE ip.id_edan_localidad = l.id_edan_localidad AND ip.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_vivienda vi WHERE vi.id_edan_localidad = l.id_edan_localidad AND vi.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_agricultura ag WHERE ag.id_edan_localidad = l.id_edan_localidad AND ag.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_pecuario pe WHERE pe.id_edan_localidad = l.id_edan_localidad AND pe.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_salud_establecimientos sa WHERE sa.id_edan_localidad = l.id_edan_localidad AND sa.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_servicios_basicos sb WHERE sb.id_edan_localidad = l.id_edan_localidad AND sb.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_unidades_educativas ue WHERE ue.id_edan_localidad = l.id_edan_localidad AND ue.fotografia IS NOT NULL
+        ) AND NOT EXISTS (
+            SELECT 1 FROM edan.edan_localidades_infra_productiva ip2 WHERE ip2.id_edan_localidad = l.id_edan_localidad AND ip2.fotografia IS NOT NULL
+        )""")
+    where = " AND ".join(conds)
+    total = db.execute(text(f"""
+        SELECT COUNT(*) FROM edan.edan_localidades l WHERE {where}
+    """), params).scalar()
+    rows = _rows(db, f"""
+        SELECT l.id_edan_localidad
+        FROM edan.edan_localidades l
+        WHERE {where}
+        ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
+        LIMIT :limit OFFSET :skip
+    """, {**params, "limit": limit, "skip": skip})
+    items = [_build_localidad(db, r["id_edan_localidad"]) for r in rows]
+    return items, total
+
+
+def resumen_localidades_municipio(db: Session, id_municipio: int):
+    """Resumen ejecutivo de todas las localidades de un municipio:
+    conteos por estado, huérfanas vs consolidadas, totales de población."""
+    row = _row(db, """
+        SELECT COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE l.id_edan IS NULL) AS huerfanas,
+               COUNT(*) FILTER (WHERE l.id_edan IS NOT NULL) AS consolidadas,
+               COALESCE(SUM(l.total_poblacion_afectada), 0) AS total_poblacion_afectada,
+               COALESCE(SUM(l.total_familias_afectadas), 0) AS total_familias_afectadas,
+               COALESCE(SUM(l.total_familias_damnificadas), 0) AS total_familias_damnificadas
+        FROM edan.edan_localidades l
+        WHERE l.id_municipio = :id_municipio
+    """, {"id_municipio": id_municipio})
+    base = dict(row) if row else {}
+    estados_rows = _rows(db, """
+        SELECT e.nombre AS estado, COUNT(*) AS cantidad
+        FROM edan.edan_localidades l
+        JOIN edan.edan_localidades_estado e
+             ON e.id_edan_localidad_estado = l.id_edan_localidad_estado
+        WHERE l.id_municipio = :id_municipio
+        GROUP BY e.nombre, e.orden
+        ORDER BY e.orden
+    """, {"id_municipio": id_municipio})
+    base["por_estado"] = [dict(r) for r in estados_rows]
+    eventos_rows = _rows(db, """
+        SELECT te.nombre AS tipo_evento, COUNT(*) AS cantidad
+        FROM edan.edan_localidades l
+        JOIN edan.tipo_evento te ON te.id_tipo_evento = l.id_tipo_evento
+        WHERE l.id_municipio = :id_municipio
+        GROUP BY te.nombre
+        ORDER BY te.nombre
+    """, {"id_municipio": id_municipio})
+    base["por_tipo_evento"] = [dict(r) for r in eventos_rows]
+    return base
 
 
 def _next_codigo_edan(db: Session, id_municipio: int) -> str:
