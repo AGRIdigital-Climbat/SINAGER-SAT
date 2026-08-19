@@ -268,6 +268,18 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
             WHERE e.id_edan = :id
         """, {"id": loc["id_edan"]})
         if edan:
+            u_ugr = None
+            if edan["id_usuario_ugr"]:
+                r = _row(db, "SELECT id_usuario, usuario, nombre, carnet, celular, correo, cargo"
+                             " FROM usuarios.usuario WHERE id_usuario = :id",
+                         {"id": edan["id_usuario_ugr"]})
+                u_ugr = dict(r) if r else None
+            u_alc = None
+            if edan["id_usuario_alcalde"]:
+                r = _row(db, "SELECT id_usuario, usuario, nombre, carnet, celular, correo, cargo"
+                             " FROM usuarios.usuario WHERE id_usuario = :id",
+                         {"id": edan["id_usuario_alcalde"]})
+                u_alc = dict(r) if r else None
             loc["edan"] = {
                 "id_edan": edan["id_edan"],
                 "codigo_edan": edan["codigo_edan"],
@@ -282,12 +294,23 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
                 "fecha_llenado": edan["fecha_llenado"],
                 "fecha_modificacion": edan["fecha_modificacion"],
                 "id_usuario_ugr": edan["id_usuario_ugr"],
+                "usuario_ugr": u_ugr,
                 "id_usuario_alcalde": edan["id_usuario_alcalde"],
+                "usuario_alcalde": u_alc,
             }
         else:
             loc["edan"] = None
     else:
         loc["edan"] = None
+
+    # Usuario creador de la localidad
+    if loc["id_usuario"]:
+        u = _row(db, "SELECT id_usuario, usuario, nombre, carnet, celular, correo, cargo"
+                      " FROM usuarios.usuario WHERE id_usuario = :id",
+                 {"id": loc["id_usuario"]})
+        loc["usuario"] = dict(u) if u else None
+    else:
+        loc["usuario"] = None
 
     # 1. Impacto en población (1:N por rango etario)
     loc["impacto_poblacion"] = _impacto_poblacion(db, id_localidad)
@@ -897,8 +920,15 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
 #  Usado por POST /localidades/{id}/<tipo>/con-foto.
 # ============================================================================
 
-def _insert_single_row(db: Session, table: str, columns: list[str], data: dict) -> dict:
-    """Inserta una fila en una tabla de items de daño/servicio y la retorna."""
+def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
+                       expand: dict | None = None) -> dict:
+    """Inserta una fila en una tabla de items de daño/servicio y la retorna.
+
+    Args:
+        expand: dict opcional de campos a expandir. Ej:
+            {"id_cultivo": ("shared.cultivo", "id", ["id", "nombre", "grupo"]),
+             "id_especie": ("shared.pecuario", "id", ["id", "nombre", "grupo"])}
+    """
     cols = ", ".join(columns)
     ph = ", ".join(f":{k}" for k in columns)
     params = {"id": data["_id"]} | {k: data.get(k) for k in columns if k != "id_edan_localidad"}
@@ -911,7 +941,15 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict) 
         params,
     ).mappings().first()
     db.commit()
-    return dict(result) if result else {}
+    row = dict(result) if result else {}
+    if expand and row:
+        for fk_col, (cat_table, cat_pk, cat_cols) in expand.items():
+            fk_val = row.get(fk_col)
+            if fk_val:
+                sel = ", ".join(cat_cols)
+                cat_row = _row(db, f"SELECT {sel} FROM {cat_table} WHERE {cat_pk} = :id", {"id": fk_val})
+                row[fk_col.replace("id_", "")] = dict(cat_row) if cat_row else None
+    return row
 
 
 def create_dano_vial(db: Session, id_localidad: int, data: dict) -> dict:
@@ -941,14 +979,16 @@ def create_dano_agricultura(db: Session, id_localidad: int, data: dict) -> dict:
     return _insert_single_row(db, "edan_localidades_danos_agricultura",
         ["tipo_cultivo", "id_cultivo", "hectareas_afectadas", "hectareas_perdidas",
          "necesidades_inmediatas", "observaciones", "fotografia",
-         "coordenada_lat", "coordenada_lon"], data)
+         "coordenada_lat", "coordenada_lon"], data,
+        expand={"id_cultivo": ("shared.cultivo", "id", ["id", "nombre", "grupo"])})
 
 
 def create_dano_pecuario(db: Session, id_localidad: int, data: dict) -> dict:
     data["_id"] = id_localidad
     return _insert_single_row(db, "edan_localidades_danos_pecuario",
         ["especie", "id_especie", "raza", "animales_afectados", "animales_muertos",
-         "necesidades_inmediatas", "fotografia", "coordenada_lat", "coordenada_lon"], data)
+         "necesidades_inmediatas", "fotografia", "coordenada_lat", "coordenada_lon"], data,
+        expand={"id_especie": ("shared.pecuario", "id", ["id", "nombre", "grupo"])})
 
 
 def create_establecimiento_salud(db: Session, id_localidad: int, data: dict) -> dict:

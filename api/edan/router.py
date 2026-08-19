@@ -1170,22 +1170,35 @@ def listar_danos_agricultura(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
-    conds = ["id_edan_localidad = :id"]
+    conds = ["a.id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
-        conds.append("fotografia IS NOT NULL AND fotografia <> ''")
+        conds.append("a.fotografia IS NOT NULL AND a.fotografia <> ''")
     elif con_foto is False:
-        conds.append("(fotografia IS NULL OR fotografia = '')")
-    rows = service._rows(db, f"""
-        SELECT * FROM edan.edan_localidades_danos_agricultura
-        WHERE {' AND '.join(conds)}
-        ORDER BY id_dano_agricola DESC LIMIT :limit OFFSET :skip
-    """, {**params, "limit": limit, "skip": skip})
+        conds.append("(a.fotografia IS NULL OR a.fotografia = '')")
+    where = " AND ".join(conds)
     total = service._row(db, f"""
-        SELECT COUNT(*) AS c FROM edan.edan_localidades_danos_agricultura
-        WHERE {' AND '.join(conds)}
+        SELECT COUNT(*) AS c FROM edan.edan_localidades_danos_agricultura a WHERE {where}
     """, params)["c"]
-    return SuccessResponse(message="Daños agricultura listados", data=[dict(r) for r in rows], total=total)
+    rows = service._rows(db, f"""
+        SELECT a.*, c.nombre AS cultivo_nombre, c.grupo AS cultivo_grupo
+        FROM edan.edan_localidades_danos_agricultura a
+        LEFT JOIN shared.cultivo c ON c.id = a.id_cultivo
+        WHERE {where}
+        ORDER BY a.id_dano_agricultura DESC LIMIT :limit OFFSET :skip
+    """, {**params, "limit": limit, "skip": skip})
+    items = []
+    for r in rows:
+        item = dict(r)
+        if item.get("id_cultivo"):
+            item["cultivo"] = {"id": item["id_cultivo"], "nombre": item.pop("cultivo_nombre", None),
+                               "grupo": item.pop("cultivo_grupo", None)}
+        else:
+            item.pop("cultivo_nombre", None)
+            item.pop("cultivo_grupo", None)
+            item["cultivo"] = None
+        items.append(item)
+    return SuccessResponse(message="Daños agricultura listados", data=items, total=total)
 
 
 @router.get("/localidades/{id_localidad}/danos-pecuarios", tags=[TAG_EDAN_LOCALIDADES])
@@ -1195,22 +1208,35 @@ def listar_danos_pecuarios(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
-    conds = ["id_edan_localidad = :id"]
+    conds = ["a.id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
-        conds.append("fotografia IS NOT NULL AND fotografia <> ''")
+        conds.append("a.fotografia IS NOT NULL AND a.fotografia <> ''")
     elif con_foto is False:
-        conds.append("(fotografia IS NULL OR fotografia = '')")
-    rows = service._rows(db, f"""
-        SELECT * FROM edan.edan_localidades_danos_pecuario
-        WHERE {' AND '.join(conds)}
-        ORDER BY id_dano_pecuario DESC LIMIT :limit OFFSET :skip
-    """, {**params, "limit": limit, "skip": skip})
+        conds.append("(a.fotografia IS NULL OR a.fotografia = '')")
+    where = " AND ".join(conds)
     total = service._row(db, f"""
-        SELECT COUNT(*) AS c FROM edan.edan_localidades_danos_pecuario
-        WHERE {' AND '.join(conds)}
+        SELECT COUNT(*) AS c FROM edan.edan_localidades_danos_pecuario a WHERE {where}
     """, params)["c"]
-    return SuccessResponse(message="Daños pecuarios listados", data=[dict(r) for r in rows], total=total)
+    rows = service._rows(db, f"""
+        SELECT a.*, p.nombre AS especie_catalogo, p.grupo AS especie_grupo
+        FROM edan.edan_localidades_danos_pecuario a
+        LEFT JOIN shared.pecuario p ON p.id = a.id_especie
+        WHERE {where}
+        ORDER BY a.id_dano_pecuario DESC LIMIT :limit OFFSET :skip
+    """, {**params, "limit": limit, "skip": skip})
+    items = []
+    for r in rows:
+        item = dict(r)
+        if item.get("id_especie"):
+            item["especie_obj"] = {"id": item["id_especie"], "nombre": item.pop("especie_catalogo", None),
+                                   "grupo": item.pop("especie_grupo", None)}
+        else:
+            item.pop("especie_catalogo", None)
+            item.pop("especie_grupo", None)
+            item["especie_obj"] = None
+        items.append(item)
+    return SuccessResponse(message="Daños pecuarios listados", data=items, total=total)
 
 
 @router.get("/localidades/{id_localidad}/salud-establecimientos", tags=[TAG_EDAN_LOCALIDADES])
