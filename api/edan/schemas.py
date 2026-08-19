@@ -163,14 +163,14 @@ class InfraProductiva(BaseModel):
 
 class GrupoVulnerable(BaseModel):
     """→ edan.edan_localidades_proteccion (1:N por grupo vulnerable).
-    Valores típicos de grupo: 'ninos', 'adolescentes', 'mujeres_lactantes',
-    'mujeres_embarazadas', 'adultos_mayores', 'personas_discapacidad',
-    'personas_enfermedad'.
+    Ahora vinculado a catálogo edan.grupo_vulnerable via FK.
     """
-    grupo: str = ''
+    id_grupo_vulnerable: int | None = None  # PK técnica (serial)
+    id_grupo_vulnerable_catalogo: int | None = None  # FK a edan.grupo_vulnerable
+    grupo: dict | None = None  # { id, codigo, nombre, orden } (catálogo anidado)
     mujeres: int = Field(0, ge=0)
     hombres: int = Field(0, ge=0)
-    total: int = Field(0, ge=0, description="Calculado: mujeres + hombres (lo asigna el servicio)")
+    total: int = Field(0, ge=0, description="Calculado: mujeres + hombres")
     apoyo_psicologico: bool | None = None
     reposicion_documentos: bool | None = None
     observaciones: str = ''
@@ -490,6 +490,22 @@ class EdanLocalidadEstadoUpdate(BaseModel):
     nombre: str | None = None
     descripcion: str | None = None
     orden: int | None = None
+
+
+class GrupoVulnerableCreate(BaseModel):
+    codigo: str
+    nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+    activo: bool = True
+
+
+class GrupoVulnerableUpdate(BaseModel):
+    codigo: str | None = None
+    nombre: str | None = None
+    descripcion: str | None = None
+    orden: int | None = None
+    activo: bool | None = None
 
 
 class EdanSyncIn(BaseModel):

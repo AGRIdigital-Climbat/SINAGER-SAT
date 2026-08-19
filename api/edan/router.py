@@ -317,7 +317,11 @@ _catalog_crud_routes(router, "tipo-localidad", service.tipo_localidad_crud,
                      TipoLocalidadCreate, TipoLocalidadUpdate, "Tipo de localidad", TAG_EDAN)
 
 _catalog_crud_routes(router, "localidades-estado", service.edan_localidades_estado_crud,
-                     EdanLocalidadEstadoCreate, EdanLocalidadEstadoUpdate, "Estado de localidad", TAG_EDAN)
+                     EdanLocalidadEstadoCreate, EdanLocalidadEstadoUpdate, "Estado localidad", TAG_EDAN)
+
+_catalog_crud_routes(router, "grupo-vulnerable", service.grupo_vulnerable_crud,
+                     GrupoVulnerableCreate, GrupoVulnerableUpdate, "Grupo vulnerable", TAG_EDAN)
+
 
 
 # ============================================================================

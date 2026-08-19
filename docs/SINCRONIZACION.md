@@ -327,7 +327,7 @@ Al actualizar una localidad existente, las secciones se **reemplazan completamen
 | `servicios_basicos` | `tipo` (CHECK: `energia_electrica`, `agua_potable`, `alcantarillado`, `gas_domiciliario`, `telecomunicaciones`), `dano_parcial`, `dano_total`, `necesidades_inmediatas`, `observaciones`, `fotografia`, `coordenada_lat`, `coordenada_lon` | Daños en servicios básicos |
 | `unidades_educativas` | `nombre_establecimiento`, `comunidad`, `dano_parcial`, `dano_total`, `suspension_clases`, `perdida_material`, `funciona_albergue`, `estudiantes`, `profesores`, `administrativos`, `observaciones`, `fotografia`, `coordenada_lat`, `coordenada_lon` | Daños en unidades educativas |
 | `infra_productiva` | `tipo`, `dano_parcial` (int), `dano_total` (int), `fotografia`, `coordenada_lat`, `coordenada_lon` | Daños en infraestructura productiva |
-| `proteccion` | `grupo` (CHECK: `ninos`, `adolescentes`, `mujeres_lactantes`, `mujeres_embarazadas`, `adultos_mayores`, `personas_discapacidad`, `personas_enfermedad`), `mujeres`, `hombres`, `total`, `apoyo_psicologico`, `reposicion_documentos`, `observaciones` | Grupos vulnerables protegidos |
+| `proteccion` | `id_grupo_vulnerable_catalogo` (FK a `edan.grupo_vulnerable`), `grupo` (objeto anidado: `{id, codigo, nombre, orden}`), `mujeres`, `hombres`, `total`, `apoyo_psicologico`, `reposicion_documentos`, `observaciones` | Grupos vulnerables protegidos |
 
 **Secciones 1:1 (objetos únicos):**
 

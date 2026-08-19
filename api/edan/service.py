@@ -153,19 +153,25 @@ def _servicios_basicos(db, id_localidad):
 
 
 def _grupos_vulnerables(db, id_localidad):
-    rows = _all(db, "edan_localidades_proteccion", id_localidad,
-                "ORDER BY id_grupo_vulnerable")
+    rows = _rows(db, """
+        SELECT p.*, g.codigo, g.nombre, g.orden, g.activo
+        FROM edan.edan_localidades_proteccion p
+        JOIN edan.grupo_vulnerable g ON g.id_grupo_vulnerable = p.id_grupo_vulnerable_catalogo
+        WHERE p.id_edan_localidad = :id
+        ORDER BY g.orden, p.id_grupo_vulnerable
+    """, {"id": id_localidad})
     return [
         {
-            "id_grupo_vulnerable": g["id_grupo_vulnerable"],
-            "grupo": g["grupo"],
-            "mujeres": g["mujeres"] or 0,
-            "hombres": g["hombres"] or 0,
-            "total": g["total"] if g["total"] is not None else (g["mujeres"] or 0) + (g["hombres"] or 0),
-            "apoyo_psicologico": g["apoyo_psicologico"],
-            "reposicion_documentos": g["reposicion_documentos"],
-            "observaciones": g["observaciones"] or "",
-        } for g in rows
+            "id_grupo_vulnerable": p["id_grupo_vulnerable"],
+            "id_grupo_vulnerable_catalogo": p["id_grupo_vulnerable_catalogo"],
+            "grupo": {"id": p["id_grupo_vulnerable_catalogo"], "codigo": p["codigo"], "nombre": p["nombre"], "orden": p["orden"], "activo": p["activo"]},
+            "mujeres": p["mujeres"] or 0,
+            "hombres": p["hombres"] or 0,
+            "total": p["total"] if p["total"] is not None else (p["mujeres"] or 0) + (p["hombres"] or 0),
+            "apoyo_psicologico": p["apoyo_psicologico"],
+            "reposicion_documentos": p["reposicion_documentos"],
+            "observaciones": p["observaciones"] or "",
+        } for p in rows
     ]
 
 
@@ -891,12 +897,13 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             continue
         db.execute(text("""
             INSERT INTO edan.edan_localidades_proteccion
-                (id_edan_localidad, grupo, mujeres, hombres, total,
+                (id_edan_localidad, id_grupo_vulnerable_catalogo, mujeres, hombres, total,
                  apoyo_psicologico, reposicion_documentos, observaciones)
-            VALUES (:id, :grupo, :mujeres, :hombres, :total,
+            VALUES (:id, :id_grupo_vulnerable_catalogo, :mujeres, :hombres, :total,
                     :apoyo_psicologico, :reposicion_documentos, :observaciones)
         """), {
-            "id": lid, "grupo": p.get("grupo", ""),
+            "id": lid,
+            "id_grupo_vulnerable_catalogo": p.get("id_grupo_vulnerable_catalogo"),
             "mujeres": p.get("mujeres", 0), "hombres": p.get("hombres", 0),
             "total": p.get("total", 0),
             "apoyo_psicologico": p.get("apoyo_psicologico"),
@@ -2080,3 +2087,4 @@ tipo_evento_crud = _catalog_crud("tipo_evento", "id_tipo_evento")
 estado_edan_crud = _catalog_crud("estado_edan", "id_estado")
 tipo_localidad_crud = _catalog_crud("tipo_localidad", "id_tipo_localidad", order_col="orden")
 edan_localidades_estado_crud = _catalog_crud("edan_localidades_estado", "id_edan_localidad_estado", order_col="orden")
+grupo_vulnerable_crud = _catalog_crud("grupo_vulnerable", "id_grupo_vulnerable", order_col="orden")
