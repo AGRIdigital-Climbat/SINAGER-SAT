@@ -512,9 +512,7 @@ def get_edan_completo(db: Session, id: int, modo: str = "detallado"):
 
 def get_edan_por_reporte(db: Session, id_reporte: int):
     """Devuelve el EDAN generado desde un reporte REA (o None si no está vinculado)."""
-    row = _row(db, "SELECT id_edan FROM edan.edan WHERE id_reporte_rea = :id", {"id": id_reporte})
-    if not row or row["id_edan"] is None:
-        row = _row(db, "SELECT id_edan FROM rea.reporte_evento WHERE id_reporte = :id", {"id": id_reporte})
+    row = _row(db, "SELECT id_edan FROM rea.reporte_evento WHERE id_reporte = :id", {"id": id_reporte})
     if not row or row["id_edan"] is None:
         return None
     return get_edan_completo(db, row["id_edan"])
@@ -1132,9 +1130,6 @@ def create_edan(db: Session, data: dict) -> int:
 def update_edan(db: Session, id: int, data: dict) -> dict | None:
     if not get_edan(db, id):
         return None
-    prev_rea = (_row(db, "SELECT id_reporte_rea FROM edan.edan WHERE id_edan = :id",
-                     {"id": id}) or {}).get("id_reporte_rea")
-    resp = data.get("responsable") or {}
     fields = {
         "id_local": data.get("id_local"),
         "codigo_edan": data.get("codigo_edan"),
@@ -1153,10 +1148,6 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
         "id_estado": data.get("id_estado"),
         "pendiente_eliminacion": data.get("pendiente_eliminacion"),
         "pendiente_actualizacion": data.get("pendiente_actualizacion"),
-        "responsable_nombre": resp.get("nombre"),
-        "responsable_cargo": resp.get("cargo"),
-        "responsable_fono": resp.get("fono"),
-        "responsable_correo": resp.get("correo"),
     }
     if data.get("id_municipio") is not None and (data.get("id_departamento") is None or data.get("id_provincia") is None):
         mun = _row(db, "SELECT id, id_provincia, id_departamento, nombre FROM shared.municipio WHERE id = :id",
@@ -1172,8 +1163,6 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
     fields["id_edan"] = id
     set_clause = ", ".join(f"{k} = :{k}" for k in fields)
     db.execute(text(f"UPDATE edan.edan SET {set_clause}, fecha_modificacion = NOW() WHERE id_edan = :id_edan"), fields)
-    if "id_reporte_rea" in data:
-        _sync_reporte_edan(db, data.get("id_reporte_rea"), id, prev_rea)
     db.commit()
     return get_edan_completo(db, id)
 
@@ -1349,6 +1338,9 @@ def localidad_sync_upsert(db: Session, data: dict, uid: int) -> dict:
     convergida y flags de sync por ítem (el lote nunca falla completo)."""
     id_local = data.get("id_local")
     payload_fecha = _parse_fecha(data.get("fecha_modificacion"))
+
+    if data.get("id_usuario") is None:
+        data["id_usuario"] = uid
 
     existing = _localidad_by_id_local(db, id_local) if id_local else None
 

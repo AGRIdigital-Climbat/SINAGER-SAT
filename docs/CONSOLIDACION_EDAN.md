@@ -812,4 +812,4 @@ Suite de pruebas con datos aleatorios ejecutada en `v1.3.0`:
 
 ---
 
-**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, fix 5 bugs `e.estado` en reportes, 16/16 tests PASS.
+**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, fix 5 bugs `e.estado` en reportes, fix sync API (update_edan, uid assignment, get_edan_por_reporte), 16/16 tests consolidación + 5/5 tests sync PASS.

@@ -631,3 +631,30 @@ curl -s "http://localhost:8000/api/v1/edan/localidades/sync/pull?skip=0&limit=10
 | Campo CHECK inválido (ej: `grupo` en `proteccion`) | 200 | Error en ese item | Usar valores válidos del CHECK constraint |
 | Sección con campos requeridos faltantes | 200 | Error en ese item | Verificar campos requeridos de cada sección |
 | `pendiente_eliminacion = true` | 200 | DELETE físico + tombstone | Borrar de SQLite local |
+
+---
+
+## 13. Limitaciones conocidas
+
+### Tombstones de localidades (DELETE físico)
+
+Cuando la app móvil elimina una localidad (`pendiente_eliminacion = true`), el servidor realiza un **DELETE físico** de la fila. Esto significa que:
+
+- Otro dispositivo que haga pull posterior **no recibirá** un "tombstone" indicando que la localidad fue eliminada.
+- La localidad simplemente desaparecerá del pull (no estará en la respuesta).
+
+**Impacto:** En un escenario multi-dispositivo, si el Dispositivo A elimina una localidad y el Dispositivo B hace pull después, B simplemente no verá la localidad (no sabrá que fue eliminada explícitamente).
+
+**Para la app actual (single-user por dispositivo):** esta limitación no afecta. Cada usuario maneja sus propias localidades en su dispositivo.
+
+### Campos legacy aceptados en EdanCreate
+
+El schema `EdanCreate` aún acepta campos que ya no existen en la tabla `edan.edan` (ej: `estado`, `departamento_nombre`, `tipo_evento_nombre`). Estos campos se ignoran silenciosamente al hacer INSERT/UPDATE.
+
+### `_replace_localidades` en sync push de EDAN
+
+Al hacer push de un EDAN con localidades anidadas, el servidor **elimina** todas las localidades existentes del EDAN que no estén en el payload y reinserta las que sí están. Esto es intencional (replace completo), pero puede ser destructivo si se mezcla con ediciones web-side concurrentes.
+
+---
+
+**Última actualización:** rama `v1.3.0` — fix sync: update_edan con columnas eliminadas, uid assignment, get_edan_por_reporte.
