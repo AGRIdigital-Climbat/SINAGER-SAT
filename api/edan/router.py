@@ -490,6 +490,54 @@ def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(
     return SuccessResponse(message="EDAN consolidado correctamente", data=result)
 
 
+@router.post("/consolidar/auto", tags=[TAG_EDAN_LOCALIDADES],
+             responses={200: {"model": SuccessResponse}},
+             summary="Consolidación automática de localidades",
+             description="Consolida automáticamente TODAS las localidades huérfanas aprobadas "
+                         "del mismo municipio y tipo de evento.\n\n"
+                         "No necesita `localidad_ids`: las selecciona automáticamente.\n\n"
+                         "**Roles permitidos:** 6 (UGR municipio).")
+def consolidar_auto_endpoint(
+    id_municipio: int = Query(..., description="Municipio"),
+    id_tipo_evento: int = Query(..., description="Tipo de evento"),
+    estado: str = Query("aprobado", description="Patrón de estado (ILIKE)"),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        result = service.consolidar_auto(db, id_municipio, id_tipo_evento,
+                                         _user["id_usuario"], estado)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+    return SuccessResponse(message="EDAN consolidado automáticamente", data=result)
+
+
+@router.put("/localidades/{id_localidad}/desconsolidar", tags=[TAG_EDAN_LOCALIDADES],
+            responses={200: {"model": SuccessResponse}},
+            summary="Desconsolidar una localidad",
+            description="Desvincula una localidad de su EDAN. La localidad vuelve a ser huérfana.\n\n"
+                        "Si el EDAN queda sin localidades, se elimina automáticamente.\n\n"
+                        "Los totales del EDAN se recalculan.")
+def desconsolidar_endpoint(
+    id_localidad: int,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        result = service.desconsolidar(db, id_localidad)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+    return SuccessResponse(message="Localidad desconsolidada correctamente", data=result)
+
+
 @router.put("/localidades/{id_localidad}/estado", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
                     summary="Cambiar estado de una EDAN localidad",
                     description="Actualiza `id_edan_localidad_estado` de la localidad `id_localidad`.\n\n"
@@ -569,9 +617,16 @@ def listar_edans(
     return SuccessResponse(message="EDANs listados correctamente", data=data, total=total)
 
 
-@router.get("/{id}", tags=[TAG_EDAN], responses={200: {"model": SuccessResponse}})
-def obtener_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    result = service.get_edan_completo(db, id)
+@router.get("/{id}", tags=[TAG_EDAN], responses={200: {"model": SuccessResponse}},
+            summary="Obtener EDAN completo",
+            description="Devuelve el EDAN con todas sus localidades.\n\n"
+                        "**Modos:**\n"
+                        "- `detallado` (default): cada localidad con todas sus secciones anidadas.\n"
+                        "- `compacto`: resumen de localidades + sumatorias agregadas.")
+def obtener_edan(id: int,
+                 modo: str = Query("detallado", description="detallado | compacto"),
+                 db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    result = service.get_edan_completo(db, id, modo=modo)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     return SuccessResponse(message="EDAN obtenido correctamente", data=result)

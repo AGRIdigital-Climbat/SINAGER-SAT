@@ -447,11 +447,61 @@ _NH_FIELDS = [
     "banos")]
 
 
-def get_edan_completo(db: Session, id: int):
+def _get_resumen_localidades(db: Session, id_edan: int) -> list:
+    """Devuelve resumen compacto de cada localidad del EDAN."""
+    rows = _rows(db, """
+        SELECT l.id_edan_localidad, l.localidad,
+               l.total_poblacion_afectada, l.total_familias_afectadas,
+               l.total_familias_damnificadas,
+               t.nombre AS tipo_localidad, es.nombre AS estado_localidad
+        FROM edan.edan_localidades l
+        LEFT JOIN edan.tipo_localidad t ON t.id_tipo_localidad = l.id_tipo_localidad
+        LEFT JOIN edan.edan_localidades_estado es ON es.id_edan_localidad_estado = l.id_edan_localidad_estado
+        WHERE l.id_edan = :id_edan ORDER BY l.id_edan_localidad
+    """, {"id_edan": id_edan})
+    return [dict(r) for r in rows]
+
+
+def _get_sumatorias(db: Session, id_edan: int) -> dict:
+    """Calcula sumatorias de todas las secciones 1:N de las localidades del EDAN."""
+    locs = _rows(db, "SELECT id_edan_localidad FROM edan.edan_localidades WHERE id_edan = :id",
+                 {"id": id_edan})
+    if not locs:
+        return {}
+    ids = [r["id_edan_localidad"] for r in locs]
+    ph = ", ".join(f":_{i}" for i in range(len(ids)))
+    params = {f"_{i}": v for i, v in enumerate(ids)}
+
+    def _sum(table, cols):
+        selects = ", ".join(f"COALESCE(SUM({c}), 0) AS {c}" for c in cols)
+        row = _row(db, f"SELECT {selects} FROM edan.{table} WHERE id_edan_localidad IN ({ph})", params)
+        return dict(row) if row else {c: 0 for c in cols}
+
+    return {
+        "danos_agricultura": _sum("edan_localidades_danos_agricultura",
+                                  ["hectareas_afectadas", "hectareas_perdidas"]),
+        "danos_pecuarios": _sum("edan_localidades_danos_pecuario",
+                                ["animales_afectados", "animales_muertos"]),
+        "impacto_poblacion": _sum("edan_localidades_impacto_poblacion",
+                                  ["fallecidos", "heridos", "desaparecidos"]),
+        "proteccion": _sum("edan_localidades_proteccion", ["mujeres", "hombres", "total"]),
+        "establecimientos_salud": _sum("edan_localidades_salud_establecimientos",
+                                       ["medicos_afectados", "enfermeras_afectadas", "otros_afectados"]),
+        "necesidad_salud": _sum("edan_localidades_salud_necesidades", ["numero_personas"]),
+    }
+
+
+def get_edan_completo(db: Session, id: int, modo: str = "detallado"):
+    """Devuelve EDAN completo. modos: 'detallado' (con localidades completas) o
+    'compacto' (resumen de localidades + sumatorias)."""
     edan = get_edan(db, id)
     if not edan:
         return None
-    edan["localidades"] = _get_localidades(db, id)
+    if modo == "compacto":
+        edan["resumen_localidades"] = _get_resumen_localidades(db, id)
+        edan["sumatorias"] = _get_sumatorias(db, id)
+    else:
+        edan["localidades"] = _get_localidades(db, id)
     edan["reportes_rea"] = [dict(r) for r in _rows(db, """
         SELECT id_reporte, comunidad, fecha_evento, hora_evento,
                id_municipio, id_tipo_evento, descripcion
@@ -1101,7 +1151,6 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
         "total_familias_afectadas": data.get("total_familias_afectadas"),
         "total_familias_damnificadas": data.get("total_familias_damnificadas"),
         "id_estado": data.get("id_estado"),
-        "estado": data.get("estado"),
         "pendiente_eliminacion": data.get("pendiente_eliminacion"),
         "pendiente_actualizacion": data.get("pendiente_actualizacion"),
         "responsable_nombre": resp.get("nombre"),
@@ -1623,7 +1672,7 @@ def consolidar(db: Session, id_municipio: int, id_tipo_evento: int,
           AND id_municipio = :mun AND id_tipo_evento = :ev
           AND id_edan_localidad_estado IN (
               SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
-              WHERE nombre = 'aprobado'
+              WHERE LOWER(nombre) LIKE 'aprobado%'
           )
     """, params)
     if len(ok) != len(ids):
@@ -1649,11 +1698,11 @@ def consolidar(db: Session, id_municipio: int, id_tipo_evento: int,
         INSERT INTO edan.edan (codigo_edan, id_departamento, id_provincia, id_municipio,
             id_tipo_evento, fecha_llenado, fecha_evento, hora_evento,
             total_poblacion_afectada, total_familias_afectadas,
-            total_familias_damnificadas, id_usuario_ugr, id_estado, estado)
+            total_familias_damnificadas, id_usuario_ugr, id_estado)
         VALUES (:codigo_edan, :id_departamento, :id_provincia, :id_municipio,
             :id_tipo_evento, :fecha_llenado, :fecha_evento, :hora_evento,
             :total_poblacion_afectada, :total_familias_afectadas,
-            :total_familias_damnificadas, :id_usuario_ugr, :id_estado, :estado)
+            :total_familias_damnificadas, :id_usuario_ugr, :id_estado)
         RETURNING id_edan
     """), {
         "codigo_edan": _next_codigo_edan(db, id_municipio),
@@ -1669,7 +1718,6 @@ def consolidar(db: Session, id_municipio: int, id_tipo_evento: int,
         "total_familias_damnificadas": agg["total_familias_damnificadas"],
         "id_usuario_ugr": id_usuario,
         "id_estado": 1,
-        "estado": "borrador",
     }).scalar()
     db.execute(text(f"""
         UPDATE edan.edan_localidades SET id_edan = :id_edan,
@@ -1678,6 +1726,71 @@ def consolidar(db: Session, id_municipio: int, id_tipo_evento: int,
     """), {**params, "id_edan": id_edan})
     db.commit()
     return get_edan_completo(db, id_edan)
+
+
+def desconsolidar(db: Session, id_localidad: int) -> dict | None:
+    """Desvincula una localidad de su EDAN (la convierte en huérfana de nuevo).
+    Si el EDAN queda vacío, lo elimina."""
+    loc = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+               {"id": id_localidad})
+    if not loc:
+        raise HTTPException(status_code=404, detail="Localidad no encontrada")
+    if not loc["id_edan"]:
+        raise HTTPException(status_code=400, detail="La localidad no está consolidada en ningún EDAN")
+    id_edan = loc["id_edan"]
+    db.execute(text("""
+        UPDATE edan.edan_localidades SET id_edan = NULL,
+            fecha_modificacion = NOW(), pendiente_actualizacion = TRUE
+        WHERE id_edan_localidad = :id
+    """), {"id": id_localidad})
+    restantes = db.execute(text(
+        "SELECT COUNT(*) FROM edan.edan_localidades WHERE id_edan = :id"
+    ), {"id": id_edan}).scalar()
+    if restantes == 0:
+        db.execute(text("DELETE FROM edan.edan WHERE id_edan = :id"), {"id": id_edan})
+        db.commit()
+        return {"desconsolidada": id_localidad, "edan_eliminado": id_edan}
+    _recalcular_totales_edan(db, id_edan)
+    db.commit()
+    return {"desconsolidada": id_localidad, "edan_restante": id_edan, "localidades_restantes": restantes}
+
+
+def _recalcular_totales_edan(db: Session, id_edan: int):
+    """Recalcula totales del EDAN sumando las localidades que le quedan."""
+    agg = _row(db, """
+        SELECT COALESCE(SUM(total_poblacion_afectada), 0) AS total_poblacion,
+               COALESCE(SUM(total_familias_afectadas), 0) AS total_familias,
+               COALESCE(SUM(total_familias_damnificadas), 0) AS total_damnificadas
+        FROM edan.edan_localidades WHERE id_edan = :id
+    """, {"id": id_edan})
+    db.execute(text("""
+        UPDATE edan.edan SET total_poblacion_afectada = :pob,
+            total_familias_afectadas = :fam, total_familias_damnificadas = :dam,
+            fecha_modificacion = NOW()
+        WHERE id_edan = :id
+    """), {"id": id_edan, "pob": agg["total_poblacion"],
+           "fam": agg["total_familias"], "dam": agg["total_damnificadas"]})
+
+
+def consolidar_auto(db: Session, id_municipio: int, id_tipo_evento: int,
+                    id_usuario: int, estado_nombre: str = "aprobado") -> dict:
+    """Consolida automáticamente TODAS las localidades huérfanas del mismo
+    municipio y tipo de evento que estén en estado aprobado."""
+    rows = _rows(db, """
+        SELECT id_edan_localidad FROM edan.edan_localidades
+        WHERE id_edan IS NULL AND id_municipio = :mun AND id_tipo_evento = :ev
+          AND id_edan_localidad_estado IN (
+              SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
+              WHERE LOWER(nombre) LIKE :patron
+          )
+        ORDER BY id_edan_localidad
+    """, {"mun": id_municipio, "ev": id_tipo_evento, "patron": f"{estado_nombre}%"})
+    if not rows:
+        raise HTTPException(status_code=404,
+                            detail="No hay localidades consolidables para este municipio/tipo de evento")
+    ids = [r["id_edan_localidad"] for r in rows]
+    return consolidar(db, id_municipio, id_tipo_evento, ids, id_usuario)
+
 
 ALLOWED_ORDER = {
     "id_edan", "codigo_edan", "fecha_evento", "fecha_creacion",
@@ -1713,7 +1826,9 @@ def _filters(f: dict, alias: str = "e") -> tuple[list[str], dict]:
         conds.append(f"{a}.id_estado = :id_estado")
         params["id_estado"] = f["id_estado"]
     if f.get("estado"):
-        conds.append(f"LOWER({a}.estado) = LOWER(:estado)")
+        conds.append(f"""{a}.id_estado IN (
+            SELECT id_estado FROM edan.estado_edan WHERE LOWER(nombre) = LOWER(:estado)
+        )""")
         params["estado"] = f["estado"]
     if f.get("id_usuario_ugr") is not None:
         conds.append(f"{a}.id_usuario_ugr = :id_usuario_ugr")
@@ -1780,8 +1895,9 @@ def _order_clause(f: dict) -> str:
     order_by = f.get("order_by") or "id_edan"
     if order_by not in ALLOWED_ORDER:
         order_by = "id_edan"
+    col = "es.nombre" if order_by == "estado" else f"e.{order_by}"
     direction = "ASC" if str(f.get("order", "desc")).lower() == "asc" else "DESC"
-    return f"ORDER BY e.{order_by} {direction}"
+    return f"ORDER BY {col} {direction}"
 
 
 def get_edans(db: Session, f: dict | None = None, skip: int = 0, limit: int = 50):
@@ -1920,16 +2036,18 @@ def reporte_resumen(db: Session, f: dict | None = None):
     """), params).scalar()
 
     por_estado = [dict(r) for r in _rows(db, f"""
-        SELECT e.estado, e.id_estado, COUNT(*) AS cantidad
-        FROM edan.edan e{where} GROUP BY e.id_estado, e.estado ORDER BY cantidad DESC
+        SELECT es.nombre AS estado, e.id_estado, COUNT(*) AS cantidad
+        FROM edan.edan e
+        LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado{where}
+        GROUP BY e.id_estado, es.nombre ORDER BY cantidad DESC
     """, params)]
 
     por_tipo_evento = [dict(r) for r in _rows(db, f"""
         SELECT e.id_tipo_evento,
                COALESCE(te.nombre, 'Sin tipo') AS tipo_evento,
                COUNT(*) AS cantidad
-        FROM edan.edan e{where}
-        LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = e.id_tipo_evento
+        FROM edan.edan e
+        LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = e.id_tipo_evento{where}
         GROUP BY e.id_tipo_evento, te.nombre ORDER BY cantidad DESC
     """, params)]
 
@@ -2023,7 +2141,7 @@ def reporte_localidades(db: Session, f: dict | None = None, skip: int = 0, limit
         JOIN edan.edan e ON e.id_edan = l.id_edan{where}
     """), params).scalar()
     rows = _rows(db, f"""
-        SELECT e.id_edan, e.codigo_edan, e.estado,
+        SELECT e.id_edan, e.codigo_edan, ee.nombre AS estado,
                d.nombre AS departamento, p.nombre AS provincia, m.nombre AS municipio,
                l.id_edan_localidad, t.nombre AS tipo_localidad,
                es.nombre AS estado_localidad, l.localidad AS localidad,
@@ -2031,6 +2149,7 @@ def reporte_localidades(db: Session, f: dict | None = None, skip: int = 0, limit
                l.imp_educacion, l.imp_vivienda, l.imp_agropecuario, l.imp_proteccion, l.imp_necesidades
         FROM edan.edan_localidades l
         JOIN edan.edan e ON e.id_edan = l.id_edan
+        LEFT JOIN edan.estado_edan ee ON ee.id_estado = e.id_estado
         LEFT JOIN edan.tipo_localidad t ON t.id_tipo_localidad = l.id_tipo_localidad
         LEFT JOIN edan.edan_localidades_estado es
                ON es.id_edan_localidad_estado = l.id_edan_localidad_estado

@@ -496,12 +496,12 @@ curl -X POST $BASE/api/v1/edan/consolidar \
 **Server ejecuta (transacción atómica):**
 
 ```sql
--- 1) INSERT cabecera
+-- 1) INSERT cabecera (SOLO id_estado, NO columna 'estado')
 INSERT INTO edan.edan (
   codigo_edan, id_departamento, id_provincia, id_municipio,
   id_tipo_evento, fecha_llenado, fecha_evento, hora_evento,
   total_poblacion_afectada, total_familias_afectadas,
-  total_familias_damnificadas, id_usuario_ugr, id_estado, estado
+  total_familias_damnificadas, id_usuario_ugr, id_estado
 ) VALUES (
   '020101/2026/001',     ← generado por _next_codigo_edan
   2, 2, 20101,           ← geografía común (de la primera localidad)
@@ -511,7 +511,7 @@ INSERT INTO edan.edan (
   '14:30:00',            ← MIN(hora_evento)
   320, 80, 12,           ← SUM de totales de las 4 localidades
   6,                     ← id_usuario_ugr (del JWT)
-  1, 'borrador'          ← estado inicial
+  1                      ← id_estado = 1 (borrador)
 ) RETURNING id_edan;     → id_edan = 50
 
 -- 2) UPDATE localidades → todas con id_edan = 50
@@ -532,11 +532,113 @@ UPDATE edan.edan_localidades
 curl $BASE/api/v1/edan/localidades/mis-reportes | jq '.data[0] | {id_edan_localidad, id_edan, es_huerfana}'
 # { "id_edan_localidad": 14, "id_edan": 50, "es_huerfana": false }
 
-# Cabecera del EDAN:
+# Cabecera del EDAN (modo detallado — default):
 curl $BASE/api/v1/edan/50 | jq '.data | {id_edan, codigo_edan, total_poblacion_afectada, localidades: .localidades | length}'
 # { "id_edan": 50, "codigo_edan": "020101/2026/001",
 #   "total_poblacion_afectada": 320, "localidades": 4 }
+
+# Cabecera del EDAN (modo compacto — solo sumatorias, sin secciones):
+curl "$BASE/api/v1/edan/50?modo=compacto" | jq '.data | {id_edan, sumatorias}'
+# { "id_edan": 50, "sumatorias": {
+#     "total_poblacion_afectada": 320,
+#     "total_familias_afectadas": 80,
+#     "total_familias_damnificadas": 12,
+#     "danos_agricultura": {"hectareas_afectadas": 42, "hectareas_perdidas": 18},
+#     "danos_pecuarios": {"total_animales_afectados": 80, "total_animales_muertos": 13},
+#     "proteccion": {"mujeres": 25, "hombres": 15, "total": 40},
+#     "establecimientos_salud": {"total_medicos": 5, "total_enfermeras": 8},
+#     "necesidad_salud": {"total_personas": 150}
+# }}
 ```
+
+### Paso 7b: Desconsolidar (si es necesario)
+
+Si el UGR necesita quitar una localidad del EDAN:
+
+```bash
+curl -X PUT $BASE/api/v1/edan/localidades/14/desconsolidar \
+  -H "Authorization: Bearer $TOKEN_UGR"
+```
+
+**Qué hace el server:**
+1. Desvincula la localidad (`id_edan = NULL`)
+2. Recalcula los totales del EDAN (resta los valores de la localidad removida)
+3. Si el EDAN queda sin localidades → lo elimina (retorna 404)
+4. Si quedan localidades → retorna el EDAN con totales actualizados
+
+### Paso 7c: Consolidar automático
+
+El UGR puede consolidar TODAS las localidades pendientes de un grupo de una sola vez:
+
+```bash
+curl -X POST $BASE/api/v1/edan/consolidar/auto \
+  -H "Authorization: Bearer $TOKEN_UGR" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id_municipio": 20101,
+    "id_tipo_evento": 3
+  }'
+```
+
+**Qué hace el server:**
+1. Busca todas las localidades aprobadas huérfanas del municipio+tipo_evento
+2. Si hay 0 → error 400
+3. Si hay 1 o más → consolida todas en un solo EDAN
+
+---
+
+## 5. Modo compacto vs detallado
+
+El endpoint `GET /api/v1/edan/{id}` acepta el query parameter `modo`:
+
+| Modo | Descripción | Uso recomendado |
+|------|-------------|-----------------|
+| `detallado` (default) | Devuelve TODAS las localidades con TODAS sus secciones anidadas | Vista completa del EDAN |
+| `compacto` | Solo cabecera del EDAN + `sumatorias` calculadas desde las secciones | Dashboard, reportes, listados |
+
+### Ejemplo de respuesta compacta
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id_edan": 50,
+    "codigo_edan": "020101/2026/001",
+    "total_poblacion_afectada": 320,
+    "total_familias_afectadas": 80,
+    "total_familias_damnificadas": 12,
+    "estado": "borrador",
+    "municipio": {"id": 20101, "nombre": "La Paz"},
+    "tipo_evento": {"id_tipo_evento": 3, "nombre": "Granizada"},
+    "sumatorias": {
+      "localidades_count": 4,
+      "danos_agricultura": {
+        "hectareas_afectadas": 42.0,
+        "hectareas_perdidas": 18.0
+      },
+      "danos_pecuarios": {
+        "total_animales_afectados": 80,
+        "total_animales_muertos": 13
+      },
+      "proteccion": {
+        "mujeres": 25,
+        "hombres": 15,
+        "total": 40
+      },
+      "establecimientos_salud": {
+        "total_medicos": 5,
+        "total_enfermeras": 8,
+        "total_otro": 3
+      },
+      "necesidad_salud": {
+        "total_personas": 150
+      }
+    }
+  }
+}
+```
+
+Las sumatorias se calculan haciendo **SUM** de los valores de todas las localidades vinculadas al EDAN.
 
 ---
 
@@ -571,8 +673,12 @@ ROLES_LECTURA = (6, 7, 8)      # Lectura
 | POST | `/edan/localidades/sync` | 6,7 | Push offline → online |
 | GET | `/edan/localidades/sync/pull` | 6,7 | Pull online → offline |
 | GET | `/edan/consolidar/pendientes` | 6 | Lista pendientes de consolidar |
-| POST | `/edan/consolidar` | 6 | **Consolidar N → 1 EDAN** |
+| POST | `/edan/consolidar` | 6 | **Consolidar N localidades → 1 EDAN** |
+| POST | `/edan/consolidar/auto` | 6 | **Consolidar automático (todas las pendientes de un grupo)** |
+| PUT | `/edan/localidades/{id}/desconsolidar` | 6 | **Quitar localidad del EDAN (recalcula totales)** |
 | PUT | `/edan/localidades/{id}/estado` | 6,7 | Cambiar estado de localidad |
+| GET | `/edan/{id}?modo=compacto` | 6,7,8 | **EDAN solo con sumatorias (sin secciones)** |
+| GET | `/edan/{id}` | 6,7,8 | EDAN completo con todas las localidades y secciones |
 | GET | `/edan/localidades/{id}/<seccion>` | 6,7 | Leer una sección (1:N) |
 | POST | `/edan/localidades/{id}/<seccion>` | 6,7 | Agregar item a sección |
 | PUT | `/edan/localidades/{id}/<seccion>/{item_id}` | 6,7 | Editar item de sección |
@@ -662,4 +768,4 @@ EDAN (edan.edan):
 
 ---
 
-**Última actualización:** rama `v1.3.0` — commits `aae667a` → `d1b05e1`.
+**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, fix 5 bugs `e.estado` en reportes.
