@@ -1670,10 +1670,7 @@ def consolidar(db: Session, id_municipio: int, id_tipo_evento: int,
         WHERE id_edan_localidad IN ({ph})
           AND id_edan IS NULL
           AND id_municipio = :mun AND id_tipo_evento = :ev
-          AND id_edan_localidad_estado IN (
-              SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
-              WHERE LOWER(nombre) LIKE 'aprobado%'
-          )
+          AND id_edan_localidad_estado = 3
     """, params)
     if len(ok) != len(ids):
         raise HTTPException(
@@ -1773,18 +1770,15 @@ def _recalcular_totales_edan(db: Session, id_edan: int):
 
 
 def consolidar_auto(db: Session, id_municipio: int, id_tipo_evento: int,
-                    id_usuario: int, estado_nombre: str = "aprobado") -> dict:
+                    id_usuario: int) -> dict:
     """Consolida automáticamente TODAS las localidades huérfanas del mismo
-    municipio y tipo de evento que estén en estado aprobado."""
+    municipio y tipo de evento que estén en estado aprobado (id=3)."""
     rows = _rows(db, """
         SELECT id_edan_localidad FROM edan.edan_localidades
         WHERE id_edan IS NULL AND id_municipio = :mun AND id_tipo_evento = :ev
-          AND id_edan_localidad_estado IN (
-              SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
-              WHERE LOWER(nombre) LIKE :patron
-          )
+          AND id_edan_localidad_estado = 3
         ORDER BY id_edan_localidad
-    """, {"mun": id_municipio, "ev": id_tipo_evento, "patron": f"{estado_nombre}%"})
+    """, {"mun": id_municipio, "ev": id_tipo_evento})
     if not rows:
         raise HTTPException(status_code=404,
                             detail="No hay localidades consolidables para este municipio/tipo de evento")

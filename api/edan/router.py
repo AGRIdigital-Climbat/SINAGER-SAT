@@ -500,13 +500,12 @@ def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(
 def consolidar_auto_endpoint(
     id_municipio: int = Query(..., description="Municipio"),
     id_tipo_evento: int = Query(..., description="Tipo de evento"),
-    estado: str = Query("aprobado", description="Patrón de estado (ILIKE)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
     try:
         result = service.consolidar_auto(db, id_municipio, id_tipo_evento,
-                                         _user["id_usuario"], estado)
+                                         _user["id_usuario"])
     except HTTPException:
         db.rollback()
         raise

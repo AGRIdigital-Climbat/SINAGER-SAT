@@ -768,4 +768,48 @@ EDAN (edan.edan):
 
 ---
 
-**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, fix 5 bugs `e.estado` en reportes.
+## 10. Pruebas exhaustivas (16/16 PASS)
+
+Suite de pruebas con datos aleatorios ejecutada en `v1.3.0`:
+
+### Grupo 1 — Consolidación básica
+| Test | Descripción | Resultado |
+|------|-------------|-----------|
+| T1 | Consolidar 2+ localidades → SUM totales | PASS |
+| T2 | `GET /edan/{id}?modo=detallado` → secciones completas | PASS |
+| T3 | `GET /edan/{id}?modo=compacto` → sumatorias correctas | PASS |
+| T4 | Consolidar 1 sola localidad | PASS |
+| T5 | Consolidar localidad en estado borrador → 400 | PASS |
+| T6 | Consolidar localidades de diferentes municipios → 400 | PASS |
+
+### Grupo 2 — Desconsolidar
+| Test | Descripción | Resultado |
+|------|-------------|-----------|
+| T7 | Quitar 1 localidad → totales recalculados | PASS |
+| T8 | Quitar todas menos 1 → EDAN persiste con totals de la última | PASS |
+| T9 | Quitar última localidad → EDAN eliminado (404) | PASS |
+
+### Grupo 3 — Consolidar automático
+| Test | Descripción | Resultado |
+|------|-------------|-----------|
+| T10 | `POST /consolidar/auto` → consolida todas las pendientes del grupo | PASS |
+| T11 | Repetir cuando no hay pendientes → 404 | PASS |
+
+### Grupo 4 — Reportes
+| Test | Descripción | Resultado |
+|------|-------------|-----------|
+| T12 | `GET /reportes/mis-resumen` → counts consistentes | PASS |
+| T13 | `GET /reportes/mis-reportes` → lista incluye EDANs creados | PASS |
+
+### Grupo 5 — Casos borde
+| Test | Descripción | Resultado |
+|------|-------------|-----------|
+| T14 | Consolidar localidades con secciones vacías → sumatorias = 0 | PASS |
+| T15 | Mezclar localidades vacías y con datos → suma solo las con datos | PASS |
+| T16 | `modo=compacto` con secciones vacías → sin errores | PASS |
+
+**Datos de prueba:** 8-10 localidades aleatorias (municipios 70101/70102, tipo_evento 1/2/3, poblaciones 50-500), secciones con datos random (agricultura, pecuario, protección, salud). Limpieza completa al finalizar.
+
+---
+
+**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, fix 5 bugs `e.estado` en reportes, 16/16 tests PASS.
