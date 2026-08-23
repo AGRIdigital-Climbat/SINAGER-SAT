@@ -1756,9 +1756,36 @@ def _recalcular_totales_edan(db: Session, id_edan: int):
         UPDATE edan.edan SET total_poblacion_afectada = :pob,
             total_familias_afectadas = :fam, total_familias_damnificadas = :dam,
             fecha_modificacion = NOW()
-        WHERE id_edan = :id
+         WHERE id_edan = :id
     """), {"id": id_edan, "pob": agg["total_poblacion"],
            "fam": agg["total_familias"], "dam": agg["total_damnificadas"]})
+
+
+def deshacer_consolidacion(db: Session, id_edan: int, id_usuario: int) -> dict:
+    """Deshace una consolidación: libera todas las localidades como huérfanas
+    y elimina el EDAN. Solo permitido en estado Borrador (id=1)."""
+    edan = get_edan(db, id_edan)
+    if not edan:
+        raise HTTPException(status_code=404, detail="EDAN no encontrado")
+    if edan.get("id_estado") != 1:
+        raise HTTPException(status_code=400,
+                            detail="Solo se puede deshacer EDANs en estado borrador")
+    if edan.get("id_usuario_ugr") != id_usuario:
+        raise HTTPException(status_code=403,
+                            detail="Solo el UGR que consolidó puede deshacer este EDAN")
+    docs = _row(db, "SELECT COUNT(*) AS cnt FROM repositorio.documentos WHERE id_edan = :id",
+                {"id": id_edan})
+    if docs and docs["cnt"] > 0:
+        raise HTTPException(status_code=400,
+                            detail="Elimine primero los documentos del repositorio")
+    count = db.execute(text("""
+        UPDATE edan.edan_localidades SET id_edan = NULL,
+            fecha_modificacion = NOW(), pendiente_actualizacion = TRUE
+        WHERE id_edan = :id
+    """), {"id": id_edan}).rowcount
+    db.execute(text("DELETE FROM edan.edan WHERE id_edan = :id"), {"id": id_edan})
+    db.commit()
+    return {"edan_deshecho": id_edan, "localidades_liberadas": count}
 
 
 def consolidar_auto(db: Session, id_municipio: int, id_tipo_evento: int,

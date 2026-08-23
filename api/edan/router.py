@@ -537,6 +537,33 @@ def desconsolidar_endpoint(
     return SuccessResponse(message="Localidad desconsolidada correctamente", data=result)
 
 
+@router.put("/{id}/deshacer", tags=[TAG_EDAN],
+            responses={200: {"model": SuccessResponse}},
+            dependencies=[Depends(_require_rol(*ROLES_EDAN_CREA))],
+            summary="Deshacer consolidación de un EDAN",
+            description="Disuelve un EDAN consolidado: libera TODAS sus localidades como huérfanas\n"
+                        "(estado Aprobado UGR se mantiene) y elimina el EDAN cabecera.\n\n"
+                        "**Restricciones:**\n"
+                        "- Solo rol 6 (UGR Municipio)\n"
+                        "- Solo EDANs en estado **Borrador** (`id_estado = 1`)\n"
+                        "- No debe tener documentos en el repositorio\n\n"
+                        "Las localidades quedan listas para re-consolidarse.")
+def deshacer_edan(
+    id: int,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        result = service.deshacer_consolidacion(db, id, _user["id_usuario"])
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+    return SuccessResponse(message="EDAN deshecho correctamente", data=result)
+
+
 @router.put("/localidades/{id_localidad}/estado", tags=[TAG_EDAN_LOCALIDADES], responses={200: {"model": SuccessResponse}},
                     summary="Cambiar estado de una EDAN localidad",
                     description="Actualiza `id_edan_localidad_estado` de la localidad `id_localidad`.\n\n"

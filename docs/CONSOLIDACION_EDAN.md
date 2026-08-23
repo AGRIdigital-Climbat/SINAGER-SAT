@@ -585,6 +585,42 @@ curl -X POST $BASE/api/v1/edan/consolidar/auto \
 2. Si hay 0 → error 400
 3. Si hay 1 o más → consolida todas en un solo EDAN
 
+### Paso 7d: Deshacer consolidación
+
+Si el UGR consolidó por error o necesita reorganizar, puede deshacer todo el EDAN:
+
+```bash
+curl -X PUT $BASE/api/v1/edan/{id_edan}/deshacer \
+  -H "Authorization: Bearer $TOKEN_UGR"
+```
+
+**Qué hace el server (transacción atómica):**
+1. Verifica que el EDAN existe (404 si no)
+2. Verifica que está en estado **Borrador** (`id_estado = 1`) — si fue enviado al Ministerio, no se puede deshacer (400)
+3. Verifica que el usuario es el UGR que lo consolidó (403 si no)
+4. Verifica que no tenga documentos en el repositorio (400 si tiene)
+5. Libera TODAS las localidades: `SET id_edan = NULL` (vuelven a ser huérfanas)
+6. Elimina el EDAN cabecera
+7. Retorna `{"edan_deshecho": id, "localidades_liberadas": N}`
+
+**Restricciones:**
+- Solo **rol 6** (UGR Municipio)
+- Solo EDANs en estado **Borrador** (`id_estado = 1`)
+- No debe tener documentos en repositorio
+
+**Las localidades conservan su estado** "Aprobado UGR" (`id_estado = 3`), por lo que quedan listas para re-consolidarse inmediatamente.
+
+```json
+{
+  "status": "success",
+  "message": "EDAN deshecho correctamente",
+  "data": {
+    "edan_deshecho": 65,
+    "localidades_liberadas": 2
+  }
+}
+```
+
 ---
 
 ## 5. Modo compacto vs detallado
@@ -675,7 +711,8 @@ ROLES_LECTURA = (6, 7, 8)      # Lectura
 | GET | `/edan/consolidar/pendientes` | 6 | Lista pendientes de consolidar |
 | POST | `/edan/consolidar` | 6 | **Consolidar N localidades → 1 EDAN** |
 | POST | `/edan/consolidar/auto` | 6 | **Consolidar automático (todas las pendientes de un grupo)** |
-| PUT | `/edan/localidades/{id}/desconsolidar` | 6 | **Quitar localidad del EDAN (recalcula totales)** |
+| PUT | `/edan/localidades/{id}/desconsolidar` | 6 | **Quitar 1 localidad del EDAN (recalcula totales)** |
+| PUT | `/edan/{id}/deshacer` | 6 | **Deshacer consolidación completa (solo borrador)** |
 | PUT | `/edan/localidades/{id}/estado` | 6,7 | Cambiar estado de localidad |
 | GET | `/edan/{id}?modo=compacto` | 6,7,8 | **EDAN solo con sumatorias (sin secciones)** |
 | GET | `/edan/{id}` | 6,7,8 | EDAN completo con todas las localidades y secciones |
@@ -810,6 +847,18 @@ Suite de pruebas con datos aleatorios ejecutada en `v1.3.0`:
 
 **Datos de prueba:** 8-10 localidades aleatorias (municipios 70101/70102, tipo_evento 1/2/3, poblaciones 50-500), secciones con datos random (agricultura, pecuario, protección, salud). Limpieza completa al finalizar.
 
+### Grupo 6 — Deshacer consolidación
+| Test | Descripción | Resultado |
+|------|-------------|-----------|
+| T1 | Deshacer EDAN borrador con 2 localidades → EDAN eliminado, localidades huérfanas con estado Aprobado UGR | PASS |
+| T1b | Verificar localidades huérfanas conservan estado "Aprobado UGR" (3) | PASS |
+| T1c | Verificar EDAN eliminado (GET → 404) | PASS |
+| T2 | Deshacer EDAN enviado (estado 2) → 400 "Solo borrador" | PASS |
+| T3 | Deshacer EDAN inexistente → 404 | PASS |
+| T4 | Deshacer con rol incorrecto (Responsable Local) → 403 | PASS |
+
+**Total: 22/22 tests PASS**
+
 ---
 
-**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, fix 5 bugs `e.estado` en reportes, fix sync API (update_edan, uid assignment, get_edan_por_reporte), 16/16 tests consolidación + 5/5 tests sync PASS.
+**Última actualización:** rama `v1.3.0` — consolidación EDAN, modo compacto, desconsolidar, consolidar automático, deshacer consolidación, fix sync API, 22/22 tests PASS.
