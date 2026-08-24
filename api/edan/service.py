@@ -723,24 +723,44 @@ def update_localidad(db: Session, id_localidad: int, data: dict) -> dict | None:
 
 
 def _insert_sections_only(db: Session, lid: int, loc: dict):
+    """Inserta o actualiza secciones usando UPSERT por id_seccion.
+    
+    Para secciones 1:N: UPSERT por id_seccion (generado por cliente).
+    Para secciones 1:1: UPSERT por id_edan_localidad.
+    """
+    # 1. Impacto Poblacion (1:N) - UPSERT por id_seccion
     for ip in loc.get("impacto_poblacion") or []:
+        id_seccion = ip.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_impacto_poblacion
-                (id_edan_localidad, rango, fallecidos, heridos, desaparecidos, observaciones)
-            VALUES (:id, :rango, :fallecidos, :heridos, :desaparecidos, :observaciones)
+                (id_edan_localidad, id_seccion, rango, fallecidos, heridos, desaparecidos, observaciones)
+            VALUES (:id, :id_seccion, :rango, :fallecidos, :heridos, :desaparecidos, :observaciones)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                rango = EXCLUDED.rango,
+                fallecidos = EXCLUDED.fallecidos,
+                heridos = EXCLUDED.heridos,
+                desaparecidos = EXCLUDED.desaparecidos,
+                observaciones = EXCLUDED.observaciones
         """), {
-            "id": lid, "rango": ip.get("rango", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "rango": ip.get("rango", ""),
             "fallecidos": ip.get("fallecidos", 0), "heridos": ip.get("heridos", 0),
             "desaparecidos": ip.get("desaparecidos", 0),
             "observaciones": ip.get("observaciones", ""),
         })
 
+    # 2. Primera Respuesta (1:1) - UPSERT por id_edan_localidad
     pr = loc.get("necesidad_primera_respuesta")
     if pr:
         db.execute(text("""
             INSERT INTO edan.edan_localidades_primera_respuesta
                 (id_edan_localidad, busqueda, salvamento, evacuacion, observaciones)
             VALUES (:id, :busqueda, :salvamento, :evacuacion, :observaciones)
+            ON CONFLICT (id_edan_localidad) DO UPDATE SET
+                busqueda = EXCLUDED.busqueda,
+                salvamento = EXCLUDED.salvamento,
+                evacuacion = EXCLUDED.evacuacion,
+                observaciones = EXCLUDED.observaciones
         """), {
             "id": lid, "busqueda": pr.get("busqueda", False),
             "salvamento": pr.get("salvamento", False),
@@ -748,17 +768,32 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "observaciones": pr.get("observaciones", ""),
         })
 
+    # 3. Establecimientos Salud (1:N) - UPSERT por id_seccion
     for e in loc.get("establecimientos_salud") or []:
+        id_seccion = e.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_salud_establecimientos
-                (id_edan_localidad, nombre_establecimiento, comunidad, nivel_atencion,
+                (id_edan_localidad, id_seccion, nombre_establecimiento, comunidad, nivel_atencion,
                  dano_parcial, dano_total, medicos_afectados, enfermeras_afectadas, otros_afectados,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :nombre_establecimiento, :comunidad, :nivel_atencion,
+            VALUES (:id, :id_seccion, :nombre_establecimiento, :comunidad, :nivel_atencion,
                     :dano_parcial, :dano_total, :medicos_afectados, :enfermeras_afectadas, :otros_afectados,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                nombre_establecimiento = EXCLUDED.nombre_establecimiento,
+                comunidad = EXCLUDED.comunidad,
+                nivel_atencion = EXCLUDED.nivel_atencion,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                medicos_afectados = EXCLUDED.medicos_afectados,
+                enfermeras_afectadas = EXCLUDED.enfermeras_afectadas,
+                otros_afectados = EXCLUDED.otros_afectados,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "nombre_establecimiento": e.get("nombre_establecimiento", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "nombre_establecimiento": e.get("nombre_establecimiento", ""),
             "comunidad": e.get("comunidad", ""), "nivel_atencion": e.get("nivel_atencion", ""),
             "dano_parcial": e.get("dano_parcial", False), "dano_total": e.get("dano_total", False),
             "medicos_afectados": e.get("medicos_afectados", 0),
@@ -769,29 +804,49 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": e.get("coordenada_lon"),
         })
 
+    # 4. Necesidad Salud (1:1) - UPSERT por id_edan_localidad
     ns = loc.get("necesidad_salud")
     if ns:
         db.execute(text("""
             INSERT INTO edan.edan_localidades_salud_necesidades
                 (id_edan_localidad, numero_personas, otras_necesidades, observaciones)
             VALUES (:id, :numero_personas, :otras_necesidades, :observaciones)
+            ON CONFLICT (id_edan_localidad) DO UPDATE SET
+                numero_personas = EXCLUDED.numero_personas,
+                otras_necesidades = EXCLUDED.otras_necesidades,
+                observaciones = EXCLUDED.observaciones
         """), {
             "id": lid, "numero_personas": ns.get("numero_personas", 0),
             "otras_necesidades": ns.get("otras_necesidades", ""),
             "observaciones": ns.get("observaciones", ""),
         })
 
+    # 5. Daños Viales (1:N) - UPSERT por id_seccion
     for d in loc.get("danos_viales") or []:
+        id_seccion = d.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_danos_viales
-                (id_edan_localidad, via, puente, tramo, dano_parcial, dano_total,
+                (id_edan_localidad, id_seccion, via, puente, tramo, dano_parcial, dano_total,
                  km_danio, necesidades_inmediatas, observaciones,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :via, :puente, :tramo, :dano_parcial, :dano_total,
+            VALUES (:id, :id_seccion, :via, :puente, :tramo, :dano_parcial, :dano_total,
                     :km_danio, :necesidades_inmediatas, :observaciones,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                via = EXCLUDED.via,
+                puente = EXCLUDED.puente,
+                tramo = EXCLUDED.tramo,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                km_danio = EXCLUDED.km_danio,
+                necesidades_inmediatas = EXCLUDED.necesidades_inmediatas,
+                observaciones = EXCLUDED.observaciones,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "via": d.get("via", False), "puente": d.get("puente", False),
+            "id": lid, "id_seccion": id_seccion,
+            "via": d.get("via", False), "puente": d.get("puente", False),
             "tramo": d.get("tramo", ""),
             "dano_parcial": d.get("dano_parcial", False), "dano_total": d.get("dano_total", False),
             "km_danio": d.get("km_danio") or 0,
@@ -802,15 +857,27 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": d.get("coordenada_lon"),
         })
 
+    # 6. Daños Infra Publica (1:N) - UPSERT por id_seccion
     for d in loc.get("danos_infra_publica") or []:
+        id_seccion = d.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_danos_infra_publica
-                (id_edan_localidad, comunidad, tipo_estructura, dano_parcial, dano_total, observaciones,
+                (id_edan_localidad, id_seccion, comunidad, tipo_estructura, dano_parcial, dano_total, observaciones,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :comunidad, :tipo_estructura, :dano_parcial, :dano_total, :observaciones,
+            VALUES (:id, :id_seccion, :comunidad, :tipo_estructura, :dano_parcial, :dano_total, :observaciones,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                comunidad = EXCLUDED.comunidad,
+                tipo_estructura = EXCLUDED.tipo_estructura,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                observaciones = EXCLUDED.observaciones,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "comunidad": d.get("comunidad", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "comunidad": d.get("comunidad", ""),
             "tipo_estructura": d.get("tipo_estructura", ""),
             "dano_parcial": d.get("dano_parcial", False), "dano_total": d.get("dano_total", False),
             "observaciones": d.get("observaciones", ""),
@@ -819,17 +886,29 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": d.get("coordenada_lon"),
         })
 
+    # 7. Servicios Basicos (1:N) - UPSERT por id_seccion
     for s in loc.get("servicios_basicos") or []:
+        id_seccion = s.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_servicios_basicos
-                (id_edan_localidad, tipo, dano_parcial, dano_total,
+                (id_edan_localidad, id_seccion, tipo, dano_parcial, dano_total,
                  necesidades_inmediatas, observaciones,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :tipo, :dano_parcial, :dano_total,
+            VALUES (:id, :id_seccion, :tipo, :dano_parcial, :dano_total,
                     :necesidades_inmediatas, :observaciones,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                tipo = EXCLUDED.tipo,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                necesidades_inmediatas = EXCLUDED.necesidades_inmediatas,
+                observaciones = EXCLUDED.observaciones,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "tipo": s.get("tipo", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "tipo": s.get("tipo", ""),
             "dano_parcial": s.get("dano_parcial", False), "dano_total": s.get("dano_total", False),
             "necesidades_inmediatas": s.get("necesidades_inmediatas", ""),
             "observaciones": s.get("observaciones", ""),
@@ -838,19 +917,37 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": s.get("coordenada_lon"),
         })
 
+    # 8. Unidades Educativas (1:N) - UPSERT por id_seccion
     for u in loc.get("unidades_educativas") or []:
+        id_seccion = u.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_unidades_educativas
-                (id_edan_localidad, nombre_establecimiento, comunidad, dano_parcial, dano_total,
+                (id_edan_localidad, id_seccion, nombre_establecimiento, comunidad, dano_parcial, dano_total,
                  suspension_clases, perdida_material, funciona_albergue,
                  estudiantes, profesores, administrativos, observaciones,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :nombre_establecimiento, :comunidad, :dano_parcial, :dano_total,
+            VALUES (:id, :id_seccion, :nombre_establecimiento, :comunidad, :dano_parcial, :dano_total,
                     :suspension_clases, :perdida_material, :funciona_albergue,
                     :estudiantes, :profesores, :administrativos, :observaciones,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                nombre_establecimiento = EXCLUDED.nombre_establecimiento,
+                comunidad = EXCLUDED.comunidad,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                suspension_clases = EXCLUDED.suspension_clases,
+                perdida_material = EXCLUDED.perdida_material,
+                funciona_albergue = EXCLUDED.funciona_albergue,
+                estudiantes = EXCLUDED.estudiantes,
+                profesores = EXCLUDED.profesores,
+                administrativos = EXCLUDED.administrativos,
+                observaciones = EXCLUDED.observaciones,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "nombre_establecimiento": u.get("nombre_establecimiento", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "nombre_establecimiento": u.get("nombre_establecimiento", ""),
             "comunidad": u.get("comunidad", ""),
             "dano_parcial": u.get("dano_parcial", False), "dano_total": u.get("dano_total", False),
             "suspension_clases": u.get("suspension_clases"),
@@ -865,17 +962,29 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": u.get("coordenada_lon"),
         })
 
+    # 9. Daños Vivienda (1:N) - UPSERT por id_seccion
     for v in loc.get("danos_vivienda") or []:
+        id_seccion = v.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_danos_vivienda
-                (id_edan_localidad, comunidad, dano_parcial, dano_total,
+                (id_edan_localidad, id_seccion, comunidad, dano_parcial, dano_total,
                  necesidades_inmediatas, observaciones,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :comunidad, :dano_parcial, :dano_total,
+            VALUES (:id, :id_seccion, :comunidad, :dano_parcial, :dano_total,
                     :necesidades_inmediatas, :observaciones,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                comunidad = EXCLUDED.comunidad,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                necesidades_inmediatas = EXCLUDED.necesidades_inmediatas,
+                observaciones = EXCLUDED.observaciones,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "comunidad": v.get("comunidad", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "comunidad": v.get("comunidad", ""),
             "dano_parcial": v.get("dano_parcial", 0), "dano_total": v.get("dano_total", 0),
             "necesidades_inmediatas": v.get("necesidades_inmediatas", ""),
             "observaciones": v.get("observaciones", ""),
@@ -884,17 +993,30 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": v.get("coordenada_lon"),
         })
 
+    # 10. Daños Agricultura (1:N) - UPSERT por id_seccion
     for a in loc.get("danos_agricultura") or []:
+        id_seccion = a.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_danos_agricultura
-                (id_edan_localidad, tipo_cultivo, id_cultivo,
+                (id_edan_localidad, id_seccion, tipo_cultivo, id_cultivo,
                  hectareas_afectadas, hectareas_perdidas, necesidades_inmediatas, observaciones,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :tipo_cultivo, :id_cultivo,
+            VALUES (:id, :id_seccion, :tipo_cultivo, :id_cultivo,
                     :hectareas_afectadas, :hectareas_perdidas, :necesidades_inmediatas, :observaciones,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                tipo_cultivo = EXCLUDED.tipo_cultivo,
+                id_cultivo = EXCLUDED.id_cultivo,
+                hectareas_afectadas = EXCLUDED.hectareas_afectadas,
+                hectareas_perdidas = EXCLUDED.hectareas_perdidas,
+                necesidades_inmediatas = EXCLUDED.necesidades_inmediatas,
+                observaciones = EXCLUDED.observaciones,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "tipo_cultivo": a.get("tipo_cultivo", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "tipo_cultivo": a.get("tipo_cultivo", ""),
             "id_cultivo": a.get("id_cultivo"),
             "hectareas_afectadas": a.get("hectareas_afectadas", 0),
             "hectareas_perdidas": a.get("hectareas_perdidas", 0),
@@ -905,17 +1027,30 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": a.get("coordenada_lon"),
         })
 
+    # 11. Daños Pecuario (1:N) - UPSERT por id_seccion
     for p in loc.get("danos_pecuarios") or []:
+        id_seccion = p.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_danos_pecuario
-                (id_edan_localidad, especie, id_especie, raza,
+                (id_edan_localidad, id_seccion, especie, id_especie, raza,
                  animales_afectados, animales_muertos, necesidades_inmediatas,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :especie, :id_especie, :raza,
+            VALUES (:id, :id_seccion, :especie, :id_especie, :raza,
                     :animales_afectados, :animales_muertos, :necesidades_inmediatas,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                especie = EXCLUDED.especie,
+                id_especie = EXCLUDED.id_especie,
+                raza = EXCLUDED.raza,
+                animales_afectados = EXCLUDED.animales_afectados,
+                animales_muertos = EXCLUDED.animales_muertos,
+                necesidades_inmediatas = EXCLUDED.necesidades_inmediatas,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "especie": p.get("especie", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "especie": p.get("especie", ""),
             "id_especie": p.get("id_especie"), "raza": p.get("raza", ""),
             "animales_afectados": p.get("animales_afectados", 0),
             "animales_muertos": p.get("animales_muertos", 0),
@@ -925,32 +1060,52 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "coordenada_lon": p.get("coordenada_lon"),
         })
 
+    # 12. Infra Productiva (1:N) - UPSERT por id_seccion
     for i in loc.get("infra_productiva") or []:
+        id_seccion = i.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_infra_productiva
-                (id_edan_localidad, tipo, dano_parcial, dano_total,
+                (id_edan_localidad, id_seccion, tipo, dano_parcial, dano_total,
                  fotografia, coordenada_lat, coordenada_lon)
-            VALUES (:id, :tipo, :dano_parcial, :dano_total,
+            VALUES (:id, :id_seccion, :tipo, :dano_parcial, :dano_total,
                     :fotografia, :coordenada_lat, :coordenada_lon)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                tipo = EXCLUDED.tipo,
+                dano_parcial = EXCLUDED.dano_parcial,
+                dano_total = EXCLUDED.dano_total,
+                fotografia = EXCLUDED.fotografia,
+                coordenada_lat = EXCLUDED.coordenada_lat,
+                coordenada_lon = EXCLUDED.coordenada_lon
         """), {
-            "id": lid, "tipo": i.get("tipo", ""),
+            "id": lid, "id_seccion": id_seccion,
+            "tipo": i.get("tipo", ""),
             "dano_parcial": i.get("dano_parcial", 0), "dano_total": i.get("dano_total", 0),
             "fotografia": i.get("fotografia") or None,
             "coordenada_lat": i.get("coordenada_lat") or None,
             "coordenada_lon": i.get("coordenada_lon") or None,
         })
 
+    # 13. Proteccion (1:N) - UPSERT por id_seccion
     for p in loc.get("proteccion") or []:
         if not isinstance(p, dict):
             continue
+        id_seccion = p.get("id_seccion")
         db.execute(text("""
             INSERT INTO edan.edan_localidades_proteccion
-                (id_edan_localidad, id_grupo_vulnerable_catalogo, mujeres, hombres, total,
+                (id_edan_localidad, id_seccion, id_grupo_vulnerable_catalogo, mujeres, hombres, total,
                  apoyo_psicologico, reposicion_documentos, observaciones)
-            VALUES (:id, :id_grupo_vulnerable_catalogo, :mujeres, :hombres, :total,
+            VALUES (:id, :id_seccion, :id_grupo_vulnerable_catalogo, :mujeres, :hombres, :total,
                     :apoyo_psicologico, :reposicion_documentos, :observaciones)
+            ON CONFLICT (id_seccion) DO UPDATE SET
+                id_grupo_vulnerable_catalogo = EXCLUDED.id_grupo_vulnerable_catalogo,
+                mujeres = EXCLUDED.mujeres,
+                hombres = EXCLUDED.hombres,
+                total = EXCLUDED.total,
+                apoyo_psicologico = EXCLUDED.apoyo_psicologico,
+                reposicion_documentos = EXCLUDED.reposicion_documentos,
+                observaciones = EXCLUDED.observaciones
         """), {
-            "id": lid,
+            "id": lid, "id_seccion": id_seccion,
             "id_grupo_vulnerable_catalogo": p.get("id_grupo_vulnerable_catalogo"),
             "mujeres": p.get("mujeres", 0), "hombres": p.get("hombres", 0),
             "total": p.get("total", 0),
@@ -959,13 +1114,16 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
             "observaciones": p.get("observaciones", ""),
         })
 
+    # 14. Necesidad Humanitaria (1:1) - UPSERT por id_edan_localidad
     nh = loc.get("necesidad_humanitaria")
     if nh:
         cols = ", ".join(_NH_FIELDS)
         ph = ", ".join(f":{k}" for k in _NH_FIELDS)
+        update_set = ", ".join(f"{k} = EXCLUDED.{k}" for k in _NH_FIELDS)
         db.execute(text(f"""
             INSERT INTO edan.edan_localidades_necesidades_humanitarias
                 (id_edan_localidad, {cols}) VALUES (:id, {ph})
+            ON CONFLICT (id_edan_localidad) DO UPDATE SET {update_set}
         """), {"id": lid, **{k: nh.get(k, False if not k.startswith("obs_") else "") for k in _NH_FIELDS}})
 
 

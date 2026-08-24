@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class ImpactoPoblacion(BaseModel):
     """→ edan.edan_localidades_impacto_poblacion (1:N por rango etario)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     rango: str = Field('', description="Ej: 'Niño 0-5', 'Adulto 19-60', 'Adulto mayor 60+'")
     fallecidos: int = Field(0, ge=0)
     heridos: int = Field(0, ge=0)
@@ -27,6 +28,7 @@ class PrimeraRespuesta(BaseModel):
 
 class EstablecimientoSalud(BaseModel):
     """→ edan.edan_localidades_salud_establecimientos (1:N)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     nombre_establecimiento: str = ''
     comunidad: str = ''
     nivel_atencion: str = Field('', description="Ej: '1er Nivel', '2do Nivel', '3er Nivel'")
@@ -49,6 +51,7 @@ class NecesidadSalud(BaseModel):
 
 class DanoVial(BaseModel):
     """→ edan.edan_localidades_danos_viales (1:N)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     via: bool = Field(False, description="Daño en vía/carretera")
     puente: bool = Field(False, description="Daño en puente")
     tramo: str = ''
@@ -64,6 +67,7 @@ class DanoVial(BaseModel):
 
 class DanoInfraPublica(BaseModel):
     """→ edan.edan_localidades_danos_infra_publica (1:N)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     comunidad: str = ''
     tipo_estructura: str = Field('', description="Ej: 'Alcaldía', 'Iglesia', 'Plaza'")
     dano_parcial: bool = False
@@ -79,6 +83,7 @@ class ServicioBasicoDetalle(BaseModel):
     Valores válidos de tipo (CHECK constraint):
     'energia_electrica', 'agua_potable', 'alcantarillado', 'gas_domiciliario', 'telecomunicaciones'
     """
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     tipo: str = Field('', description="energia_electrica|agua_potable|alcantarillado|gas_domiciliario|telecomunicaciones")
     dano_parcial: bool = False
     dano_total: bool = False
@@ -91,6 +96,7 @@ class ServicioBasicoDetalle(BaseModel):
 
 class UnidadEducativa(BaseModel):
     """→ edan.edan_localidades_unidades_educativas (1:N)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     nombre_establecimiento: str = ''
     comunidad: str = ''
     dano_parcial: bool = False
@@ -111,6 +117,7 @@ class DanoVivienda(BaseModel):
     """→ edan.edan_localidades_danos_vivienda (1:N).
     Cantidades de viviendas con daño parcial/total.
     """
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     comunidad: str = ''
     dano_parcial: int = Field(0, ge=0)
     dano_total: int = Field(0, ge=0)
@@ -125,6 +132,7 @@ class DanoAgricultura(BaseModel):
     """→ edan.edan_localidades_danos_agricultura (1:N).
     Si id_cultivo está presente, se vincula al catálogo shared.cultivo.
     """
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     tipo_cultivo: str = ''
     id_cultivo: int | None = Field(None, description="FK a shared.cultivo (opcional)")
     hectareas_afectadas: int = Field(0, ge=0)
@@ -140,6 +148,7 @@ class DanoPecuario(BaseModel):
     """→ edan.edan_localidades_danos_pecuario (1:N).
     Si id_especie está presente, se vincula al catálogo shared.pecuario.
     """
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     especie: str = ''
     id_especie: int | None = Field(None, description="FK a shared.pecuario (opcional)")
     raza: str = ''
@@ -153,6 +162,7 @@ class DanoPecuario(BaseModel):
 
 class InfraProductiva(BaseModel):
     """→ edan.edan_localidades_infra_productiva (1:N)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     tipo: str = Field('', description="Ej: 'Molino', 'Almacén', 'Tienda comunitaria'")
     dano_parcial: int = Field(0, ge=0)
     dano_total: int = Field(0, ge=0)
@@ -165,6 +175,7 @@ class GrupoVulnerable(BaseModel):
     """→ edan.edan_localidades_proteccion (1:N por grupo vulnerable).
     Ahora vinculado a catálogo edan.grupo_vulnerable via FK.
     """
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
     id_grupo_vulnerable: int | None = None  # PK técnica (serial)
     id_grupo_vulnerable_catalogo: int | None = None  # FK a edan.grupo_vulnerable
     grupo: dict | None = None  # { id, codigo, nombre, orden } (catálogo anidado)
