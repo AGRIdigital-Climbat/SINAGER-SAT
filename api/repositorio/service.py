@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 # ============================================================================
 
 def _row(db: Session, query: str, params: dict):
-    return db.execute(text(query), params).mappings().first()
+    r = db.execute(text(query), params).mappings().first()
+    return dict(r) if r else None
 
 
 def _rows(db: Session, query: str, params: dict) -> list:
-    return db.execute(text(query), params).mappings().all()
+    return [dict(r) for r in db.execute(text(query), params).mappings().all()]
 
 
 # ============================================================================
