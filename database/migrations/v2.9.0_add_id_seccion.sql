@@ -65,48 +65,47 @@ ALTER TABLE edan.edan_localidades_proteccion
 -- ============================================================================
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_impacto_poblacion 
-  ON edan.edan_localidades_impacto_poblacion (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  ON edan.edan_localidades_impacto_poblacion (id_seccion);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_salud_establecimientos 
   ON edan.edan_localidades_salud_establecimientos (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_danos_viales 
   ON edan.edan_localidades_danos_viales (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_danos_infra_publica 
   ON edan.edan_localidades_danos_infra_publica (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_servicios_basicos 
   ON edan.edan_localidades_servicios_basicos (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_unidades_educativas 
   ON edan.edan_localidades_unidades_educativas (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_danos_vivienda 
   ON edan.edan_localidades_danos_vivienda (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_danos_agricultura 
   ON edan.edan_localidades_danos_agricultura (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_danos_pecuario 
   ON edan.edan_localidades_danos_pecuario (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_infra_productiva 
   ON edan.edan_localidades_infra_productiva (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seccion_proteccion 
   ON edan.edan_localidades_proteccion (id_seccion) 
-  WHERE id_seccion IS NOT NULL;
+  
 
 -- ============================================================================
 --  3. Comentario de documentación
