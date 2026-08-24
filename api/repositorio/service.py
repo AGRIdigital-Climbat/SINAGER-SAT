@@ -178,10 +178,10 @@ def update_documento(db: Session, id_documento: int, data: dict) -> bool:
     fields = {k: v for k, v in data.items() if v is not None}
     if not fields:
         return True
-    fields["id"] = id_documento
     set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+    fields["id_documento"] = id_documento
     db.execute(text(f"""
-        UPDATE repositorio.documentos SET {set_clause} WHERE id_documento = :id
+        UPDATE repositorio.documentos SET {set_clause} WHERE id_documento = :id_documento
     """), fields)
     db.commit()
     return True

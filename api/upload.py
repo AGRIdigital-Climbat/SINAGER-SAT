@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .config import settings
