@@ -736,6 +736,7 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
                 (id_edan_localidad, id_seccion, rango, fallecidos, heridos, desaparecidos, observaciones)
             VALUES (:id, :id_seccion, :rango, :fallecidos, :heridos, :desaparecidos, :observaciones)
             ON CONFLICT (id_seccion) DO UPDATE SET
+                id_edan_localidad = EXCLUDED.id_edan_localidad,
                 rango = EXCLUDED.rango,
                 fallecidos = EXCLUDED.fallecidos,
                 heridos = EXCLUDED.heridos,
