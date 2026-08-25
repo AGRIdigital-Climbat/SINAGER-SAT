@@ -846,6 +846,7 @@ async def crear_danos_viales_con_foto(
     observaciones: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -860,6 +861,7 @@ async def crear_danos_viales_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Daño vial creado con foto", data=result)
     except HTTPException:
@@ -882,6 +884,7 @@ async def crear_danos_infra_publica_con_foto(
     observaciones: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -894,6 +897,7 @@ async def crear_danos_infra_publica_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Daño infraestructura pública creado con foto", data=result)
     except HTTPException:
@@ -917,6 +921,7 @@ async def crear_danos_vivienda_con_foto(
     observaciones: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -929,6 +934,7 @@ async def crear_danos_vivienda_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Daño vivienda creado con foto", data=result)
     except HTTPException:
@@ -953,6 +959,7 @@ async def crear_danos_agricultura_con_foto(
     observaciones: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -967,6 +974,7 @@ async def crear_danos_agricultura_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Daño agricultura creado con foto", data=result)
     except HTTPException:
@@ -991,6 +999,7 @@ async def crear_danos_pecuarios_con_foto(
     necesidades_inmediatas: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -1004,6 +1013,7 @@ async def crear_danos_pecuarios_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Daño pecuario creado con foto", data=result)
     except HTTPException:
@@ -1030,6 +1040,7 @@ async def crear_salud_establecimiento_con_foto(
     otros_afectados: int = Form(0),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -1045,6 +1056,7 @@ async def crear_salud_establecimiento_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Establecimiento de salud creado con foto", data=result)
     except HTTPException:
@@ -1068,6 +1080,7 @@ async def crear_servicio_basico_con_foto(
     observaciones: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -1081,6 +1094,7 @@ async def crear_servicio_basico_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Servicio básico creado con foto", data=result)
     except HTTPException:
@@ -1109,6 +1123,7 @@ async def crear_unidad_educativa_con_foto(
     observaciones: str = Form(""),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -1126,6 +1141,7 @@ async def crear_unidad_educativa_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Unidad educativa creada con foto", data=result)
     except HTTPException:
@@ -1148,6 +1164,7 @@ async def crear_infra_productiva_con_foto(
     dano_total: int = Form(0),
     coordenada_lat: float | None = Form(None),
     coordenada_lon: float | None = Form(None),
+    id_seccion: str | None = Form(None, description="ID único offline (opcional, generado por cliente)"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -1159,6 +1176,7 @@ async def crear_infra_productiva_con_foto(
             "fotografia": fotografia,
             "coordenada_lat": coordenada_lat,
             "coordenada_lon": coordenada_lon,
+            "id_seccion": id_seccion,
         })
         return SuccessResponse(message="Infraestructura productiva creada con foto", data=result)
     except HTTPException:

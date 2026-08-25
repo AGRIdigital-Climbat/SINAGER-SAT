@@ -1142,6 +1142,10 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
             {"id_cultivo": ("shared.cultivo", "id", ["id", "nombre", "grupo"]),
              "id_especie": ("shared.pecuario", "id", ["id", "nombre", "grupo"])}
     """
+    # Agregar id_seccion si está presente en data
+    if data.get("id_seccion"):
+        columns = ["id_seccion"] + list(columns)
+    
     cols = ", ".join(columns)
     ph = ", ".join(f":{k}" for k in columns)
     params = {"id": data["_id"]} | {k: data.get(k) for k in columns if k != "id_edan_localidad"}
