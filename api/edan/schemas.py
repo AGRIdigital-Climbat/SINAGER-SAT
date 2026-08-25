@@ -20,6 +20,7 @@ class ImpactoPoblacion(BaseModel):
 
 class PrimeraRespuesta(BaseModel):
     """→ edan.edan_localidades_primera_respuesta (1:1 por localidad)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente)")
     busqueda: bool = False
     salvamento: bool = False
     evacuacion: bool = False
@@ -44,6 +45,7 @@ class EstablecimientoSalud(BaseModel):
 
 class NecesidadSalud(BaseModel):
     """→ edan.edan_localidades_salud_necesidades (1:1)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente)")
     numero_personas: int = Field(0, ge=0)
     otras_necesidades: str = ''
     observaciones: str = ''
@@ -191,6 +193,7 @@ class NecesidadHumanitaria(BaseModel):
     """→ edan.edan_localidades_necesidades_humanitarias (1:1).
     Cada bool indica si se requiere esa ayuda. Cada obs_* es texto libre.
     """
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente)")
     alimentos: bool = False
     refugio_vivienda: bool = False
     ropa_cama: bool = False
