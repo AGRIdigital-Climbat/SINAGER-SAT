@@ -717,3 +717,105 @@ CREATE UNIQUE INDEX idx_seccion_servicios_basicos
 |---------|--------|
 | v2.8.0 | Última versión sin `id_seccion` - secciones se duplican al editar offline |
 | v2.9.0 | Agrega `id_seccion` + UPSERT - edición offline sin duplicados, fotos actualizadas correctamente |
+
+
+---
+
+## Actualización: Coordenadas Obligatorias con Foto
+
+### Regla de Negocio
+
+**Si hay foto → coordenadas SON OBLIGATORIAS**
+
+| Caso | ¿Foto? | ¿Coordenadas? | ¿Válido? | Response |
+|------|--------|---------------|----------|----------|
+| A | ✅ Sí | ✅ Sí | ✅ **VÁLIDO** | 201 Creado |
+| B | ❌ No | ✅ Sí | ✅ **VÁLIDO** | 201 Creado |
+| C | ❌ No | ❌ No | ✅ **VÁLIDO** | 201 Creado |
+| D | ✅ Sí | ❌ No | ❌ **NO VÁLIDO** | 422 - "Foto requiere coordenadas GPS" |
+
+### Ejemplos de Validación
+
+```bash
+# ✅ CASO A: Con foto + coordenadas
+curl -X POST ".../servicios-basicos/con-foto" \
+  -F "file=@foto.jpg" \
+  -F "tipo=energia_electrica" \
+  -F "coordenada_lat=-16.5045" \
+  -F "coordenada_lon=-68.1532"
+# Response: 201 Creado
+
+# ✅ CASO B: Sin foto + coordenadas
+curl -X POST ".../servicios-basicos/con-foto" \
+  -F "tipo=agua_potable" \
+  -F "coordenada_lat=-16.51" \
+  -F "coordenada_lon=-68.16"
+# Response: 201 Creado
+
+# ✅ CASO C: Sin foto + sin coordenadas
+curl -X POST ".../servicios-basicos/con-foto" \
+  -F "tipo=alcantarillado"
+# Response: 201 Creado
+
+# ❌ CASO D: Con foto + SIN coordenadas
+curl -X POST ".../servicios-basicos/con-foto" \
+  -F "file=@foto.jpg" \
+  -F "tipo=energia_electrica"
+# Response: 422 - "Foto requiere coordenadas GPS"
+```
+
+---
+
+## Pruebas Realizadas (v2.9.0)
+
+### Tests por Sección
+
+| Sección | Endpoint | Resultado |
+|---------|----------|-----------|
+| `servicios_basicos` | POST /servicios-basicos/con-foto | ✅ PASS |
+| `infra_productiva` | POST /infra-productiva/con-foto | ✅ PASS |
+| `salud_establecimientos` | POST /salud-establecimientos/con-foto | ✅ PASS |
+| `danos_viales` | POST /danos-viales/con-foto | ✅ PASS* |
+| `danos_infra_publica` | POST /danos-infra-publica/con-foto | ✅ PASS |
+| `unidades_educativas` | POST /unidades-educativas/con-foto | ✅ PASS |
+| `danos_vivienda` | POST /danos-vivienda/con-foto | ✅ PASS |
+| `danos_agricultura` | POST /danos-agricultura/con-foto | ✅ PASS |
+| `danos_pecuario` | POST /danos-pecuarios/con-foto | ✅ PASS |
+
+*Nota: `danos_viales` requiere `km_danio=0` explícito (no puede ser null implícito)
+
+### Comportamiento Verificado
+
+```
+✓ INSERT con id_seccion + foto + coordenadas: OK
+✓ INSERT con id_seccion + sin foto + coordenadas: OK
+✓ INSERT sin id_seccion + foto + coordenadas: OK (id_seccion = NULL)
+✓ Validación foto sin coordenadas: 422 - "Foto requiere coordenadas GPS"
+✓ NO duplicados con mismo id_seccion: UPSERT funciona
+```
+
+---
+
+## Notas Importantes por Sección
+
+### Daños Viales
+
+El campo `km_danio` requiere valor explícito (0 si no aplica):
+
+```bash
+curl -X POST ".../danos-viales/con-foto" \
+  -F "file=@foto.jpg" \
+  -F "via=true" \
+  -F "tramo=Test" \
+  -F "km_danio=0" \    # ← Obligatorio (float, no null)
+  -F "coordenada_lat=-16.53" \
+  -F "coordenada_lon=-68.18"
+```
+
+---
+
+## Referencias
+
+- [`docs/EJEMPLOS_POR_SECCION.md`](EJEMPLOS_POR_SECCION.md) - Ejemplos completos para las 11 secciones
+- [`docs/MIGRACION_v2.9.0_id_seccion.md`](MIGRACION_v2.9.0_id_seccion.md) - Migración BD
+- [`docs/TESTS_ID_SECCION.md`](TESTS_ID_SECCION.md) - Tests de UPSERT
