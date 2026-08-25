@@ -658,3 +658,68 @@ Al hacer push de un EDAN con localidades anidadas, el servidor **elimina** todas
 ---
 
 **Última actualización:** rama `v1.3.0` — fix sync: update_edan con columnas eliminadas, uid assignment, get_edan_por_reporte.
+
+
+## Sincronización de Secciones con Fotografías (v2.9.0)
+
+### Resumen
+
+La versión v2.9.0 agrega `id_seccion` a todas las secciones 1:N para permitir edición offline sin duplicados.
+
+### Tablas afectadas (11 tablas)
+
+| Tabla | Tiene `fotografia` | Tiene `id_seccion` |
+|-------|-------------------|-------------------|
+| `edan_localidades_infra_productiva` | ✅ | ✅ |
+| `edan_localidades_salud_establecimientos` | ✅ | ✅ |
+| `edan_localidades_danos_viales` | ✅ | ✅ |
+| `edan_localidades_danos_infra_publica` | ✅ | ✅ |
+| `edan_localidades_servicios_basicos` | ✅ | ✅ |
+| `edan_localidades_unidades_educativas` | ✅ | ✅ |
+| `edan_localidades_danos_vivienda` | ✅ | ✅ |
+| `edan_localidades_danos_agricultura` | ✅ | ✅ |
+| `edan_localidades_danos_pecuario` | ✅ | ✅ |
+| `edan_localidades_proteccion` | ❌ | ✅ |
+| `edan_localidades_impacto_poblacion` | ❌ | ✅ |
+
+### Mecanismo
+
+- **Cliente** genera `id_seccion` único al crear la sección (UNA VEZ)
+- **Cliente** reusa `id_seccion` al editar (MISMO valor)
+- **Backend** hace UPSERT por `id_seccion`:
+  - Si existe → UPDATE (incluye `fotografia`)
+  - Si no existe → INSERT
+
+### Reglas críticas
+
+1. **SIEMPRE enviar `id_seccion`** en el payload de sync
+2. **SIEMPRE enviar `fotografia`** completo (path existente o nuevo)
+3. **`fotografia: null`** elimina la foto existente
+4. **NO omitir `fotografia`** (se pierde la foto existente)
+
+### Ejemplo mínimo
+
+```json
+{
+  "localidades": [{
+    "id_local": "abc-123",
+    "servicios_basicos": [
+      {
+        "id_seccion": "1a0357323cb-659d0c9c3d415",
+        "tipo": "energia_electrica",
+        "dano_parcial": true,
+        "fotografia": "/uploads/energia_001.jpg"
+      }
+    ]
+  }]
+}
+```
+
+### Documentación completa
+
+Ver [`docs/SINCRONIZACION_SECCIONES_FOTOS.md`](SINCRONIZACION_SECCIONES_FOTOS.md) para:
+- Flujos completos (crear, editar, eliminar foto)
+- Ejemplos mixtos (algunos con foto, otros sin foto)
+- Implementación en TypeScript
+- Tests verificados
+- Troubleshooting
