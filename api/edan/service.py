@@ -1313,6 +1313,37 @@ def create_infra_productiva(db: Session, id_localidad: int, data: dict) -> dict:
          "coordenada_lat", "coordenada_lon"], data)
 
 
+def create_proteccion(db: Session, id_localidad: int, data: dict) -> dict:
+    data["_id"] = id_localidad
+    return _insert_single_row(db, "edan_localidades_proteccion",
+        ["id_grupo_vulnerable_catalogo", "mujeres", "hombres", "total",
+         "apoyo_psicologico", "reposicion_documentos", "observaciones"], data,
+        expand={"id_grupo_vulnerable_catalogo": ("edan.grupo_vulnerable", "id_grupo_vulnerable",
+                ["id_grupo_vulnerable", "codigo", "nombre", "orden", "activo"])})
+
+
+def update_proteccion(db: Session, id_grupo_vulnerable: int, data: dict) -> dict | None:
+    fields = {k: v for k, v in data.items() if v is not None and k != "_id"}
+    if not fields:
+        row = _row(db, "SELECT * FROM edan.edan_localidades_proteccion WHERE id_grupo_vulnerable = :id",
+                   {"id": id_grupo_vulnerable})
+        return dict(row) if row else None
+    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+    db.execute(text(f"UPDATE edan.edan_localidades_proteccion SET {set_clause} WHERE id_grupo_vulnerable = :pk"),
+               {**fields, "pk": id_grupo_vulnerable})
+    db.commit()
+    row = _row(db, "SELECT * FROM edan.edan_localidades_proteccion WHERE id_grupo_vulnerable = :id",
+               {"id": id_grupo_vulnerable})
+    return dict(row) if row else None
+
+
+def delete_proteccion(db: Session, id_grupo_vulnerable: int) -> bool:
+    result = db.execute(text("DELETE FROM edan.edan_localidades_proteccion WHERE id_grupo_vulnerable = :id"),
+                        {"id": id_grupo_vulnerable})
+    db.commit()
+    return result.rowcount > 0
+
+
 # ============================================================================
 #  CRUD PRINCIPAL (transaccional)
 # ============================================================================

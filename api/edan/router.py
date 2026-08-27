@@ -1443,6 +1443,84 @@ def listar_infra_productiva(
 
 
 # ============================================================================
+#  PROTECCION: CRUD individual para grupos vulnerables (sin foto)
+# ============================================================================
+
+@router.get("/localidades/{id_localidad}/proteccion", tags=[TAG_EDAN_LOCALIDADES],
+            summary="Listar grupos vulnerables de una localidad")
+def listar_proteccion(
+    id_localidad: int,
+    skip: int = 0, limit: int = 100,
+    db: Session = Depends(get_db), _user=Depends(get_current_user),
+):
+    rows = service._grupos_vulnerables(db, id_localidad)
+    return SuccessResponse(message="Grupos vulnerables listados", data=rows, total=len(rows))
+
+
+@router.post("/localidades/{id_localidad}/proteccion", status_code=201, tags=[TAG_EDAN_LOCALIDADES],
+             summary="Crear o actualizar grupo vulnerable (JSON, sin foto)",
+             description="Crea o actualiza (UPSERT por id_seccion) un grupo vulnerable en `edan.edan_localidades_proteccion`.\n\n"
+                         "JSON body con campos: `id_seccion`, `id_grupo_vulnerable_catalogo`, `mujeres`, `hombres`, `total`, `apoyo_psicologico`, `reposicion_documentos`, `observaciones`.")
+async def crear_proteccion(
+    id_localidad: int,
+    body: ProteccionCreate,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        result = service.create_proteccion(db, id_localidad, body.model_dump())
+        return SuccessResponse(message="Grupo vulnerable creado/actualizado", data=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+
+
+@router.put("/localidades/{id_localidad}/proteccion/{id_grupo_vulnerable}",
+            tags=[TAG_EDAN_LOCALIDADES],
+            summary="Actualizar grupo vulnerable específico")
+async def actualizar_proteccion(
+    id_localidad: int,
+    id_grupo_vulnerable: int,
+    body: ProteccionCreate,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        result = service.update_proteccion(db, id_grupo_vulnerable, body.model_dump())
+        if not result:
+            raise HTTPException(404, "Grupo vulnerable no encontrado")
+        return SuccessResponse(message="Grupo vulnerable actualizado", data=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+
+
+@router.delete("/localidades/{id_localidad}/proteccion/{id_grupo_vulnerable}",
+               tags=[TAG_EDAN_LOCALIDADES],
+               summary="Eliminar grupo vulnerable específico")
+def eliminar_proteccion(
+    id_localidad: int,
+    id_grupo_vulnerable: int,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        ok = service.delete_proteccion(db, id_grupo_vulnerable)
+        if not ok:
+            raise HTTPException(404, "Grupo vulnerable no encontrado")
+        return MessageResponse(message="Grupo vulnerable eliminado")
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise _db_error(e)
+
+
+# ============================================================================
 #  GET: todas las fotos de un municipio (para galería de evidencia)
 #  Agrupa por id_localidad y retorna cada item con su foto, geolocalización
 #  y nombre de comunidad para renderizar en un mapa o galería.

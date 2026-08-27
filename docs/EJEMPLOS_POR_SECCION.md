@@ -465,6 +465,34 @@ curl -X POST ".../danos-viales/con-foto" \
 }
 ```
 
+### 11.3 Endpoints dedicados (CRUD individual)
+
+Para crear, editar o eliminar grupos vulnerables individualmente:
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `GET /edan/localidades/{id}/proteccion` | GET | Lista todos los grupos |
+| `POST /edan/localidades/{id}/proteccion` | POST | Crea/actualiza grupo (JSON, UPSERT por `id_seccion`) |
+| `PUT /edan/localidades/{id}/proteccion/{id_grupo}` | PUT | Actualiza grupo específico |
+| `DELETE /edan/localidades/{id}/proteccion/{id_grupo}` | DELETE | Elimina grupo específico |
+
+**Ejemplo crear con `id_seccion`:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/edan/localidades/199/proteccion" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id_seccion": "po_1693012345_abc12345",
+    "id_grupo_vulnerable_catalogo": 1,
+    "mujeres": 15,
+    "hombres": 12,
+    "total": 27,
+    "apoyo_psicologico": true
+  }'
+```
+
+**Documentación completa:** [ENDPOINTS_PROTECCION.md](ENDPOINTS_PROTECCION.md)
+
 ---
 
 ## Tabla de Referencia Rápida

@@ -506,6 +506,18 @@ class EdanLocalidadEstadoUpdate(BaseModel):
     orden: int | None = None
 
 
+class ProteccionCreate(BaseModel):
+    """Schema de entrada para crear/actualizar un grupo vulnerable en una localidad (sin foto)."""
+    id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: 'po_1693012345_abc12345'")
+    id_grupo_vulnerable_catalogo: int
+    mujeres: int = Field(0, ge=0)
+    hombres: int = Field(0, ge=0)
+    total: int = Field(0, ge=0)
+    apoyo_psicologico: bool | None = None
+    reposicion_documentos: bool | None = None
+    observaciones: str = ''
+
+
 class GrupoVulnerableCreate(BaseModel):
     codigo: str
     nombre: str
