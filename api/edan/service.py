@@ -110,9 +110,9 @@ def _build_header_payload(db: Session, data: dict) -> dict:
         "fecha_llenado": data.get("fecha_llenado") or None,
         "fecha_evento": data.get("fecha_evento") or None,
         "hora_evento": data.get("hora_evento") or None,
-        "total_poblacion_afectada": data.get("total_poblacion_afectada", 0),
-        "total_familias_afectadas": data.get("total_familias_afectadas", 0),
-        "total_familias_damnificadas": data.get("total_familias_damnificadas", 0),
+            "total_poblacion_afectada": data.get("total_poblacion_afectada") or 0,
+            "total_familias_afectadas": data.get("total_familias_afectadas") or 0,
+            "total_familias_damnificadas": data.get("total_familias_damnificadas") or 0,
         "id_estado": data.get("id_estado", 1),
         "pendiente_eliminacion": data.get("pendiente_eliminacion", False),
         "pendiente_actualizacion": data.get("pendiente_actualizacion", False),
@@ -143,8 +143,33 @@ def _all(db: Session, table: str, id_localidad: int, order: str = ""):
 
 
 def _impacto_poblacion(db, id_localidad):
-    return _all(db, "edan_localidades_impacto_poblacion", id_localidad,
-                "ORDER BY id_impacto_poblacion")
+    rows = _rows(db, """
+        SELECT ip.*, ge.codigo AS ge_codigo, ge.nombre AS ge_nombre,
+               ge.orden AS ge_orden, ge.activo AS ge_activo
+        FROM edan.edan_localidades_impacto_poblacion ip
+        JOIN edan.grupo_etario ge ON ge.id_grupo_etario = ip.id_grupo_etario
+        WHERE ip.id_edan_localidad = :id
+        ORDER BY ge.orden, ip.id_impacto_poblacion
+    """, {"id": id_localidad})
+    return [
+        {
+            "id_impacto_poblacion": ip["id_impacto_poblacion"],
+            "id_seccion": ip["id_seccion"],
+            "id_grupo_etario": ip["id_grupo_etario"],
+            "grupo_etario": {
+                "id": ip["id_grupo_etario"],
+                "codigo": ip["ge_codigo"],
+                "nombre": ip["ge_nombre"],
+                "orden": ip["ge_orden"],
+                "activo": ip["ge_activo"],
+            },
+            "rango": ip["ge_nombre"],
+            "fallecidos": ip["fallecidos"],
+            "heridos": ip["heridos"],
+            "desaparecidos": ip["desaparecidos"],
+            "observaciones": ip["observaciones"] or "",
+        } for ip in rows
+    ]
 
 
 def _servicios_basicos(db, id_localidad):
@@ -544,6 +569,21 @@ def _resolve_tipo_localidad(db: Session, loc: dict) -> int | None:
     return None
 
 
+def _resolve_grupo_etario(db: Session, item: dict) -> int | None:
+    """Prioriza id_grupo_etario; si llega el string legacy 'rango' o 'grupo_etario',
+    lo resuelve por nombre/codigo (compatibilidad con la app durante la transición).
+    Returns: idGrupoEtario o None si no resuelve."""
+    if item.get("id_grupo_etario") is not None:
+        return item["id_grupo_etario"]
+    nombre = item.get("rango") or item.get("grupo_etario")
+    if nombre:
+        t = _row(db, "SELECT id_grupo_etario FROM edan.grupo_etario WHERE nombre = :n OR codigo = :n",
+                 {"n": nombre})
+        if t:
+            return t["id_grupo_etario"]
+    return None
+
+
 def _inherit_localidad_header(db: Session, loc: dict, id_edan: int | None):
     """Robustez de sync: si la localidad no trae evento/geografía/fechas,
     los hereda de su EDAN (evita pérdida de datos al reemplazar localidades)."""
@@ -650,6 +690,21 @@ def _bump_edan_fecha(db: Session, id_edan: int):
     """), {"id": id_edan})
 
 
+def _bump_localidad_fecha(db: Session, id_localidad: int):
+    """Marca una localidad como modificada por una escritura de sección, para
+    que el pull y la consolidación detecten el cambio. Si está consolidada,
+    propaga el bump al EDAN."""
+    db.execute(text("""
+        UPDATE edan.edan_localidades SET fecha_modificacion = NOW(),
+            pendiente_actualizacion = TRUE
+        WHERE id_edan_localidad = :id
+    """), {"id": id_localidad})
+    parent = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                  {"id": id_localidad})
+    if parent and parent["id_edan"] is not None:
+        _bump_edan_fecha(db, parent["id_edan"])
+
+
 def delete_localidad(db: Session, id_localidad: int) -> bool:
     parent = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
                   {"id": id_localidad})
@@ -671,48 +726,48 @@ def update_localidad(db: Session, id_localidad: int, data: dict) -> dict | None:
     _inherit_localidad_header(db, data, parent["id_edan"])
     db.execute(text("""
         UPDATE edan.edan_localidades SET
-            id_tipo_localidad = :id_tipo_localidad,
-            id_edan_localidad_estado = :id_edan_localidad_estado,
-            localidad = :localidad,
-            imp_poblacion = :imp_poblacion, imp_salud = :imp_salud,
-            imp_infraestructura = :imp_infraestructura, imp_servicios = :imp_servicios,
-            imp_educacion = :imp_educacion, imp_vivienda = :imp_vivienda,
-            imp_agropecuario = :imp_agropecuario, imp_proteccion = :imp_proteccion,
-            imp_necesidades = :imp_necesidades,
-            id_tipo_evento = :id_tipo_evento,
-            id_departamento = :id_departamento, id_provincia = :id_provincia,
-            id_municipio = :id_municipio,
-            fecha_llenado = :fecha_llenado, fecha_evento = :fecha_evento,
-            hora_evento = :hora_evento,
-            total_poblacion_afectada = :total_poblacion_afectada,
-            total_familias_afectadas = :total_familias_afectadas,
-            total_familias_damnificadas = :total_familias_damnificadas,
-            fecha_modificacion = NOW()
-        WHERE id_edan_localidad = :id
-    """), {
-        "id": id_localidad,
-        "id_tipo_localidad": _resolve_tipo_localidad(db, data),
-        "id_edan_localidad_estado": data.get("id_edan_localidad_estado"),
-        "localidad": data.get("localidad", ""),
-        "imp_poblacion": data.get("imp_poblacion", False),
-        "imp_salud": data.get("imp_salud", False),
-        "imp_infraestructura": data.get("imp_infraestructura", False),
-        "imp_servicios": data.get("imp_servicios", False),
-        "imp_educacion": data.get("imp_educacion", False),
-        "imp_vivienda": data.get("imp_vivienda", False),
-        "imp_agropecuario": data.get("imp_agropecuario", False),
-        "imp_proteccion": data.get("imp_proteccion", False),
-        "imp_necesidades": data.get("imp_necesidades", False),
-        "id_tipo_evento": data.get("id_tipo_evento"),
-        "id_departamento": data.get("id_departamento"),
-        "id_provincia": data.get("id_provincia"),
-        "id_municipio": data.get("id_municipio"),
-        "fecha_llenado": data.get("fecha_llenado") or None,
-        "fecha_evento": data.get("fecha_evento") or None,
-        "hora_evento": data.get("hora_evento") or None,
-        "total_poblacion_afectada": data.get("total_poblacion_afectada", 0),
-        "total_familias_afectadas": data.get("total_familias_afectadas", 0),
-        "total_familias_damnificadas": data.get("total_familias_damnificadas", 0),
+                id_tipo_localidad = :id_tipo_localidad,
+                id_edan_localidad_estado = :id_edan_localidad_estado,
+                localidad = :localidad,
+                imp_poblacion = :imp_poblacion, imp_salud = :imp_salud,
+                imp_infraestructura = :imp_infraestructura, imp_servicios = :imp_servicios,
+                imp_educacion = :imp_educacion, imp_vivienda = :imp_vivienda,
+                imp_agropecuario = :imp_agropecuario, imp_proteccion = :imp_proteccion,
+                imp_necesidades = :imp_necesidades,
+                id_tipo_evento = :id_tipo_evento,
+                id_departamento = :id_departamento, id_provincia = :id_provincia,
+                id_municipio = :id_municipio,
+                fecha_llenado = :fecha_llenado, fecha_evento = :fecha_evento,
+                hora_evento = :hora_evento,
+                total_poblacion_afectada = :total_poblacion_afectada,
+                total_familias_afectadas = :total_familias_afectadas,
+                total_familias_damnificadas = :total_familias_damnificadas,
+                fecha_modificacion = NOW()
+            WHERE id_edan_localidad = :id
+        """), {
+            "id": id_localidad,
+            "id_tipo_localidad": _resolve_tipo_localidad(db, data),
+            "id_edan_localidad_estado": data.get("id_edan_localidad_estado"),
+            "localidad": data.get("localidad", ""),
+            "imp_poblacion": data.get("imp_poblacion", False),
+            "imp_salud": data.get("imp_salud", False),
+            "imp_infraestructura": data.get("imp_infraestructura", False),
+            "imp_servicios": data.get("imp_servicios", False),
+            "imp_educacion": data.get("imp_educacion", False),
+            "imp_vivienda": data.get("imp_vivienda", False),
+            "imp_agropecuario": data.get("imp_agropecuario", False),
+            "imp_proteccion": data.get("imp_proteccion", False),
+            "imp_necesidades": data.get("imp_necesidades", False),
+            "id_tipo_evento": data.get("id_tipo_evento"),
+            "id_departamento": data.get("id_departamento"),
+            "id_provincia": data.get("id_provincia"),
+            "id_municipio": data.get("id_municipio"),
+            "fecha_llenado": data.get("fecha_llenado") or None,
+            "fecha_evento": data.get("fecha_evento") or None,
+            "hora_evento": data.get("hora_evento") or None,
+            "total_poblacion_afectada": data.get("total_poblacion_afectada") or 0,
+            "total_familias_afectadas": data.get("total_familias_afectadas") or 0,
+            "total_familias_damnificadas": data.get("total_familias_damnificadas") or 0,
     })
     _delete_localidad_sections(db, id_localidad)
     _insert_sections_only(db, id_localidad, data)
@@ -731,20 +786,23 @@ def _insert_sections_only(db: Session, lid: int, loc: dict):
     # 1. Impacto Poblacion (1:N) - UPSERT por id_seccion
     for ip in loc.get("impacto_poblacion") or []:
         id_seccion = ip.get("id_seccion")
+        id_grupo_etario = _resolve_grupo_etario(db, ip)
+        if id_grupo_etario is None:
+            continue
         db.execute(text("""
             INSERT INTO edan.edan_localidades_impacto_poblacion
-                (id_edan_localidad, id_seccion, rango, fallecidos, heridos, desaparecidos, observaciones)
-            VALUES (:id, :id_seccion, :rango, :fallecidos, :heridos, :desaparecidos, :observaciones)
+                (id_edan_localidad, id_seccion, id_grupo_etario, fallecidos, heridos, desaparecidos, observaciones)
+            VALUES (:id, :id_seccion, :id_grupo_etario, :fallecidos, :heridos, :desaparecidos, :observaciones)
             ON CONFLICT (id_seccion) DO UPDATE SET
                 id_edan_localidad = EXCLUDED.id_edan_localidad,
-                rango = EXCLUDED.rango,
+                id_grupo_etario = EXCLUDED.id_grupo_etario,
                 fallecidos = EXCLUDED.fallecidos,
                 heridos = EXCLUDED.heridos,
                 desaparecidos = EXCLUDED.desaparecidos,
                 observaciones = EXCLUDED.observaciones
         """), {
             "id": lid, "id_seccion": id_seccion,
-            "rango": ip.get("rango", ""),
+            "id_grupo_etario": id_grupo_etario,
             "fallecidos": ip.get("fallecidos", 0), "heridos": ip.get("heridos", 0),
             "desaparecidos": ip.get("desaparecidos", 0),
             "observaciones": ip.get("observaciones", ""),
@@ -1195,33 +1253,44 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
              "id_especie": ("shared.pecuario", "id", ["id", "nombre", "grupo"])}
     """
     id_seccion = data.get("id_seccion")
+    # Solo se envía lo que viene con valor (no None): en INSERT aplican los
+    # DEFAULT de la BD; en UPDATE se omiten las columnas ausentes/null (sync
+    # no-destructivo a nivel de campo).
+    present = [k for k in columns if data.get(k) is not None]
     
     if id_seccion:
-        # UPSERT por id_seccion
-        all_cols = ["id_seccion"] + list(columns)
-        cols = ", ".join(all_cols)
-        ph = ", ".join(f":{k}" for k in all_cols)
-        update_set = ", ".join(f"{k} = EXCLUDED.{k}" for k in all_cols if k != "id_seccion")
-        
-        params = {"id": data["_id"], "id_seccion": id_seccion}
-        params.update({k: data.get(k) for k in columns})
-        
-        result = db.execute(
-            text(f"""
-                INSERT INTO edan.{table} (id_edan_localidad, {cols})
-                VALUES (:id, {ph})
-                ON CONFLICT (id_seccion) DO UPDATE SET
-                    id_edan_localidad = EXCLUDED.id_edan_localidad,
-                    {update_set}
-                RETURNING *
-            """),
-            params,
-        ).mappings().first()
+        # UPSERT sin ON CONFLICT: primero UPDATE por id_seccion; si la fila no
+        # existe, INSERT (los campos ausentes toman el DEFAULT de la BD).
+        params = {"id_sec": id_seccion, "id_loc": data["_id"]}
+        if present:
+            update_set = ", ".join(f"{k} = :{k}" for k in present)
+            params |= {k: data[k] for k in present}
+            result = db.execute(
+                text(f"""
+                    UPDATE edan.{table} SET {update_set}
+                    WHERE id_seccion = :id_sec AND id_edan_localidad = :id_loc
+                    RETURNING *
+                """),
+                params,
+            ).mappings().first()
+        else:
+            result = None
+        if not result:
+            cols = ", ".join(["id_seccion"] + present)
+            ph = ", ".join([":id_seccion"] + [f":{k}" for k in present])
+            result = db.execute(
+                text(f"""
+                    INSERT INTO edan.{table} (id_edan_localidad, {cols})
+                    VALUES (:id, {ph})
+                    RETURNING *
+                """),
+                {"id": data["_id"], "id_seccion": id_seccion} | {k: data[k] for k in present},
+            ).mappings().first()
     else:
         # INSERT normal (compatibilidad con código existente)
-        cols = ", ".join(columns)
-        ph = ", ".join(f":{k}" for k in columns)
-        params = {"id": data["_id"]} | {k: data.get(k) for k in columns if k != "id_edan_localidad"}
+        cols = ", ".join(present)
+        ph = ", ".join(f":{k}" for k in present)
+        params = {"id": data["_id"]} | {k: data[k] for k in present if k != "id_edan_localidad"}
         result = db.execute(
             text(f"""
                 INSERT INTO edan.{table} (id_edan_localidad, {cols})
@@ -1240,6 +1309,10 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
                 sel = ", ".join(cat_cols)
                 cat_row = _row(db, f"SELECT {sel} FROM {cat_table} WHERE {cat_pk} = :id", {"id": fk_val})
                 row[fk_col.replace("id_", "")] = dict(cat_row) if cat_row else None
+        # Campo de compat 'rango' (nombre del catálogo) para impacto_poblacion
+        ge = row.get("grupo_etario")
+        if isinstance(ge, dict) and ge.get("nombre"):
+            row["rango"] = ge["nombre"]
     return row
 
 
@@ -1342,6 +1415,278 @@ def delete_proteccion(db: Session, id_grupo_vulnerable: int) -> bool:
                         {"id": id_grupo_vulnerable})
     db.commit()
     return result.rowcount > 0
+
+
+# ============================================================================
+#  SYNC INCREMENTAL POR SECCIONES
+#  API de segmentos (cabecera + sección = UPSERT por id_seccion, no-destructivo).
+# ============================================================================
+
+def _seccion_error_detail(exc: Exception) -> str:
+    """Traduce un error de BD a mensaje limpio (sufijo de router._db_error)."""
+    if isinstance(exc, HTTPException):
+        return exc.detail
+    try:
+        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+    except AttributeError:
+        code = None
+    if code == "23503":
+        return "El registro referenciado no existe (violación de clave foránea)"
+    if code == "23505":
+        return "Ya existe un registro con el mismo valor (violación de unicidad)"
+    if code == "23502":
+        return "Falta un campo obligatorio"
+    if code == "23514":
+        return "Valor no permitido (restricción CHECK)"
+    return "Error al procesar la solicitud"
+
+
+def _normalize_list(payload) -> list:
+    """Acepta un objeto único o una lista de objetos (grupo de una sección)."""
+    if payload is None:
+        return []
+    return payload if isinstance(payload, list) else [payload]
+
+
+def _upsert_11(db: Session, table: str, id_localidad: int, data: dict,
+               columns: list[str], value_defaults: dict | None = None) -> dict:
+    """UPSERT de 1 sola fila en una tabla 1:1 (PR/SN/NH) por id_seccion,
+    con fallback por id_edan_localidad cuando no viene id_seccion.
+    No-destructivo: el UPDATE solo toca los campos enviados (no resetea a
+    default los ausentes); el INSERT completo (con defaults) aplica cuando
+    la fila aún no existe."""
+    value_defaults = value_defaults or {}
+    id_seccion = data.get("id_seccion")
+    present = [k for k in columns if data.get(k) is not None]
+    insert_cols = columns
+    vals = {k: (data.get(k) if data.get(k) is not None else value_defaults.get(k, False))
+            for k in insert_cols}
+
+    row = None
+    if id_seccion:
+        if present:
+            update_set = ", ".join(f"{k} = :{k}" for k in present)
+            params = {"id_sec": id_seccion, "id_loc": id_localidad,
+                      **{k: data[k] for k in present}}
+            row = db.execute(text(f"""
+                UPDATE edan.{table} SET {update_set}
+                WHERE id_seccion = :id_sec AND id_edan_localidad = :id_loc
+                RETURNING *
+            """), params).mappings().first()
+        if not row:
+            all_cols = ["id_seccion"] + insert_cols
+            row = db.execute(text(f"""
+                INSERT INTO edan.{table} (id_edan_localidad, {", ".join(all_cols)})
+                VALUES (:id, :id_seccion, {", ".join(f":{k}" for k in insert_cols)})
+                RETURNING *
+            """), {"id": id_localidad, "id_seccion": id_seccion, **vals}).mappings().first()
+    else:
+        if present:
+            update_set = ", ".join(f"{k} = :{k}" for k in present)
+            params = {"id_loc": id_localidad, **{k: data[k] for k in present}}
+            row = db.execute(text(f"""
+                UPDATE edan.{table} SET {update_set}
+                WHERE id_edan_localidad = :id_loc
+                RETURNING *
+            """), params).mappings().first()
+        if not row:
+            row = db.execute(text(f"""
+                INSERT INTO edan.{table} (id_edan_localidad, {", ".join(insert_cols)})
+                VALUES (:id, {", ".join(f":{k}" for k in insert_cols)})
+                RETURNING *
+            """), {"id": id_localidad, **vals}).mappings().first()
+    db.commit()
+    return dict(row) if row else {}
+
+
+def create_impacto_poblacion(db: Session, id_localidad: int, data: dict) -> dict:
+    data["_id"] = id_localidad
+    id_ge = _resolve_grupo_etario(db, data)
+    if id_ge is not None:
+        data["id_grupo_etario"] = id_ge
+    return _insert_single_row(db, "edan_localidades_impacto_poblacion",
+        ["id_grupo_etario", "fallecidos", "heridos", "desaparecidos", "observaciones"], data,
+        expand={"id_grupo_etario": ("edan.grupo_etario", "id_grupo_etario",
+                ["id_grupo_etario", "codigo", "nombre", "orden", "activo"])})
+
+
+def create_primera_respuesta(db: Session, id_localidad: int, data: dict) -> dict:
+    return _upsert_11(db, "edan_localidades_primera_respuesta", id_localidad, data,
+        ["busqueda", "salvamento", "evacuacion", "observaciones"],
+        value_defaults={"observaciones": ""})
+
+
+def create_necesidad_salud(db: Session, id_localidad: int, data: dict) -> dict:
+    return _upsert_11(db, "edan_localidades_salud_necesidades", id_localidad, data,
+        ["numero_personas", "otras_necesidades", "observaciones"],
+        value_defaults={"otras_necesidades": "", "observaciones": ""})
+
+
+def create_necesidad_humanitaria(db: Session, id_localidad: int, data: dict) -> dict:
+    nh_defaults = {k: ("" if k.startswith("obs_") else False) for k in _NH_FIELDS}
+    return _upsert_11(db, "edan_localidades_necesidades_humanitarias", id_localidad, data,
+        _NH_FIELDS, value_defaults=nh_defaults)
+
+
+def upsert_seccion_batch(db: Session, id_localidad: int,
+                         seccion_fn, payload, defaults: dict | None = None) -> dict:
+    """UPSERT de un grupo de items de una misma sección. Aísla errores por fila
+    (nunca falla el lote completo) y devuelve results + errors por índice.
+
+    `defaults` rellena los campos ausentes (None) de cada fila para no violar
+    NOT NULL cuando el cliente omite un campo numérico/bool/texto."""
+    items = _normalize_list(payload)
+    if not items:
+        return {"results": [], "errors": []}
+    results: list = []
+    errors: list = []
+    for i, item in enumerate(items):
+        row = dict(item)
+        for k, v in (defaults or {}).items():
+            if row.get(k) is None:
+                row[k] = v
+        row["_id"] = id_localidad
+        try:
+            results.append(seccion_fn(db, id_localidad, row))
+        except Exception as e:
+            db.rollback()
+            errors.append({"index": i, "detail": _seccion_error_detail(e)})
+    if results:
+        _bump_localidad_fecha(db, id_localidad)
+        db.commit()
+    return {"results": results, "errors": errors}
+
+
+def delete_seccion_item(db: Session, table: str, id_localidad: int,
+                        id_seccion: str) -> bool:
+    result = db.execute(text(f"""
+        DELETE FROM edan.{table} WHERE id_edan_localidad = :id AND id_seccion = :id_seccion
+    """), {"id": id_localidad, "id_seccion": id_seccion})
+    deleted = result.rowcount > 0
+    if deleted:
+        _bump_localidad_fecha(db, id_localidad)
+        db.commit()
+    return deleted
+
+
+def delete_seccion_todo(db: Session, table: str, id_localidad: int) -> int:
+    """Borra TODA la sección de la localidad (vale para 1:1 y clear-all 1:N)."""
+    result = db.execute(text(f"DELETE FROM edan.{table} WHERE id_edan_localidad = :id"),
+                        {"id": id_localidad})
+    n = result.rowcount
+    if n:
+        _bump_localidad_fecha(db, id_localidad)
+        db.commit()
+    return n
+
+
+def _resolve_localidad_id(db: Session, id_localidad: str) -> int:
+    """Resuelve id_localidad (puede ser id_edan_localidad int o id_local UUID).
+    
+    Para modo offline-first: si el cliente envía id_local (UUID), busca
+    la cabecera y devuelve id_edan_localidad. Si no existe, lanza 400
+    para que el cliente reintente después (la cabecera puede estar en camino).
+    
+    Para modo online: si el cliente envía id_edan_localidad (int), lo usa directo.
+    """
+    try:
+        id_int = int(id_localidad)
+        row = _row(db, "SELECT id_edan_localidad FROM edan.edan_localidades WHERE id_edan_localidad = :id", {"id": id_int})
+        if row:
+            return row["id_edan_localidad"]
+    except (ValueError, TypeError):
+        pass
+    
+    row = _row(db, "SELECT id_edan_localidad FROM edan.edan_localidades WHERE id_local = :id_local", {"id_local": id_localidad})
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="Cabecera no encontrada. Envía POST /cabecera primero o reintenta.",
+            headers={"X-Retry-After": "2"}
+        )
+    return row["id_edan_localidad"]
+
+
+def _existe_localidad(db: Session, id_localidad: int) -> bool:
+    return bool(_row(db, "SELECT 1 FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                     {"id": id_localidad}))
+
+
+def upsert_cabecera(db: Session, data: dict) -> dict | None:
+    """Crea o actualiza SOLO la cabecera del edan_localidad (por id_local).
+    Nunca toca secciones."""
+    external_id = data.get("id_local")
+    existing = _localidad_by_id_local(db, external_id) if external_id else None
+    if existing:
+        lid = existing["id_edan_localidad"]
+        parent = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                      {"id": lid})
+        _inherit_localidad_header(db, data, parent["id_edan"] if parent else None)
+        db.execute(text("""
+            UPDATE edan.edan_localidades SET
+                id_tipo_localidad = :id_tipo_localidad,
+                id_edan_localidad_estado = :id_edan_localidad_estado,
+                localidad = :localidad,
+                imp_poblacion = :imp_poblacion, imp_salud = :imp_salud,
+                imp_infraestructura = :imp_infraestructura, imp_servicios = :imp_servicios,
+                imp_educacion = :imp_educacion, imp_vivienda = :imp_vivienda,
+                imp_agropecuario = :imp_agropecuario, imp_proteccion = :imp_proteccion,
+                imp_necesidades = :imp_necesidades,
+                id_tipo_evento = :id_tipo_evento,
+                id_departamento = :id_departamento, id_provincia = :id_provincia,
+                id_municipio = :id_municipio,
+                fecha_llenado = :fecha_llenado, fecha_evento = :fecha_evento,
+                hora_evento = :hora_evento,
+                total_poblacion_afectada = :total_poblacion_afectada,
+                total_familias_afectadas = :total_familias_afectadas,
+                total_familias_damnificadas = :total_familias_damnificadas,
+                fecha_modificacion = NOW()
+            WHERE id_edan_localidad = :id
+        """), {
+            "id": lid,
+            "id_tipo_localidad": _resolve_tipo_localidad(db, data),
+            "id_edan_localidad_estado": data.get("id_edan_localidad_estado"),
+            "localidad": data.get("localidad", ""),
+            "imp_poblacion": data.get("imp_poblacion", False),
+            "imp_salud": data.get("imp_salud", False),
+            "imp_infraestructura": data.get("imp_infraestructura", False),
+            "imp_servicios": data.get("imp_servicios", False),
+            "imp_educacion": data.get("imp_educacion", False),
+            "imp_vivienda": data.get("imp_vivienda", False),
+            "imp_agropecuario": data.get("imp_agropecuario", False),
+            "imp_proteccion": data.get("imp_proteccion", False),
+            "imp_necesidades": data.get("imp_necesidades", False),
+            "id_tipo_evento": data.get("id_tipo_evento"),
+            "id_departamento": data.get("id_departamento"),
+            "id_provincia": data.get("id_provincia"),
+            "id_municipio": data.get("id_municipio"),
+            "fecha_llenado": data.get("fecha_llenado") or None,
+            "fecha_evento": data.get("fecha_evento") or None,
+            "hora_evento": data.get("hora_evento") or None,
+            "total_poblacion_afectada": data.get("total_poblacion_afectada", 0),
+            "total_familias_afectadas": data.get("total_familias_afectadas", 0),
+            "total_familias_damnificadas": data.get("total_familias_damnificadas", 0),
+        })
+        if parent and parent["id_edan"] is not None:
+            _bump_edan_fecha(db, parent["id_edan"])
+        db.commit()
+        return _build_localidad(db, lid)
+    lid = _insert_localidad(db, None, data)
+    if external_id:
+        db.execute(text("""
+            UPDATE edan.edan_localidades SET id_local = :id_local
+            WHERE id_edan_localidad = :id
+        """), {"id_local": external_id, "id": lid})
+    db.commit()
+    return _build_localidad(db, lid)
+
+
+def _map_localidad_by_id_local(db: Session, id_local: str) -> dict | None:
+    row = _localidad_by_id_local(db, id_local)
+    if not row:
+        return None
+    return _build_localidad(db, row["id_edan_localidad"])
 
 
 # ============================================================================
@@ -1702,6 +2047,27 @@ def cambiar_estado_localidad(db: Session, id_localidad: int, id_estado: int) -> 
         _bump_edan_fecha(db, cur["id_edan"])
     db.commit()
     return _build_localidad(db, id_localidad)
+
+
+def cambiar_estado_localidad_por_id_local(db: Session, id_local: str, id_estado: int) -> dict | None:
+    """Cambia el estado de una localidad usando id_local (clave offline del móvil)."""
+    st = _row(db, "SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado"
+                  " WHERE id_edan_localidad_estado = :id", {"id": id_estado})
+    if not st:
+        raise HTTPException(status_code=404, detail="Estado de localidad no encontrado")
+    cur = _row(db, "SELECT id_edan_localidad, id_edan FROM edan.edan_localidades WHERE id_local = :id_local",
+               {"id_local": id_local})
+    if not cur:
+        return None
+    db.execute(text("""
+        UPDATE edan.edan_localidades SET id_edan_localidad_estado = :est,
+            fecha_modificacion = NOW(), pendiente_actualizacion = TRUE
+        WHERE id_local = :id_local
+    """), {"est": id_estado, "id_local": id_local})
+    if cur["id_edan"] is not None:
+        _bump_edan_fecha(db, cur["id_edan"])
+    db.commit()
+    return _build_localidad(db, cur["id_edan_localidad"])
 
 
 def cambiar_estado_edan(db: Session, id_edan: int, id_estado: int) -> dict | None:
@@ -2085,6 +2451,55 @@ IMP_FLAGS = [
 ]
 
 
+def _filters_from_query(
+    q: str | None = None,
+    id_departamento: int | None = None,
+    id_provincia: int | None = None,
+    id_municipio: int | None = None,
+    id_tipo_evento: int | None = None,
+    id_estado: int | None = None,
+    estado: str | None = None,
+    id_usuario_ugr: int | None = None,
+    fecha_evento_desde: str | None = None,
+    fecha_evento_hasta: str | None = None,
+    fecha_creacion_desde: str | None = None,
+    fecha_creacion_hasta: str | None = None,
+    pendiente_eliminacion: bool | None = None,
+    pendiente_actualizacion: bool | None = None,
+    con_foto: bool | None = None,
+    sin_foto: bool | None = None,
+    imp_poblacion: bool | None = None,
+    imp_salud: bool | None = None,
+    imp_infraestructura: bool | None = None,
+    imp_servicios: bool | None = None,
+    imp_educacion: bool | None = None,
+    imp_vivienda: bool | None = None,
+    imp_agropecuario: bool | None = None,
+    imp_proteccion: bool | None = None,
+    imp_necesidades: bool | None = None,
+    tiene_agricultura: bool | None = None,
+    tiene_pecuario: bool | None = None,
+) -> dict:
+    return {
+        "q": q, "id_departamento": id_departamento, "id_provincia": id_provincia,
+        "id_municipio": id_municipio, "id_tipo_evento": id_tipo_evento,
+        "id_estado": id_estado, "estado": estado, "id_usuario_ugr": id_usuario_ugr,
+        "fecha_evento_desde": fecha_evento_desde,
+        "fecha_evento_hasta": fecha_evento_hasta,
+        "fecha_creacion_desde": fecha_creacion_desde,
+        "fecha_creacion_hasta": fecha_creacion_hasta,
+        "pendiente_eliminacion": pendiente_eliminacion,
+        "pendiente_actualizacion": pendiente_actualizacion,
+        "con_foto": con_foto, "sin_foto": sin_foto,
+        "imp_poblacion": imp_poblacion, "imp_salud": imp_salud,
+        "imp_infraestructura": imp_infraestructura, "imp_servicios": imp_servicios,
+        "imp_educacion": imp_educacion, "imp_vivienda": imp_vivienda,
+        "imp_agropecuario": imp_agropecuario, "imp_proteccion": imp_proteccion,
+        "imp_necesidades": imp_necesidades,
+        "tiene_agricultura": tiene_agricultura, "tiene_pecuario": tiene_pecuario,
+    }
+
+
 def _filters(f: dict, alias: str = "e") -> tuple[list[str], dict]:
     conds: list[str] = []
     params: dict = {}
@@ -2228,6 +2643,8 @@ def get_mis_localidades_resumen(db: Session, id_usuario: int):
 
     Permite que un usuario con rol 7 (responsable local) o 6 (UGR) recupere
     sus localidades tras perder el celular: si ya consolidó, también las ve.
+    Incluye `por_estado` (id_edan_localidad_estado + nombre + cantidad) para
+    refrescar badges en la web sin recorrer el listado completo.
     """
     row = _row(db, """
         SELECT COUNT(*) AS total_localidades,
@@ -2236,15 +2653,97 @@ def get_mis_localidades_resumen(db: Session, id_usuario: int):
                COALESCE(SUM(total_poblacion_afectada), 0) AS total_poblacion,
                COALESCE(SUM(total_familias_afectadas), 0) AS total_familias,
                COALESCE(SUM(total_familias_damnificadas), 0) AS total_familias_damnificadas,
-               COUNT(*) FILTER (WHERE id_edan_localidad_estado IS NOT NULL) AS total_con_estado,
-               COUNT(*) FILTER (WHERE id_edan IS NULL AND id_edan_localidad_estado IS NOT NULL)
-                   AS total_huerfanas_con_estado,
-               COUNT(*) FILTER (WHERE id_edan IS NOT NULL AND id_edan_localidad_estado IS NOT NULL)
-                   AS total_consolidadas_con_estado
+               COUNT(*) FILTER (WHERE id_edan_localidad_estado IS NOT NULL) AS total_con_estado
         FROM edan.edan_localidades
         WHERE id_usuario = :uid
     """, {"uid": id_usuario})
-    return dict(row) if row else {}
+    por_estado = [dict(r) for r in _rows(db, """
+        SELECT l.id_edan_localidad_estado, ele.nombre AS estado, COUNT(*) AS cantidad
+        FROM edan.edan_localidades l
+        LEFT JOIN edan.edan_localidades_estado ele
+            ON ele.id_edan_localidad_estado = l.id_edan_localidad_estado
+        WHERE l.id_usuario = :uid
+        GROUP BY l.id_edan_localidad_estado, ele.nombre
+        ORDER BY COUNT(*) DESC
+    """, {"uid": id_usuario})]
+    data = dict(row) if row else {}
+    data["por_estado"] = por_estado
+    return data
+
+
+def list_mis_localidades_estados(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
+    """Listado LIGERO de localidades del usuario para badges de estado.
+
+    Devuelve solo los campos de cabecera + estado (sin secciones), para
+    refrescar rápidamente `id_edan_localidad_estado` en una lista.
+    """
+    total = db.execute(text("""
+        SELECT COUNT(*) FROM edan.edan_localidades WHERE id_usuario = :uid
+    """), {"uid": id_usuario}).scalar()
+    rows = _rows(db, """
+        SELECT l.id_edan_localidad, l.id_local, l.localidad,
+               l.id_edan_localidad_estado,
+               l.id_edan, l.pendiente_actualizacion,
+               l.fecha_modificacion,
+               ele.nombre AS estado_localidad_nombre, ele.orden AS estado_localidad_orden
+        FROM edan.edan_localidades l
+        LEFT JOIN edan.edan_localidades_estado ele
+            ON ele.id_edan_localidad_estado = l.id_edan_localidad_estado
+        WHERE l.id_usuario = :uid
+        ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
+        LIMIT :limit OFFSET :skip
+    """, {"uid": id_usuario, "limit": limit, "skip": skip})
+    data = []
+    for r in rows:
+        item = dict(r)
+        item["es_huerfana"] = item.get("id_edan") is None
+        if item.get("id_edan_localidad_estado"):
+            item["estado_localidad"] = {
+                "id_edan_localidad_estado": item["id_edan_localidad_estado"],
+                "nombre": item.pop("estado_localidad_nombre"),
+                "orden": item.pop("estado_localidad_orden"),
+            }
+        else:
+            item.pop("estado_localidad_nombre", None)
+            item.pop("estado_localidad_orden", None)
+            item["estado_localidad"] = None
+        data.append(item)
+    return data, total
+
+
+def get_mis_resumen_edan(db: Session, id_usuario: int):
+    """Resumen EDAN del usuario (cabecera), incluye `por_estado` de estado_edan."""
+    return reporte_resumen(db, {"id_usuario_ugr": id_usuario})
+
+
+def list_mis_edans_estados(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
+    """Listado LIGERO de EDAN del usuario para badges de estado (estado_edan)."""
+    total = db.execute(text("""
+        SELECT COUNT(*) FROM edan.edan WHERE id_usuario_ugr = :uid
+    """), {"uid": id_usuario}).scalar()
+    rows = _rows(db, f"""
+        SELECT e.id_edan, e.codigo_edan, e.id_estado, e.id_tipo_evento,
+               e.fecha_evento, e.fecha_modificacion, e.id_usuario_ugr,
+               es.nombre AS estado_nombre, es.orden AS estado_orden,
+               te.nombre AS tipo_evento_nombre
+        FROM edan.edan e
+        LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado
+        LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = e.id_tipo_evento
+        WHERE e.id_usuario_ugr = :uid
+        ORDER BY e.id_edan DESC LIMIT :limit OFFSET :skip
+    """, {"uid": id_usuario, "limit": limit, "skip": skip})
+    data = []
+    for r in rows:
+        item = dict(r)
+        tipo = ({"id_tipo_evento": item["id_tipo_evento"], "nombre": item.get("tipo_evento_nombre")}
+                if item.get("id_tipo_evento") else None)
+        estado = ({"id_estado": item["id_estado"], "nombre": item.pop("estado_nombre"),
+                   "orden": item.pop("estado_orden")} if item.get("id_estado") else None)
+        item["tipo_evento"] = tipo
+        item["estado"] = estado
+        item.pop("tipo_evento_nombre", None)
+        data.append(item)
+    return data, total
 
 
 def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int = 50,
@@ -2487,3 +2986,4 @@ estado_edan_crud = _catalog_crud("estado_edan", "id_estado")
 tipo_localidad_crud = _catalog_crud("tipo_localidad", "id_tipo_localidad", order_col="orden")
 edan_localidades_estado_crud = _catalog_crud("edan_localidades_estado", "id_edan_localidad_estado", order_col="orden")
 grupo_vulnerable_crud = _catalog_crud("grupo_vulnerable", "id_grupo_vulnerable", order_col="orden")
+grupo_etario_crud = _catalog_crud("grupo_etario", "id_grupo_etario", order_col="orden")

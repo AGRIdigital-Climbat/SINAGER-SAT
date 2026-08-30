@@ -1,5 +1,7 @@
 # Ejemplos por Sección - id_seccion, Foto y Coordenadas
 
+> **Nota (v1.3.2):** existe la V2 de sync por secciones (sin fotografía) en `/api/v2/edan/localidades/{id}/<seccion>`, que acepta objeto único o array, hace UPSERT por `id_seccion` y es no destructiva. Este doc cubre los endpoints v1 con foto/coordenadas. Ver [SINCRONIZACION.md](SINCRONIZACION.md#sincronización-incremental-por-secciones-v2--apiv2).
+
 ## Reglas de Negocio
 
 ### 1. Foto + Coordenadas

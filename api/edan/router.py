@@ -7,6 +7,7 @@ from ..auth.permisos import module_permiso
 from ..response import SuccessResponse, MessageResponse
 from ..upload import save_upload_file
 from . import service
+from .service import _filters_from_query
 from .schemas import *
 
 router = APIRouter(prefix="/edan", dependencies=[Depends(module_permiso("EDAN"))])
@@ -46,55 +47,6 @@ def _db_error(exc: Exception) -> HTTPException:
     if code == "23502":
         return HTTPException(status_code=400, detail="Falta un campo obligatorio")
     return HTTPException(status_code=400, detail="Error al procesar la solicitud")
-
-
-def _filters_from_query(
-    q: str | None = None,
-    id_departamento: int | None = None,
-    id_provincia: int | None = None,
-    id_municipio: int | None = None,
-    id_tipo_evento: int | None = None,
-    id_estado: int | None = None,
-    estado: str | None = None,
-    id_usuario_ugr: int | None = None,
-    fecha_evento_desde: str | None = None,
-    fecha_evento_hasta: str | None = None,
-    fecha_creacion_desde: str | None = None,
-    fecha_creacion_hasta: str | None = None,
-    pendiente_eliminacion: bool | None = None,
-    pendiente_actualizacion: bool | None = None,
-    con_foto: bool | None = None,
-    sin_foto: bool | None = None,
-    imp_poblacion: bool | None = None,
-    imp_salud: bool | None = None,
-    imp_infraestructura: bool | None = None,
-    imp_servicios: bool | None = None,
-    imp_educacion: bool | None = None,
-    imp_vivienda: bool | None = None,
-    imp_agropecuario: bool | None = None,
-    imp_proteccion: bool | None = None,
-    imp_necesidades: bool | None = None,
-    tiene_agricultura: bool | None = None,
-    tiene_pecuario: bool | None = None,
-) -> dict:
-    return {
-        "q": q, "id_departamento": id_departamento, "id_provincia": id_provincia,
-        "id_municipio": id_municipio, "id_tipo_evento": id_tipo_evento,
-        "id_estado": id_estado, "estado": estado, "id_usuario_ugr": id_usuario_ugr,
-        "fecha_evento_desde": fecha_evento_desde,
-        "fecha_evento_hasta": fecha_evento_hasta,
-        "fecha_creacion_desde": fecha_creacion_desde,
-        "fecha_creacion_hasta": fecha_creacion_hasta,
-        "pendiente_eliminacion": pendiente_eliminacion,
-        "pendiente_actualizacion": pendiente_actualizacion,
-        "con_foto": con_foto, "sin_foto": sin_foto,
-        "imp_poblacion": imp_poblacion, "imp_salud": imp_salud,
-        "imp_infraestructura": imp_infraestructura, "imp_servicios": imp_servicios,
-        "imp_educacion": imp_educacion, "imp_vivienda": imp_vivienda,
-        "imp_agropecuario": imp_agropecuario, "imp_proteccion": imp_proteccion,
-        "imp_necesidades": imp_necesidades,
-        "tiene_agricultura": tiene_agricultura, "tiene_pecuario": tiene_pecuario,
-    }
 
 
 def _filtros_dep(

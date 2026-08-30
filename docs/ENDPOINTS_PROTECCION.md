@@ -1,5 +1,7 @@
 # Endpoints de Protección (Grupos Vulnerables)
 
+> **Nota (v1.3.2):** en V2 existe `POST /api/v2/edan/localidades/{id}/proteccion` (objeto o array, UPSERT por `id_seccion`, requiere `id_grupo_vulnerable_catalogo` válido). Este doc sigue cubriendo los endpoints v1 dedicados.
+
 ## Descripción
 
 Endpoints dedicados para gestionar individualmente los grupos vulnerables asociados a una localidad EDAN.

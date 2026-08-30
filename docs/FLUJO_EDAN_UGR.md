@@ -2,8 +2,10 @@
 
 **Proyecto:** SINAGER-SAT  
 **Sección:** 4.2 — Base de Datos Nacional y Repositorio de GRD  
-**Versión:** v2.8.0  
-**Fecha:** 2026-08-18
+**Versión:** v1.3.2  
+**Fecha:** 2026-08-28
+
+> **Nota (v1.3.2):** el sync de localidades ahora puede llegar por secciones vía `/api/v2` (cabecera primero, luego secciones con UPSERT por `id_seccion`). El UGR sigue viendo el EDAN como "Enviado" (`id_edan_localidad_estado=2`) con la información más actualizada de las localidades sincronizadas. Ver [SINCRONIZACION.md](SINCRONIZACION.md#sincronización-incremental-por-secciones-v2--apiv2).
 
 ---
 

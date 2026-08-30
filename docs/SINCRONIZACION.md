@@ -657,69 +657,63 @@ Al hacer push de un EDAN con localidades anidadas, el servidor **elimina** todas
 
 ---
 
-**Última actualización:** rama `v1.3.0` — fix sync: update_edan con columnas eliminadas, uid assignment, get_edan_por_reporte.
+**Última actualización:** rama `v1.3.2` — nueva V2 de sync incremental por secciones en `/api/v2` (no destructiva, aislamiento de errores); v1 intacta.
 
+## Sincronización de Secciones con Fotografías (v1)
 
-## Sincronización de Secciones con Fotografías (v2.9.0)
+Los detalles completos del sync de secciones 1:N con fotografía (UPSERT por `id_seccion`, reglas de oro del cliente, subida de fotos con `/api/v1/upload`, ejemplos mixtos, tests y troubleshooting) están en [`docs/SINCRONIZACION_SECCIONES_FOTOS.md`](SINCRONIZACION_SECCIONES_FOTOS.md).
 
-### Resumen
+## Sincronización incremental por secciones (V2 — `/api/v2`)
 
-La versión v2.9.0 agrega `id_seccion` a todas las secciones 1:N para permitir edición offline sin duplicados.
+A partir de la **v1.3.2** el sync de localidades EDAN se envía **por secciones** (modelo AppSheet: se identifica el cambio y se sincroniza solo ese cambio), en lugar de enviar el JSON completo de la localidad con las 14 secciones en un solo payload.
 
-### Tablas afectadas (11 tablas)
+Las APIs V2 viven en **`/api/v2`** y **NO tocan las v1** (que siguen operando con fotografía). El flujo es:
 
-| Tabla | Tiene `fotografia` | Tiene `id_seccion` |
-|-------|-------------------|-------------------|
-| `edan_localidades_infra_productiva` | ✅ | ✅ |
-| `edan_localidades_salud_establecimientos` | ✅ | ✅ |
-| `edan_localidades_danos_viales` | ✅ | ✅ |
-| `edan_localidades_danos_infra_publica` | ✅ | ✅ |
-| `edan_localidades_servicios_basicos` | ✅ | ✅ |
-| `edan_localidades_unidades_educativas` | ✅ | ✅ |
-| `edan_localidades_danos_vivienda` | ✅ | ✅ |
-| `edan_localidades_danos_agricultura` | ✅ | ✅ |
-| `edan_localidades_danos_pecuario` | ✅ | ✅ |
-| `edan_localidades_proteccion` | ❌ | ✅ |
-| `edan_localidades_impacto_poblacion` | ❌ | ✅ |
+1. **Cabecera primero:** `POST /api/v2/edan/localidades/cabecera` crea/actualiza solo la cabecera usando `id_local` como clave de dedupe y devuelve el `id_edan_localidad` para poder enviar las secciones.
+2. **Secciones después:** `POST /api/v2/edan/localidades/{id}/<seccion>` acepta un **objeto único o un array (grupo)** de la misma sección; cada fila lleva su propio `id_seccion`.
+3. **Mapeo:** `GET /api/v2/edan/localidades/por-id-local/{id_local}` devuelve el `id_edan_localidad` correspondiente al `id_local` del móvil.
 
-### Mecanismo
+### Reglas de la V2
 
-- **Cliente** genera `id_seccion` único al crear la sección (UNA VEZ)
-- **Cliente** reusa `id_seccion` al editar (MISMO valor)
-- **Backend** hace UPSERT por `id_seccion`:
-  - Si existe → UPDATE (incluye `fotografia`)
-  - Si no existe → INSERT
+- **No destructiva:** solo se actualizan los campos que vienen en el payload (a nivel de fila y a nivel de campo). Lo que no viene, no se toca.
+- **Campos con `NULL`/ausentes:** en un INSERT toman el `DEFAULT` de la BD (`0`, `''`, `false`); en un UPDATE se omiten (no resetean el valor existente).
+- **Aislamiento de errores:** si una fila de un grupo falla (FK inválida, restricción CHECK, obligatorio), las demás se guardan igual y la respuesta trae `errors[]` con el índice de la fila y el motivo.
+- **`id_seccion` se genera en el origen de los datos (app o web), con las mismas características (UUID).** El servidor solo lo usa como clave de UPSERT, nunca lo genera.
+- **Roles de escritura:** 6 (UGR municipio) y 7 (Responsable local). La lectura no exige rol local.
+- **Secciones 1:1** (`primera-respuesta`, `necesidad-salud`, `necesidad-humanitaria`): un solo objeto; UPSERT por `id_seccion` con fallback por `id_edan_localidad` cuando no se envía `id_seccion` (nunca duplica).
 
-### Reglas críticas
+### Endpoints V2
 
-1. **SIEMPRE enviar `id_seccion`** en el payload de sync
-2. **SIEMPRE enviar `fotografia`** completo (path existente o nuevo)
-3. **`fotografia: null`** elimina la foto existente
-4. **NO omitir `fotografia`** (se pierde la foto existente)
+| Recurso | GET | POST | DELETE |
+|---|---|---|---|
+| `localidades/cabecera` | — | crear/actualizar cabecera | — |
+| `localidades/por-id-local/{id_local}` | mapear id_local | — | — |
+| `impacto-poblacion` | listar | grupo (objeto o array) | `…/seccion/{id_seccion}` o vaciar |
+| `salud-establecimientos` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `danos-viales` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `danos-infra-publica` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `servicios-basicos` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `unidades-educativas` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `danos-vivienda` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `danos-agricultura` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `danos-pecuarios` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `infra-productiva` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `proteccion` | listar | grupo | `…/seccion/{id_seccion}` o vaciar |
+| `primera-respuesta` (1:1) | obtener | objeto único | eliminar |
+| `necesidad-salud` (1:1) | obtener | objeto único | eliminar |
+| `necesidad-humanitaria` (1:1) | obtener | objeto único | eliminar |
 
-### Ejemplo mínimo
+### Guía práctica — envío paso a paso (cabecera → secciones)
 
-```json
-{
-  "localidades": [{
-    "id_local": "abc-123",
-    "servicios_basicos": [
-      {
-        "id_seccion": "1a0357323cb-659d0c9c3d415",
-        "tipo": "energia_electrica",
-        "dano_parcial": true,
-        "fotografia": "/uploads/energia_001.jpg"
-      }
-    ]
-  }]
-}
-```
+La documentación **dedicada de `edan_localidades`** con el flujo completo y todos los ejemplos (login, cabecera, cada sección 1:N y 1:1, edición, borrado, mapeo y checklist del cliente) está en [`docs/EDAN_LOCALIDADES_V2.md`](EDAN_LOCALIDADES_V2.md).
 
-### Documentación completa
+Resumen del orden de envío:
 
-Ver [`docs/SINCRONIZACION_SECCIONES_FOTOS.md`](SINCRONIZACION_SECCIONES_FOTOS.md) para:
-- Flujos completos (crear, editar, eliminar foto)
-- Ejemplos mixtos (algunos con foto, otros sin foto)
-- Implementación en TypeScript
-- Tests verificados
-- Troubleshooting
+1. `POST /api/v2/edan/localidades/cabecera` → devuelve `id_edan_localidad`.
+2. `POST /api/v2/edan/localidades/{id}/<seccion>` por cada sección (objeto único o array).
+3. `DELETE …/{seccion}/seccion/{id_seccion}` para eliminar ítems; `DELETE …/{seccion}` para vaciar.
+4. `GET /api/v2/edan/localidades/por-id-local/{id_local}` para mapear/verificar.
+
+### Swagger
+
+En `/docs` las secciones V2 se muestran agrupadas como **tercer nivel** bajo `EDAN_LOCALIDADES` (tags jerárquicos `EDAN_LOCALIDADES > <Seccion>` renderizados por `swagger-ui-plugin-hierarchical-tags`). La interfaz interactiva documenta cada endpoint (schemas, errores y roles permitidos).

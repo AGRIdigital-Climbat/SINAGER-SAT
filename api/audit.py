@@ -6,6 +6,12 @@ from .database import SessionLocal
 from .auth.jwt import verify_token
 
 URL_APP_MAP = [
+    ("/api/v2/rea/", 4),
+    ("/api/v2/edan/", 1),
+    ("/api/v2/usuarios/", 9),
+    ("/api/v2/shared/", 9),
+    ("/api/v2/auth/", 9),
+    ("/api/v2/upload/", 4),
     ("/api/v1/rea/", 4),
     ("/api/v1/edan/", 1),
     ("/api/v1/usuarios/", 9),
@@ -68,7 +74,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         detalle = {"path": path, "method": method}
         if body_data:
-            clean_body = {k: v for k, v in body_data.items() if k != "contrasena"}
+            if isinstance(body_data, dict):
+                clean_body = {k: v for k, v in body_data.items() if k != "contrasena"}
+            else:
+                clean_body = body_data
             if clean_body:
                 detalle["body"] = clean_body
         raw_query = dict(request.query_params)

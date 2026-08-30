@@ -1,7 +1,9 @@
-# SINAGERSAT — Base de Datos PostgreSQL (v1.3.0)
+# SINAGERSAT — Base de Datos PostgreSQL (v1.3.2)
 
 Arquitectura **Multi-Esquema** para el Sistema Nacional de Alerta Temprana y
 Gestión de Riesgos (SINAGERSAT).
+
+> **Nota (v1.3.2):** la V2 de sync por secciones (`/api/v2`) **no introduce cambios de esquema**: reutiliza las tablas existentes de secciones (todas con `id_seccion`) y `edan.edan_localidades`. Ver [SINCRONIZACION.md](SINCRONIZACION.md#sincronización-incremental-por-secciones-v2--apiv2).
 
 ## Conexión
 

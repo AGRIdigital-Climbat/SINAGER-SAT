@@ -9,9 +9,12 @@ from pydantic import BaseModel, Field
 # ============================================================================
 
 class ImpactoPoblacion(BaseModel):
-    """→ edan.edan_localidades_impacto_poblacion (1:N por rango etario)."""
+    """→ edan.edan_localidades_impacto_poblacion (1:N por grupo etario).
+    La fuente de verdad es id_grupo_etario (FK a edan.grupo_etario).
+    El campo rango se mantiene solo por compatibilidad de lectura en v1 (calculado)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
-    rango: str = Field('', description="Ej: 'Niño 0-5', 'Adulto 19-60', 'Adulto mayor 60+'")
+    id_grupo_etario: int | None = Field(None, description="FK a edan.grupo_etario (recomendado). Si falta, se resuelve por rango/codigo.")
+    rango: str | None = Field(None, description="DEPRECATED: usar id_grupo_etario. Solo se acepta para compatibilidad v1 (resolución por nombre).")
     fallecidos: int = Field(0, ge=0)
     heridos: int = Field(0, ge=0)
     desaparecidos: int = Field(0, ge=0)
@@ -274,6 +277,74 @@ class LocalidadCreate(BaseModel):
     necesidad_humanitaria: NecesidadHumanitaria | None = None
 
 
+class LocalidadCabeceraCreate(BaseModel):
+    """Schema para el sync incremental POR SECCIONES: crea o actualiza SOLO la
+    cabecera del edan_localidades. Nunca toca secciones.
+
+    Es la 1ra escritura del flujo móvil: devuelve `id_edan_localidad` para
+    poder enviar las secciones después. `id_local` (UUID offline) es la clave
+    de dedupe: si ya existe, se actualiza la cabecera; si no, se crea.
+
+    Ejemplo offline (1er sync sin conexión):
+    {
+      "id_local": "3b2f9c1e-8a67-4d2e-9f01-c4d8a3b2e7f0",
+      "localidad": "Comunidad Nuevo Amanecer",
+      "id_municipio": 70101,
+      "id_departamento": 7,
+      "id_provincia": 701,
+      "id_tipo_evento": 7,
+      "id_tipo_localidad": 2,
+      "total_poblacion_afectada": 255,
+      "total_familias_afectadas": 60,
+      "total_familias_damnificadas": 30,
+      "imp_poblacion": true,
+      "imp_agropecuario": true
+    }
+    """
+    id_tipo_localidad: int | None = Field(None, description="FK a edan.tipo_localidad")
+    id_edan_localidad_estado: int | None = Field(None, description="FK a edan.edan_localidades_estado")
+    tipo_localidad: str | None = Field(None, description="Nombre libre (alternativa al id)")
+    id_tipo_evento: int | None = Field(None, description="FK a edan.tipo_evento")
+    id_departamento: int | None = Field(None, description="FK a shared.departamento")
+    id_provincia: int | None = Field(None, description="FK a shared.provincia")
+    id_municipio: int | None = Field(None, description="FK a shared.municipio")
+    fecha_llenado: str | None = Field(None, description="ISO date YYYY-MM-DD")
+    fecha_evento: str | None = Field(None, description="ISO date YYYY-MM-DD")
+    hora_evento: str | None = Field(None, description="HH:MM:SS")
+    total_poblacion_afectada: int = Field(0, ge=0)
+    total_familias_afectadas: int = Field(0, ge=0)
+    total_familias_damnificadas: int = Field(0, ge=0)
+    id_local: str | None = Field(None, description="UUID del móvil (offline-first dedupe)")
+    id_usuario: int | None = Field(None, description="Asignado por el servidor si no se envía")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp")
+    localidad: str = Field('', description="Nombre de la comunidad/barrio/ciudad")
+    imp_poblacion: bool = Field(False, description="¿Hubo impacto en población?")
+    imp_salud: bool = False
+    imp_infraestructura: bool = False
+    imp_servicios: bool = False
+    imp_educacion: bool = False
+    imp_vivienda: bool = False
+    imp_agropecuario: bool = False
+    imp_proteccion: bool = False
+    imp_necesidades: bool = False
+
+
+class LocalidadEstadoUpdateV2(BaseModel):
+    """Schema para cambiar el estado de una localidad en V2 usando id_local.
+
+    Ejemplo (móvil envía estado tras revisión):
+    {
+      "id_local": "3b2f9c1e-8a67-4d2e-9f01-c4d8a3b2e7f0",
+      "id_edan_localidad_estado": 2
+    }
+    """
+    id_local: str = Field(..., description="UUID del móvil (clave offline)",
+                          json_schema_extra={"example": "3b2f9c1e-8a67-4d2e-9f01-c4d8a3b2e7f0"})
+    id_edan_localidad_estado: int = Field(..., ge=1, le=6,
+        description="Estado: 1=Borrador, 2=Enviado UGR, 3=Aprobado UGR, 4=Rechazado UGR, 5=Aprobado Ajuste UGR, 6=En revisión UGR",
+        json_schema_extra={"example": 2})
+
+
 class LocalidadNestedResponse(BaseModel):
     """Estructura completa anidada de una localidad (respuesta de GET).
 
@@ -527,6 +598,22 @@ class GrupoVulnerableCreate(BaseModel):
 
 
 class GrupoVulnerableUpdate(BaseModel):
+    codigo: str | None = None
+    nombre: str | None = None
+    descripcion: str | None = None
+    orden: int | None = None
+    activo: bool | None = None
+
+
+class GrupoEtarioCreate(BaseModel):
+    codigo: str
+    nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+    activo: bool = True
+
+
+class GrupoEtarioUpdate(BaseModel):
     codigo: str | None = None
     nombre: str | None = None
     descripcion: str | None = None

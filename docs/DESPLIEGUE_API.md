@@ -1,6 +1,8 @@
 # SINAGERSAT API — Despliegue y Documentación
 
-Guía completa de la API REST v1.3.0. Incluye despliegue, endpoints, autenticación, roles, permisos y ejemplos.
+Guía completa de la API REST v1.3.2. Incluye despliegue, endpoints, autenticación, roles, permisos y ejemplos.
+
+> **Novedad (v1.3.2):** sync incremental por secciones en `/api/v2` — cabecera primero, luego cada sección como recurso independiente con UPSERT por `id_seccion`, no destructivo y con aislamiento de errores por fila. Las v1 no se modifican. Ver [SINCRONIZACION.md](SINCRONIZACION.md#sincronización-incremental-por-secciones-v2--apiv2).
 
 ---
 

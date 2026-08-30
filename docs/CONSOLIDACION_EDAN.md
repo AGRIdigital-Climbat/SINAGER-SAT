@@ -1,5 +1,7 @@
 # Consolidación EDAN: cómo se vincula `edan_localidades` → `edan`
 
+> **Nota (v1.3.2):** la V2 de sync por secciones (`/api/v2`, no destructiva) **no modifica el flujo de consolidación**: `consolidar`/`desconsolidar` siguen operando sobre la cabecera (`id_edan`, `id_edan_localidad_estado`). Ver [SINCRONIZACION.md](SINCRONIZACION.md#sincronización-incremental-por-secciones-v2--apiv2).
+
 > **Audiencia:** developers de app móvil y web que consumen la API BaseData.
 > **Objetivo:** entender cómo varias "EDAN localidades" (ítems) se agrupan en un
 > solo "EDAN" (cabecera) mediante el proceso de consolidación, y cómo se
