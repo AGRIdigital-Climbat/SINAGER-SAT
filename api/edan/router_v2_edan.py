@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..dependencies import get_current_user
 from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
-from .schemas import EdanCreate, EdanUpdate, EstadoEdanUpdate, ConsolidarIn
+from .schemas import EdanCreate, EdanUpdate, ConsolidarIn, EdanSyncIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate
+from .utils import require_rol, db_error
 from ..auth.permisos import module_permiso
 
 router = APIRouter(prefix="/edan", dependencies=[Depends(module_permiso("EDAN"))])
@@ -15,31 +16,6 @@ TAG_EDAN_LOCALIDADES = "EDAN_LOCALIDADES"
 ROLES_EDAN_CREA = (1, 2, 3, 4, 5, 9)
 ROLES_ESTADO_EDAN = (1, 2, 3, 4, 5, 9)
 ROLES_LOCALES = (6, 7)
-
-
-def _require_rol(*roles):
-    def _checker(_user=Depends(get_current_user)):
-        if _user.get("id_rol") not in roles:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Rol {_user.get('id_rol')} no autorizado. Roles permitidos: {roles}"
-            )
-        return _user
-    return _checker
-
-
-def _db_error(exc: Exception) -> HTTPException:
-    try:
-        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
-    except AttributeError:
-        code = None
-    if code == "23503":
-        return HTTPException(status_code=400, detail="El registro referenciado no existe (violación de clave foránea)")
-    if code == "23505":
-        return HTTPException(status_code=400, detail="Ya existe un registro con el mismo valor (violación de unicidad)")
-    if code == "23502":
-        return HTTPException(status_code=400, detail="Falta un campo obligatorio")
-    return HTTPException(status_code=400, detail="Error al procesar la solicitud")
 
 
 def _filtros_dep(
@@ -192,7 +168,7 @@ def reportes_localidades_edan(
     return SuccessResponse(message="Reporte de localidades generado correctamente", data=data, total=total)
 
 
-@router.get("/", tags=[TAG_EDAN])
+@router.get("/", tags=[TAG_EDAN], summary="Listar EDANs con filtros")
 def listar_edans(f: dict = Depends(_filtros_dep), skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=500),
                  db: Session = Depends(get_db), _user=Depends(get_current_user)):
     data, total = service.get_edans(db, dict(f), skip=skip, limit=limit)
@@ -229,6 +205,72 @@ def mis_estados_edan(
     return SuccessResponse(message="Estados de mis EDAN listados correctamente", data=data, total=total)
 
 
+# ============================================================================
+#  SYNC EDAN + CONSOLIDAR PENDIENTES
+# ============================================================================
+
+@router.get("/consolidar/pendientes", tags=[TAG_EDAN_LOCALIDADES],
+            responses={200: {"model": SuccessResponse}},
+            summary="Listar EDAN localidades listas para consolidar",
+            description="Devuelve las EDAN localidades huérfanas (id_edan IS NULL) agrupadas por\n"
+                        "(municipio, tipo_evento), con conteos y totales agregados.\n\n"
+                        "Por defecto muestra TODOS los estados. Use `estado` para filtrar\n"
+                        "(ILIKE: 'aprobado' matchea 'Aprobado UGR' y 'Aprobado Ajuste UGR')\n"
+                        "o `id_estado` para un estado específico.\n\n"
+                        "El UGR municipio usa esto para decidir cuáles agrupar en un nuevo EDAN.")
+def consolidar_pendientes(
+    id_municipio: int | None = Query(None, description="Municipio del UGR (opcional)"),
+    estado: str | None = Query(None, description="Estado de localidad (ILIKE, ej: 'aprobado')"),
+    id_estado: int | None = Query(None, description="ID de estado específico"),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.listar_consolidables(db, id_municipio=id_municipio,
+                                         estado_nombre=estado, id_estado=id_estado)
+    return SuccessResponse(message="EDAN localidades consolidadas listadas correctamente",
+                           data=data, total=len(data))
+
+
+@router.post("/sync", tags=[TAG_EDAN],
+             responses={200: {"model": SuccessResponse}},
+             summary="Sincronizar EDANs (push desde móvil)",
+             description="Recibe un lote de EDANs desde la app móvil. Por cada EDAN ejecuta un upsert.\n\n"
+                         "La respuesta devuelve por fila: `aplicado`, `id_local`, `id_edan`, `conflicto`, "
+                         "`tombstone`, `data`, `error`.")
+def sync_push(data: EdanSyncIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    uid = _user["id_usuario"]
+    results = []
+    for e in data.edans:
+        try:
+            results.append(service.sync_upsert(db, e.model_dump(), uid))
+        except Exception as exc:
+            db.rollback()
+            results.append({
+                "id_local": e.id_local, "sincronizado": False, "aplicado": False,
+                "error": db_error(exc).detail,
+            })
+    return SuccessResponse(message="EDANs sincronizados correctamente", data=results)
+
+
+@router.get("/sync/pull", tags=[TAG_EDAN],
+            responses={200: {"model": SuccessResponse}},
+            summary="Descargar EDANs para móvil (pull)",
+            description="Devuelve los EDANs del usuario. El móvil usa esto para convergencia offline-first.\n\n"
+                        "Query `fecha_desde` (ISO timestamp) filtra por `fecha_modificacion >= fecha_desde`\n"
+                        "para sincronización incremental.")
+def sync_pull(
+    id_usuario: int | None = Query(None),
+    fecha_desde: str | None = Query(None, description="Solo EDANs modificados después de esta fecha"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
+    data, total = service.list_edans_sync(db, uid, fecha_desde=fecha_desde, skip=skip, limit=limit)
+    return SuccessResponse(message="EDANs sincronizados correctamente", data=data, total=total)
+
+
 @router.get("/{id}", tags=[TAG_EDAN], summary="Obtener EDAN completo")
 def obtener_edan(id: int, modo: str = Query("detallado"), db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_edan_completo(db, id, modo=modo)
@@ -237,7 +279,8 @@ def obtener_edan(id: int, modo: str = Query("detallado"), db: Session = Depends(
     return SuccessResponse(message="EDAN obtenido correctamente", data=result)
 
 
-@router.post("/", status_code=201, tags=[TAG_EDAN], dependencies=[Depends(_require_rol(*ROLES_EDAN_CREA))])
+@router.post("/", status_code=201, tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
+             summary="Crear un EDAN")
 def crear_edan(data: EdanCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     try:
         payload = data.model_dump(exclude_none=False)
@@ -249,37 +292,39 @@ def crear_edan(data: EdanCreate, db: Session = Depends(get_db), user=Depends(get
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
 
 
-@router.put("/{id}", tags=[TAG_EDAN], dependencies=[Depends(_require_rol(*ROLES_EDAN_CREA))])
+@router.put("/{id}", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
+            summary="Actualizar un EDAN")
 def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         result = service.update_edan(db, id, data.model_dump(exclude_unset=True))
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     return SuccessResponse(message="EDAN actualizado correctamente", data=result)
 
 
-@router.put("/{id}/estado", tags=[TAG_EDAN], dependencies=[Depends(_require_rol(*ROLES_ESTADO_EDAN))],
+@router.put("/{id}/estado", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_ESTADO_EDAN))],
             summary="Cambiar estado de EDAN")
-def cambiar_estado_edan_endpoint(id: int, data: EstadoEdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def cambiar_estado_edan_endpoint(id: int, data: CambiarEstadoEdanIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         result = service.cambiar_estado_edan(db, id, data.id_estado)
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     return SuccessResponse(message="Estado de EDAN actualizado correctamente", data=result)
 
 
-@router.delete("/{id}", tags=[TAG_EDAN], dependencies=[Depends(_require_rol(*ROLES_EDAN_CREA))])
+@router.delete("/{id}", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
+               summary="Eliminar un EDAN (lógico o permanente)")
 def eliminar_edan(id: int, permanente: bool = Query(False), db: Session = Depends(get_db), _user=Depends(get_current_user)):
     if permanente:
         if not service.delete_edan(db, id):
@@ -291,7 +336,7 @@ def eliminar_edan(id: int, permanente: bool = Query(False), db: Session = Depend
     return SuccessResponse(message="EDAN marcado para eliminación", data=result)
 
 
-@router.put("/{id}/deshacer", tags=[TAG_EDAN], dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+@router.put("/{id}/deshacer", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_LOCALES))],
             summary="Deshacer consolidación de un EDAN")
 def deshacer_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
@@ -299,11 +344,11 @@ def deshacer_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_curr
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     return SuccessResponse(message="EDAN deshecho correctamente", data=result)
 
 
-@router.post("/consolidar", tags=[TAG_EDAN_LOCALIDADES], dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+@router.post("/consolidar", tags=[TAG_EDAN_LOCALIDADES], dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Consolidar EDAN localidades en un nuevo EDAN")
 def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
@@ -311,11 +356,11 @@ def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     return SuccessResponse(message="EDAN consolidado correctamente", data=result)
 
 
-@router.post("/consolidar/auto", tags=[TAG_EDAN_LOCALIDADES], dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+@router.post("/consolidar/auto", tags=[TAG_EDAN_LOCALIDADES], dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Consolidación automática de localidades")
 def consolidar_auto_endpoint(id_municipio: int = Query(...), id_tipo_evento: int = Query(...),
                              db: Session = Depends(get_db), _user=Depends(get_current_user)):
@@ -324,35 +369,32 @@ def consolidar_auto_endpoint(id_municipio: int = Query(...), id_tipo_evento: int
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     return SuccessResponse(message="EDAN consolidado automáticamente", data=result)
 
 
 @router.put("/localidades/{id_localidad}/desconsolidar", tags=[TAG_EDAN_LOCALIDADES],
-            dependencies=[Depends(_require_rol(*ROLES_LOCALES))], summary="Desconsolidar una localidad")
+            dependencies=[Depends(require_rol(*ROLES_LOCALES))], summary="Desconsolidar una localidad")
 def desconsolidar_endpoint(id_localidad: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         result = service.desconsolidar(db, id_localidad)
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     return SuccessResponse(message="Localidad desconsolidada correctamente", data=result)
 
 
 @router.put("/localidades/{id_localidad}/estado", tags=[TAG_EDAN_LOCALIDADES],
-            dependencies=[Depends(_require_rol(*ROLES_LOCALES))], summary="Cambiar estado de localidad (por id_edan_localidad)")
-def cambiar_estado_localidad_endpoint(id_localidad: int, data: dict = Body(...),
+            dependencies=[Depends(require_rol(*ROLES_LOCALES))], summary="Cambiar estado de localidad (por id_edan_localidad)")
+def cambiar_estado_localidad_endpoint(id_localidad: int, data: LocalidadEstadoUpdate,
                                        db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    id_estado = data.get("id_edan_localidad_estado")
-    if id_estado is None:
-        raise HTTPException(status_code=400, detail="Falta id_edan_localidad_estado")
     try:
-        result = service.cambiar_estado_localidad(db, id_localidad, id_estado)
+        result = service.cambiar_estado_localidad(db, id_localidad, data.id_edan_localidad_estado)
     except HTTPException:
         raise
     except Exception as e:
-        raise _db_error(e)
+        raise db_error(e)
     if not result:
         raise HTTPException(status_code=404, detail="Localidad no encontrada")
     return SuccessResponse(message="Estado de localidad actualizado correctamente", data=result)

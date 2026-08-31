@@ -7,6 +7,7 @@ from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
 from .schemas import LocalidadCabeceraCreate, LocalidadEstadoUpdateV2
+from .utils import require_rol, db_error
 
 # ============================================================================
 #  V2 — SYNC INCREMENTAL POR SECCIONES
@@ -38,31 +39,6 @@ TAG_PROTECCION = "EDAN_LOCALIDADES > Proteccion"
 TAG_NECESIDAD_HUMANITARIA = "EDAN_LOCALIDADES > Necesidades Humanitarias"
 
 ROLES_LOCALES = (6, 7)  # UGR municipio + Responsable local
-
-
-def _require_rol(*roles):
-    def _checker(_user=Depends(get_current_user)):
-        if _user.get("id_rol") not in roles:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Rol {_user.get('id_rol')} no autorizado. Roles permitidos: {roles}"
-            )
-        return _user
-    return _checker
-
-
-def _db_error(exc: Exception) -> HTTPException:
-    try:
-        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
-    except AttributeError:
-        code = None
-    if code == "23503":
-        return HTTPException(status_code=400, detail="El registro referenciado no existe (violación de clave foránea)")
-    if code == "23505":
-        return HTTPException(status_code=400, detail="Ya existe un registro con el mismo valor (violación de unicidad)")
-    if code == "23502":
-        return HTTPException(status_code=400, detail="Falta un campo obligatorio")
-    return HTTPException(status_code=400, detail="Error al procesar la solicitud")
 
 
 # ----------------------------------------------------------------------------
@@ -139,7 +115,7 @@ def obtener_localidad_completa(id_localidad: str, db: Session = Depends(get_db),
 # ----------------------------------------------------------------------------
 
 @router.post("/localidades/cabecera", status_code=201, tags=[TAG_EDAN_LOCALIDADES, TAG_CABECERA],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear/actualizar cabecera de localidad (1er paso del sync por secciones)",
              description="Crea o actualiza SOLO la cabecera de `edan.edan_localidades` usando `id_local` "
                          "(UUID offline) como clave de dedupe. NUNCA toca secciones.\n\n"
@@ -154,7 +130,7 @@ def upsert_cabecera(data: LocalidadCabeceraCreate, db: Session = Depends(get_db)
         result = service.upsert_cabecera(db, payload)
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
     return SuccessResponse(message="Cabecera guardada correctamente", data=result)
 
 
@@ -174,7 +150,7 @@ def mapear_por_id_local(id_local: str, db: Session = Depends(get_db), _user=Depe
 #  El `id_seccion` lo genera el cliente UNA vez y se REUSA en cada edición.
 # ----------------------------------------------------------------------------
 
-def _ejemplo(updates: dict) -> dict:
+def _ejemplo_con_foto(updates: dict) -> dict:
     base = {
         "id_seccion": "1a0357323cb-659d0c9c3d415",
         "fotografia": "/uploads/reports/70101/abc123.png",
@@ -185,60 +161,84 @@ def _ejemplo(updates: dict) -> dict:
     return base
 
 
+def _ejemplo_sin_foto(updates: dict) -> dict:
+    base = {
+        "id_seccion": "1a0357323cb-659d0c9c3d415",
+    }
+    base.update(updates)
+    return base
+
+
 BODY_EXAMPLES_SECCIONES: dict[str, dict] = {
     "impacto-poblacion": {
-        "Objeto único": {"value": _ejemplo({"id_grupo_etario": 3, "fallecidos": 2, "heridos": 8, "desaparecidos": 0})},
+        "Objeto único": {"value": _ejemplo_sin_foto({"id_grupo_etario": 3, "fallecidos": 2, "heridos": 8, "desaparecidos": 0})},
         "Grupo (array)": {"value": [
-            _ejemplo({"id_seccion": "sec_imp_01", "id_grupo_etario": 1, "fallecidos": 0, "heridos": 3}),
-            _ejemplo({"id_seccion": "sec_imp_02", "id_grupo_etario": 4, "fallecidos": 1, "heridos": 2}),
+            _ejemplo_sin_foto({"id_seccion": "sec_imp_01", "id_grupo_etario": 1, "fallecidos": 0, "heridos": 3}),
+            _ejemplo_sin_foto({"id_seccion": "sec_imp_02", "id_grupo_etario": 4, "fallecidos": 1, "heridos": 2}),
         ]},
-        "Compat v1 (string legacy)": {"value": _ejemplo({"rango": "Adulto de 19-60 años", "fallecidos": 2, "heridos": 8})},
+        "Compat v1 (string legacy)": {"value": _ejemplo_sin_foto({"rango": "Adulto de 19-60 años", "fallecidos": 2, "heridos": 8})},
     },
     "salud-establecimientos": {
-        "Objeto único": {"value": _ejemplo({
+        "Objeto único": {"value": _ejemplo_con_foto({
             "nombre_establecimiento": "Centro de Salud 15 de Agosto", "comunidad": "Nuevo Amanecer",
             "nivel_atencion": "2do Nivel", "dano_parcial": True, "dano_total": False,
             "medicos_afectados": 1, "enfermeras_afectadas": 2, "otros_afectados": 1})},
     },
     "danos-viales": {
-        "Online + GPS": {"value": _ejemplo({"via": True, "puente": False, "tramo": "Carretera al norte km 5", "km_danio": 3.5})},
+        "Online + GPS": {"value": _ejemplo_con_foto({
+            "via": True, "puente": False, "tramo": "Carretera al norte km 5", "dano_parcial": True,
+            "dano_total": False, "km_danio": 3.5, "necesidades_inmediatas": "Reposición de señalética",
+            "observaciones": "Tramo con derrumbe"})},
     },
     "danos-infra-publica": {
-        "Objeto único": {"value": _ejemplo({"comunidad": "Nuevo Amanecer", "tipo_estructura": "Puente peatonal", "dano_parcial": False, "dano_total": True})},
+        "Objeto único": {"value": _ejemplo_con_foto({
+            "comunidad": "Nuevo Amanecer", "tipo_estructura": "Puente peatonal", "dano_parcial": False,
+            "dano_total": True, "observaciones": "Estructura colapsada"})},
     },
     "servicios-basicos": {
-        "Objeto único": {"value": _ejemplo({"tipo": "energia_electrica", "dano_parcial": False, "dano_total": True, "necesidades_inmediatas": "Generador eléctrico"})},
+        "Objeto único": {"value": _ejemplo_con_foto({
+            "tipo": "energia_electrica", "dano_parcial": False, "dano_total": True,
+            "necesidades_inmediatas": "Generador eléctrico", "observaciones": "Poste caído en red primaria"})},
     },
     "unidades-educativas": {
-        "Objeto único": {"value": _ejemplo({
+        "Objeto único": {"value": _ejemplo_con_foto({
             "nombre_establecimiento": "Escuela Nuevo Amanecer", "comunidad": "Nuevo Amanecer",
             "dano_parcial": True, "dano_total": False, "suspension_clases": True,
             "perdida_material": True, "funciona_albergue": False,
-            "estudiantes": 120, "profesores": 5, "administrativos": 2})},
+            "estudiantes": 120, "profesores": 5, "administrativos": 2,
+            "observaciones": "Daños en techos"})},
     },
     "danos-vivienda": {
-        "Objeto único": {"value": _ejemplo({"comunidad": "Nuevo Amanecer", "dano_parcial": 15, "dano_total": 4, "necesidades_inmediatas": "Carpas"})},
+        "Objeto único": {"value": _ejemplo_con_foto({
+            "comunidad": "Nuevo Amanecer", "dano_parcial": 15, "dano_total": 4,
+            "necesidades_inmediatas": "Carpas", "observaciones": "Viviendas de adobe"})},
     },
     "danos-agricultura": {
-        "Objeto único": {"value": _ejemplo({"tipo_cultivo": "Maíz", "id_cultivo": 12, "hectareas_afectadas": 5, "hectareas_perdidas": 2})},
+        "Objeto único": {"value": _ejemplo_con_foto({
+            "tipo_cultivo": "Maíz", "id_cultivo": 12, "hectareas_afectadas": 5,
+            "hectareas_perdidas": 2, "necesidades_inmediatas": "Semillas", "observaciones": "Cultivo en floración"})},
     },
     "danos-pecuarios": {
-        "Objeto único": {"value": _ejemplo({"especie": "Ganado vacuno", "id_especie": 3, "raza": "Cebuíno", "animales_afectados": 20, "animales_muertos": 6})},
+        "Objeto único": {"value": _ejemplo_con_foto({
+            "especie": "Ganado vacuno", "id_especie": 3, "raza": "Cebuíno", "animales_afectados": 20,
+            "animales_muertos": 6, "necesidades_inmediatas": "Forraje"})},
     },
     "infra-productiva": {
-        "Objeto único": {"value": _ejemplo({"tipo": "Almacén", "dano_parcial": 0, "dano_total": 1})},
+        "Objeto único": {"value": _ejemplo_con_foto({"tipo": "Almacén", "dano_parcial": 0, "dano_total": 1})},
     },
     "proteccion": {
-        "Objeto único": {"value": _ejemplo({"id_grupo_vulnerable_catalogo": 2, "mujeres": 10, "hombres": 8, "apoyo_psicologico": True})},
+        "Objeto único": {"value": _ejemplo_sin_foto({
+            "id_grupo_vulnerable_catalogo": 2, "mujeres": 10, "hombres": 8,
+            "apoyo_psicologico": True, "reposicion_documentos": False, "observaciones": "Niños y niñas"})},
     },
     "primera-respuesta": {
-        "Objeto único": {"value": {"id_seccion": "1a0357323cb-659d0c9c3d415", "busqueda": True, "salvamento": False, "evacuacion": True}},
+        "Objeto único": {"value": _ejemplo_sin_foto({"busqueda": True, "salvamento": False, "evacuacion": True, "observaciones": "Evacuación preventiva"})},
     },
     "necesidad-salud": {
-        "Objeto único": {"value": {"id_seccion": "1a0357323cb-659d0c9c3d415", "numero_personas": 40, "otras_necesidades": "medicinas"}},
+        "Objeto único": {"value": _ejemplo_sin_foto({"numero_personas": 40, "otras_necesidades": "medicinas", "observaciones": "Falta insumos de primeros auxilios"})},
     },
     "necesidad-humanitaria": {
-        "Objeto único": {"value": {"id_seccion": "1a0357323cb-659d0c9c3d415", "alimentos": True, "ropa_cama": True, "obs_alimentos": "Ración diaria"}},
+        "Objeto único": {"value": _ejemplo_sin_foto({"alimentos": True, "ropa_cama": True, "obs_alimentos": "Ración diaria", "obs_ropa_cama": "Frazadas y colchonetas"})},
     },
 }
 
@@ -290,7 +290,7 @@ def _registrar_seccion_1n(path, tag, label, tabla, create_fn, pk_col):
 
     @router.post(f"/localidades/{{id_localidad}}/{path}", status_code=201,
                  tags=[TAG_EDAN_LOCALIDADES, tag],
-                 dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                 dependencies=[Depends(require_rol(*ROLES_LOCALES))],
                  summary=f"Crear/actualizar {label} (grupo JSON sin-foto)",
                  description="Acepta un objeto único o un array de objetos de la MISMA sección.\n"
                              "Cada fila se guarda con UPSERT por su `id_seccion` y los errores se "
@@ -309,23 +309,25 @@ def _registrar_seccion_1n(path, tag, label, tabla, create_fn, pk_col):
 
     @router.delete(f"/localidades/{{id_localidad}}/{path}/seccion/{{id_seccion}}",
                    tags=[TAG_EDAN_LOCALIDADES, tag],
-                   dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                   dependencies=[Depends(require_rol(*ROLES_LOCALES))],
                    responses={200: {"model": MessageResponse}},
                    summary=f"Eliminar un ítem de {label} por id_seccion")
-    def _delete_item(id_localidad: int, id_seccion: str,
+    def _delete_item(id_localidad: str, id_seccion: str,
                      db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        ok = service.delete_seccion_item(db, tabla, id_localidad, id_seccion)
+        id_edan = service._resolve_localidad_id(db, id_localidad)
+        ok = service.delete_seccion_item(db, tabla, id_edan, id_seccion)
         if not ok:
             raise HTTPException(status_code=404, detail="Ítem con ese id_seccion no encontrado")
         return MessageResponse(message=f"{label}: ítem eliminado correctamente")
 
     @router.delete(f"/localidades/{{id_localidad}}/{path}",
                    tags=[TAG_EDAN_LOCALIDADES, tag],
-                   dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                   dependencies=[Depends(require_rol(*ROLES_LOCALES))],
                    responses={200: {"model": MessageResponse}},
                    summary=f"Vaciar toda la sección {label} de una localidad")
-    def _delete_all(id_localidad: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-        n = service.delete_seccion_todo(db, tabla, id_localidad)
+    def _delete_all(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+        id_edan = service._resolve_localidad_id(db, id_localidad)
+        n = service.delete_seccion_todo(db, tabla, id_edan)
         return MessageResponse(message=f"{label}: {n} registro(s) eliminado(s)")
 
 
@@ -360,7 +362,7 @@ def _registrar_seccion_1to1(path, tag, label, tabla, create_fn):
 
     @router.post(f"/localidades/{{id_localidad}}/{path}", status_code=201,
                  tags=[TAG_EDAN_LOCALIDADES, tag],
-                 dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                 dependencies=[Depends(require_rol(*ROLES_LOCALES))],
                  summary=f"Crear/actualizar {label} (sección 1:1, UPSERT sin foto)",
                  description="UPSERT por `id_seccion` con fallback por `id_edan_localidad` cuando "
                              "no se envía `id_seccion` (nunca duplica).\n\n"
@@ -374,14 +376,14 @@ def _registrar_seccion_1to1(path, tag, label, tabla, create_fn):
             row = create_fn(db, id_edan, {"_id": id_edan, **dict(payload)})
         except Exception as e:
             db.rollback()
-            raise _db_error(e)
+            raise db_error(e)
         service._bump_localidad_fecha(db, id_edan)
         db.commit()
         return SuccessResponse(message=f"{label} guardada correctamente", data=row)
 
     @router.delete(f"/localidades/{{id_localidad}}/{path}",
                    tags=[TAG_EDAN_LOCALIDADES, tag],
-                   dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+                   dependencies=[Depends(require_rol(*ROLES_LOCALES))],
                    responses={200: {"model": MessageResponse}},
                    summary=f"Eliminar {label} de una localidad (sección 1:1)")
     def _delete(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
@@ -401,7 +403,7 @@ for _reg in SECCIONES_1TO1:
 # ----------------------------------------------------------------------------
 
 @router.put("/localidades/estado", tags=[TAG_EDAN_LOCALIDADES],
-            dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+            dependencies=[Depends(require_rol(*ROLES_LOCALES))],
             summary="Cambiar estado de localidad (V2, por id_local)",
             description="Actualiza `id_edan_localidad_estado` de una localidad usando su `id_local` (UUID offline).\n\n"
                         "**Estados disponibles:**\n"
@@ -420,7 +422,7 @@ def cambiar_estado_localidad(data: LocalidadEstadoUpdateV2, db: Session = Depend
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
     if not result:
         raise HTTPException(status_code=404, detail=f"Localidad con id_local={data.id_local} no encontrada")
     return SuccessResponse(message="Estado de localidad actualizado correctamente", data=result)

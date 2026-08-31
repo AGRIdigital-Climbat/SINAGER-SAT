@@ -1,6 +1,6 @@
 # DESPLIEGUE API V2 — SINAGERSAT
 
-> **Versión:** v1.5.0 · **Base URL:** `http://<host>:8000` · **Prefijo:** `/api/v2`
+> **Versión:** v1.4.0 · **Base URL:** `http://<host>:8000` · **Prefijo:** `/api/v2`
 > **Swagger interactivo:** `/docs/v2` (agrupado jerárquicamente) y `/docs/v1` (legacy).
 > **Docs de referencia:** [`EDAN_LOCALIDADES_V2.md`](EDAN_LOCALIDADES_V2.md), [`SINCRONIZACION.md`](SINCRONIZACION.md),
 > [`EJEMPLOS_POR_SECCION.md`](EJEMPLOS_POR_SECCION.md) (campos por sección).
@@ -44,13 +44,13 @@ print('tags:', len(d.get('tags', [])))
 
 | Módulo | Prefijo | Endpoints | Ejemplo |
 |---|---|---|---|
-| Autenticación | `/api/v2/auth` | `login`, `refresh`, `me` | `POST /api/v2/auth/login` |
-| Shared (catálogos) | `/api/v2/shared` | departamentos, provincias, municipios, tipo_evento, cultivo, pecuaria… | `GET /api/v2/shared/municipios` |
-| Usuarios | `/api/v2/usuarios` | cuentas, roles, permisos | `GET /api/v2/usuarios/cuentas` |
+| Autenticación | `/api/v2/auth` | login, register, verificar-identidad, cambiar-contrasena, mis-permisos | `POST /api/v2/auth/login` |
+| Shared (catálogos) | `/api/v2/shared` | departamentos, provincias, municipios, cultivo, pecuaria… (tipo_evento está bajo `/edan`) | `GET /api/v2/shared/municipios` |
+| Usuarios | `/api/v2/usuarios` | usuarios, roles, permisos | `GET /api/v2/usuarios/` |
 | Upload | `/api/v2/upload` | subida de archivos | `POST /api/v2/upload` |
-| Repositorio | `/api/v2/repositorio` | documentos | `GET /api/v2/repositorio/documentos` |
-| EDAN cabecera | `/api/v2/edan` | listar, crear, editar, estado, consolidar/desconsolidar, reportes (resumen/geografico/agricultura/pecuario/localidades), **mis-reportes**, **mis-resumen**, **mis-estados** | `POST /api/v2/edan/consolidar` |
-| EDAN localidades (sync) | `/api/v2/edan/localidades` | cabecera, 14 secciones, estado, con-foto, **mis-reportes**, **mis-resumen**, **mis-estados** | ver §3 y §4 |
+| Repositorio | `/api/v2/repositorio` | documentos por EDAN | `GET /api/v2/repositorio/edan/{id}/documentos` |
+| EDAN cabecera | `/api/v2/edan` | listar, crear, editar, estado, consolidar/desconsolidar, reportes (resumen/geografico/agricultura/pecuario/localidades), **mis-reportes**, **mis-resumen**, **mis-estados**, sync (push/pull), consolidar/pendientes | `POST /api/v2/edan/consolidar` |
+| EDAN localidades (sync) | `/api/v2/edan/localidades` | cabecera, 14 secciones, estado, con-foto, **mis-reportes**, **mis-resumen**, **mis-estados**, municipio/{id}, municipio/{id}/resumen | ver §3 y §4 |
 
 ---
 
@@ -90,7 +90,7 @@ Regla:
   ```
   HTTP 400
   X-Retry-After: 2
-  {"detail": "Localidad no encontrada: crea primero la cabecera (se reintenta en 2s)"}
+  {"detail": "Cabecera no encontrada. Envía POST /cabecera primero o reintenta."}
   ```
   El móvil debe **reintentar con backoff** (1s, 2s, 4s…) hasta que la cabecera esté creada. Eso permite **envío en paralelo** (cabecera y secciones al mismo tiempo sin esperar la respuesta de la cabecera).
 
@@ -492,7 +492,7 @@ curl -s "$BASE/api/v2/edan/localidades/292" -H "$H"
 curl -s "$BASE/api/v2/edan/localidades/1a042b1eac3-65a0486fd0d19" -H "$H"
 ```
 
-La respuesta es exactamente la estructura de `mis-reportes` pero de **una sola** localidad: cabecera + las 13 secciones + `estado_localidad` + `usuario`. **Este endpoint de detalle es el que siempre carga el contenido al abrir el formulario** (para evitar que la web manipule la estructura anidada).
+La respuesta es exactamente la estructura de `mis-reportes` pero de **una sola** localidad: cabecera + las 14 secciones + `estado_localidad` + `usuario`. **Este endpoint de detalle es el que siempre carga el contenido al abrir el formulario** (para evitar que la web manipule la estructura anidada).
 
 ### 8.2 EDAN cabecera
 
@@ -612,7 +612,88 @@ curl -s "$BASE/api/v2/edan/grupo-etario" | python3 -m json.tool
 
 ---
 
-## 10. Checklist de migración app/web (v1 → v2)
+## 10. Sync EDAN + Consolidar Pendientes (v2)
+
+Estos 3 endpoints completan la compatibilidad entre la app Flutter y la API v2. Tienen la misma firma que en v1.
+
+### `GET /edan/consolidar/pendientes`
+
+Lista las localidades huérfanas listas para consolidar, agrupadas por municipio/tipo_evento.
+
+```bash
+curl -s "$BASE/api/v2/edan/consolidar/pendientes" -H "$H" | python3 -m json.tool
+# Con filtro:
+curl -s "$BASE/api/v2/edan/consolidar/pendientes?id_municipio=70101&estado=aprobado" -H "$H"
+```
+
+| Param | Tipo | Descripción |
+|---|---|---|
+| `id_municipio` | int, opcional | Filtrar por municipio del UGR |
+| `estado` | string, opcional | ILIKE sobre nombre de estado (ej: `aprobado`) |
+| `id_estado` | int, opcional | ID exacto de estado |
+
+### `POST /edan/sync`
+
+Push de EDANs desde la app móvil (offline-first). Ejecuta upsert por EDAN.
+
+```bash
+curl -s -X POST "$BASE/api/v2/edan/sync" -H "$H" -H "$CT" \
+  -d '{"edans": [{"id_local": "uuid-abc", "localidad": "Test", "id_municipio": 70101, "id_tipo_evento": 1}]}'
+```
+
+Respuesta por fila: `aplicado`, `id_local`, `id_edan`, `conflicto`, `tombstone`, `data`, `error`.
+
+### `GET /edan/sync/pull`
+
+Descarga EDANs del usuario para sincronización incremental.
+
+```bash
+curl -s "$BASE/api/v2/edan/sync/pull?skip=0&limit=50" -H "$H"
+# Con filtro de fecha:
+curl -s "$BASE/api/v2/edan/sync/pull?fecha_desde=2026-08-01T00:00:00" -H "$H"
+```
+
+| Param | Tipo | Descripción |
+|---|---|---|
+| `id_usuario` | int, opcional | Solo admin/rol 9 puede consultar otros usuarios |
+| `fecha_desde` | ISO timestamp | Filtra `fecha_modificacion >= fecha_desde` |
+| `skip` | int | Offset (default 0) |
+| `limit` | int | Máximo 1000 (default 50) |
+
+### `GET /edan/localidades/municipio/{id_municipio}`
+
+Devuelve TODAS las localidades de un municipio (huérfanas + consolidadas), de TODOS los usuarios, con la estructura completa (14 secciones anidadas).
+
+```bash
+curl -s "$BASE/api/v2/edan/localidades/municipio/70101" -H "$H" | python3 -m json.tool
+# Con filtros:
+curl -s "$BASE/api/v2/edan/localidades/municipio/70101?estado=aprobado&solo_huerfanas=true" -H "$H"
+```
+
+| Param | Tipo | Descripción |
+|---|---|---|
+| `id_tipo_evento` | int, opcional | Filtrar por tipo de evento |
+| `id_estado` | int, opcional | ID de estado de localidad |
+| `estado` | string, opcional | Nombre de estado (ILIKE, ej: `aprobado`) |
+| `solo_huerfanas` | bool, opcional | `true`=solo huérfanas, `false`=solo consolidadas, `null`=todas |
+| `id_usuario` | int, opcional | Filtrar por usuario creador |
+| `con_foto` | bool, opcional | `true`=solo con foto, `false`=solo sin foto |
+| `skip` | int | Offset (default 0) |
+| `limit` | int | Máximo 500 (default 50) |
+
+### `GET /edan/localidades/municipio/{id_municipio}/resumen`
+
+Conteos agregados de todas las localidades de un municipio: total, huérfanas vs consolidadas, por estado, por tipo de evento, totales de población/familias afectadas.
+
+```bash
+curl -s "$BASE/api/v2/edan/localidades/municipio/70101/resumen" -H "$H" | python3 -m json.tool
+```
+
+> **Nota:** los endpoints `POST /localidades/sync`, `GET /localidades/sync/pull`, `PUT /localidades/{id}` y `DELETE /localidades/{id}/proteccion/{id}` son **código muerto** en la app (nadie los llama). No se portaron a v2 intencionalmente. Si se necesitan en el futuro, se agregan con la misma firma v1.
+
+---
+
+## 11. Checklist de migración app/web (v1 → v2)
 
 1. Cambia el `baseUrl` de `/api/v1` a `/api/v2`. Nada más.
 2. (Recomendado) En v2 puedes usar `id_local` (UUID) en paths de secciones para **envío en paralelo** el primer sync.
@@ -623,7 +704,7 @@ curl -s "$BASE/api/v2/edan/grupo-etario" | python3 -m json.tool
 
 ---
 
-## 10. Verificación rápida del despliegue
+## 12. Verificación rápida del despliegue
 
 ```bash
 curl -s $BASE/health                       # {"status":"ok"}

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from ..dependencies import get_current_user
 from ..database import get_db
@@ -6,6 +6,7 @@ from ..response import SuccessResponse
 from . import service
 from ..auth.permisos import module_permiso
 from ..upload import save_upload_file
+from .utils import require_rol, db_error
 
 router = APIRouter(prefix="/edan", dependencies=[Depends(module_permiso("EDAN"))])
 
@@ -20,31 +21,6 @@ TAG_UNIDADES_CON_FOTO = "EDAN_LOCALIDADES > Unidades Educativas (con foto)"
 TAG_INFRA_PROD_CON_FOTO = "EDAN_LOCALIDADES > Infra Productiva (con foto)"
 
 ROLES_LOCALES = (6, 7)
-
-
-def _require_rol(*roles):
-    def _checker(_user=Depends(get_current_user)):
-        if _user.get("id_rol") not in roles:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Rol {_user.get('id_rol')} no autorizado. Roles permitidos: {roles}"
-            )
-        return _user
-    return _checker
-
-
-def _db_error(exc: Exception) -> HTTPException:
-    try:
-        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
-    except AttributeError:
-        code = None
-    if code == "23503":
-        return HTTPException(status_code=400, detail="El registro referenciado no existe (violación de clave foránea)")
-    if code == "23505":
-        return HTTPException(status_code=400, detail="Ya existe un registro con el mismo valor (violación de unicidad)")
-    if code == "23502":
-        return HTTPException(status_code=400, detail="Falta un campo obligatorio")
-    return HTTPException(status_code=400, detail="Error al procesar la solicitud")
 
 
 async def _upload_to_localidad(file: UploadFile, db: Session, id_localidad: str, _user: dict) -> str:
@@ -68,7 +44,7 @@ def _validar_foto_gps(file: UploadFile | None, coordenada_lat: float | None, coo
 # ============================================================================
 
 @router.post("/localidades/{id_localidad}/danos-viales/con-foto", status_code=201, tags=[TAG_DANOS_VIALES_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear daño vial con foto+GPS (multipart)")
 async def crear_danos_viales_con_foto(
     id_localidad: str,
@@ -108,11 +84,11 @@ async def crear_danos_viales_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/danos-infra-publica/con-foto", status_code=201, tags=[TAG_DANOS_INFRA_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear daño infraestructura pública con foto+GPS")
 async def crear_danos_infra_publica_con_foto(
     id_localidad: str,
@@ -147,11 +123,11 @@ async def crear_danos_infra_publica_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/danos-vivienda/con-foto", status_code=201, tags=[TAG_DANOS_VIVIENDA_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear daño vivienda con foto+GPS")
 async def crear_danos_vivienda_con_foto(
     id_localidad: str,
@@ -187,11 +163,11 @@ async def crear_danos_vivienda_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/danos-agricultura/con-foto", status_code=201, tags=[TAG_DANOS_AGRICULTURA_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear daño agricultura con foto+GPS")
 async def crear_danos_agricultura_con_foto(
     id_localidad: str,
@@ -229,11 +205,11 @@ async def crear_danos_agricultura_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/danos-pecuarios/con-foto", status_code=201, tags=[TAG_DANOS_PECUARIOS_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear daño pecuario con foto+GPS")
 async def crear_danos_pecuarios_con_foto(
     id_localidad: str,
@@ -270,11 +246,11 @@ async def crear_danos_pecuarios_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/salud-establecimientos/con-foto", status_code=201, tags=[TAG_SALUD_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear establecimiento salud con foto+GPS")
 async def crear_salud_establecimiento_con_foto(
     id_localidad: str,
@@ -315,11 +291,11 @@ async def crear_salud_establecimiento_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/servicios-basicos/con-foto", status_code=201, tags=[TAG_SERVICIOS_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear servicio básico con foto+GPS")
 async def crear_servicios_basicos_con_foto(
     id_localidad: str,
@@ -355,11 +331,11 @@ async def crear_servicios_basicos_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/unidades-educativas/con-foto", status_code=201, tags=[TAG_UNIDADES_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear unidad educativa con foto+GPS")
 async def crear_unidades_educativas_con_foto(
     id_localidad: str,
@@ -405,11 +381,11 @@ async def crear_unidades_educativas_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
 
 
 @router.post("/localidades/{id_localidad}/infra-productiva/con-foto", status_code=201, tags=[TAG_INFRA_PROD_CON_FOTO],
-             dependencies=[Depends(_require_rol(*ROLES_LOCALES))],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              summary="Crear infraestructura productiva con foto+GPS")
 async def crear_infra_productiva_con_foto(
     id_localidad: str,
@@ -441,4 +417,53 @@ async def crear_infra_productiva_con_foto(
         raise
     except Exception as e:
         db.rollback()
-        raise _db_error(e)
+        raise db_error(e)
+
+
+# ============================================================================
+#  LOCALIDADES POR MUNICIPIO (UGR)
+# ============================================================================
+
+@router.get("/localidades/municipio/{id_municipio}",
+            tags=[TAG_DANOS_VIALES_CON_FOTO], responses={200: {"model": SuccessResponse}},
+            summary="Todas las localidades de un municipio",
+            description="Devuelve TODAS las localidades de un municipio (huérfanas + consolidadas),\n"
+                        "de TODOS los usuarios, con la estructura completa (14 secciones anidadas).\n\n"
+                        "El UGR municipality usa esto para ver todo lo que se está reportando en su zona.\n\n"
+                        "Filtros opcionales: tipo de evento, estado, solo huérfanas/consolidadas,\n"
+                        "usuario creador, con/sin foto.")
+def listar_localidades_municipio(
+    id_municipio: int,
+    id_tipo_evento: int | None = Query(None, description="Filtrar por tipo de evento"),
+    id_estado: int | None = Query(None, description="ID de estado de localidad"),
+    estado: str | None = Query(None, description="Nombre de estado (ILIKE, ej: 'aprobado')"),
+    solo_huerfanas: bool | None = Query(None, description="True=solo huérfanas, False=solo consolidadas, None=todas"),
+    id_usuario: int | None = Query(None, description="Filtrar por usuario creador"),
+    con_foto: bool | None = Query(None, description="True=solo con foto, False=solo sin foto, None=todas"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data, total = service.listar_localidades_municipio(
+        db, id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
+        id_estado=id_estado, estado_nombre=estado, solo_huerfanas=solo_huerfanas,
+        id_usuario=id_usuario, con_foto=con_foto, skip=skip, limit=limit)
+    return SuccessResponse(message="Localidades del municipio listadas correctamente",
+                           data=data, total=total)
+
+
+@router.get("/localidades/municipio/{id_municipio}/resumen",
+            tags=[TAG_DANOS_VIALES_CON_FOTO], responses={200: {"model": SuccessResponse}},
+            summary="Resumen ejecutivo de localidades por municipio",
+            description="Conteos agregados de todas las localidades de un municipio:\n"
+                        "total, huérfanas vs consolidadas, por estado, por tipo de evento,\n"
+                        "totales de población/familias afectadas.")
+def resumen_localidades_municipio(
+    id_municipio: int,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data = service.resumen_localidades_municipio(db, id_municipio)
+    return SuccessResponse(message="Resumen de localidades del municipio generado correctamente",
+                           data=data)

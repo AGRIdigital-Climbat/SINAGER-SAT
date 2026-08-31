@@ -639,6 +639,11 @@ class ConsolidarIn(BaseModel):
     localidad_ids: list[int] = []
 
 
+class CambiarEstadoEdanIn(BaseModel):
+    """Schema para cambiar el estado de un EDAN."""
+    id_estado: int = Field(..., description="ID de estado del EDAN (estado_edan)")
+
+
 class LocalidadSyncIn(BaseModel):
     localidades: list[LocalidadCreate] = []
 

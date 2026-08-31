@@ -1,6 +1,6 @@
 # EDAN Localidades — Sync por Secciones (V2)
 
-> **Versión:** v1.5.0 · **Base URL:** `https://<host>` · **Prefijo V2:** `/api/v2`
+> **Versión:** v1.4.0 · **Base URL:** `https://<host>` · **Prefijo V2:** `/api/v2`
 > **Swagger interactivo:** `http://<host>:8000/docs/v2` · **OpenAPI JSON v2:** `GET http://<host>:8000/openapi.v2.json`
 > (no requiere token; `openapi.json` = v1+v2, `openapi.v1.json` = solo v1).
 > **Audiencia:** app móvil (Flutter/offline) y web — desarrolladores que sincronizan `edan_localidades`.
@@ -75,7 +75,7 @@ Regla foto↔GPS: **foto exige coordenadas**; sin foto pueden ir sin coordenadas
 | **Online** | `POST /cabecera {id_local}` ← `id_edan_localidad` | `POST /localidades/{id_edan}/danos-viales {id_seccion}` | `/api/v2/edan/localidades/314/danos-viales` |
 | **Offline (paralelo)** | `POST /cabecera {id_local}` ← mismo UUID | `POST /localidades/{id_local}/danos-viales {id_seccion}` | `/api/v2/edan/localidades/uuid-abc/danos-viales` |
 
-**Ventaja del modo paralelo:** el móvil puede enviar cabecera + secciones al mismo tiempo (sin esperar respuesta). Si la sección llega antes, el servidor espera la cabecera (timeout 5s) y hace UPSERT.
+**Ventaja del modo paralelo:** el móvil puede enviar cabecera + secciones al mismo tiempo (sin esperar respuesta). Si la sección llega antes que la cabecera, el servidor responde `400` con `X-Retry-After: 2` y el móvil reintenta con backoff (1s, 2s, 4s…) hasta que la cabecera exista.
 
 ---
 
@@ -83,7 +83,7 @@ Regla foto↔GPS: **foto exige coordenadas**; sin foto pueden ir sin coordenadas
 
 ```bash
 # Obtener token (JWT)
-curl -s -X POST $BASE/api/v1/auth/login \
+curl -s -X POST $BASE/api/v2/auth/login \
   -H "Content-Type: application/json" \
   -d '{"usuario":"7051296","contrasena":"12345678"}'
 # → { "data": { "access_token": "eyJhbGci..." } }
@@ -490,7 +490,7 @@ En `/docs`, secciones V2 agrupadas como **tercer nivel** bajo `EDAN_LOCALIDADES`
 
 ---
 
-## 9. Checklist para el cliente
+## 10. Checklist para el cliente
 
 - [ ] Generar `id_local` una sola vez (UUID) y guardarlo.
 - [ ] Generar cada `id_seccion` una sola vez por ítem y reusarlo al editar.
