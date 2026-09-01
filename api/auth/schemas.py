@@ -2,11 +2,30 @@ from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
+    model_config = {"json_schema_extra": {
+        "examples": [{"usuario": "admin", "contrasena": "pass123"}]
+    }}
     usuario: str
     contrasena: str
 
 
 class RegisterRequest(BaseModel):
+    model_config = {"json_schema_extra": {
+        "examples": [{
+            "usuario": "enc1",
+            "contrasena": "pass123",
+            "nombre": "Encargado 1",
+            "celular": "70000000",
+            "carnet": "1234567",
+            "comunidad": "Comunidad Test",
+            "correo": "enc1@test.com",
+            "cargo": "Encargado",
+            "id_departamento": 2,
+            "id_provincia": 201,
+            "id_municipio": 20101,
+            "id_rol": 4
+        }]
+    }}
     usuario: str
     contrasena: str
     nombre: str

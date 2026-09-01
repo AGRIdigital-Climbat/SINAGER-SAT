@@ -6,7 +6,12 @@ from ..dependencies import get_current_user
 from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
-from .schemas import LocalidadCabeceraCreate, LocalidadEstadoUpdateV2
+from .schemas import (
+    LocalidadCabeceraCreate, LocalidadEstadoUpdateV2,
+    ImpactoPoblacion, EstablecimientoSalud, DanoVial, DanoInfraPublica,
+    ServicioBasicoDetalle, UnidadEducativa, DanoVivienda, DanoAgricultura,
+    DanoPecuario, InfraProductiva, GrupoVulnerable,
+)
 from .utils import require_rol, db_error
 
 # ============================================================================
@@ -39,6 +44,20 @@ TAG_PROTECCION = "EDAN_LOCALIDADES > Proteccion"
 TAG_NECESIDAD_HUMANITARIA = "EDAN_LOCALIDADES > Necesidades Humanitarias"
 
 ROLES_LOCALES = (6, 7)  # UGR municipio + Responsable local
+
+PATH_TO_SCHEMA = {
+    "impacto-poblacion": ImpactoPoblacion,
+    "salud-establecimientos": EstablecimientoSalud,
+    "danos-viales": DanoVial,
+    "danos-infra-publica": DanoInfraPublica,
+    "servicios-basicos": ServicioBasicoDetalle,
+    "unidades-educativas": UnidadEducativa,
+    "danos-vivienda": DanoVivienda,
+    "danos-agricultura": DanoAgricultura,
+    "danos-pecuarios": DanoPecuario,
+    "infra-productiva": InfraProductiva,
+    "proteccion": GrupoVulnerable,
+}
 
 
 # ----------------------------------------------------------------------------
@@ -183,22 +202,38 @@ BODY_EXAMPLES_SECCIONES: dict[str, dict] = {
             "nombre_establecimiento": "Centro de Salud 15 de Agosto", "comunidad": "Nuevo Amanecer",
             "nivel_atencion": "2do Nivel", "dano_parcial": True, "dano_total": False,
             "medicos_afectados": 1, "enfermeras_afectadas": 2, "otros_afectados": 1})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_salud_01", "nombre_establecimiento": "Centro Salud 15 de Agosto", "comunidad": "Nuevo Amanecer", "nivel_atencion": "2do Nivel", "dano_parcial": True, "medicos_afectados": 1}),
+            _ejemplo_con_foto({"id_seccion": "sec_salud_02", "nombre_establecimiento": "Posta San Juan", "comunidad": "San Juan", "nivel_atencion": "1er Nivel", "dano_total": True}),
+        ]},
     },
     "danos-viales": {
         "Online + GPS": {"value": _ejemplo_con_foto({
             "via": True, "puente": False, "tramo": "Carretera al norte km 5", "dano_parcial": True,
             "dano_total": False, "km_danio": 3.5, "necesidades_inmediatas": "Reposición de señalética",
             "observaciones": "Tramo con derrumbe"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_vial_01", "via": True, "puente": False, "tramo": "Carretera norte km 5", "dano_parcial": True, "km_danio": 3.5}),
+            _ejemplo_con_foto({"id_seccion": "sec_vial_02", "via": False, "puente": True, "tramo": "Puente sobre río Tarija", "dano_total": True, "km_danio": 0}),
+        ]},
     },
     "danos-infra-publica": {
         "Objeto único": {"value": _ejemplo_con_foto({
             "comunidad": "Nuevo Amanecer", "tipo_estructura": "Puente peatonal", "dano_parcial": False,
             "dano_total": True, "observaciones": "Estructura colapsada"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_infra_01", "comunidad": "Nuevo Amanecer", "tipo_estructura": "Puente peatonal", "dano_total": True}),
+            _ejemplo_con_foto({"id_seccion": "sec_infra_02", "comunidad": "San Juan", "tipo_estructura": "Alcaldía", "dano_parcial": True}),
+        ]},
     },
     "servicios-basicos": {
         "Objeto único": {"value": _ejemplo_con_foto({
             "tipo": "energia_electrica", "dano_parcial": False, "dano_total": True,
             "necesidades_inmediatas": "Generador eléctrico", "observaciones": "Poste caído en red primaria"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_sb_01", "tipo": "energia_electrica", "dano_total": True, "necesidades_inmediatas": "Generador"}),
+            _ejemplo_con_foto({"id_seccion": "sec_sb_02", "tipo": "agua_potable", "dano_parcial": True, "necesidades_inmediatas": "Bombas de repuesto"}),
+        ]},
     },
     "unidades-educativas": {
         "Objeto único": {"value": _ejemplo_con_foto({
@@ -207,29 +242,53 @@ BODY_EXAMPLES_SECCIONES: dict[str, dict] = {
             "perdida_material": True, "funciona_albergue": False,
             "estudiantes": 120, "profesores": 5, "administrativos": 2,
             "observaciones": "Daños en techos"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_ue_01", "nombre_establecimiento": "Escuela Nuevo Amanecer", "comunidad": "Nuevo Amanecer", "dano_parcial": True, "suspension_clases": True, "estudiantes": 120}),
+            _ejemplo_con_foto({"id_seccion": "sec_ue_02", "nombre_establecimiento": "Colegio San Martín", "comunidad": "San Martín", "dano_total": True, "estudiantes": 200}),
+        ]},
     },
     "danos-vivienda": {
         "Objeto único": {"value": _ejemplo_con_foto({
             "comunidad": "Nuevo Amanecer", "dano_parcial": 15, "dano_total": 4,
             "necesidades_inmediatas": "Carpas", "observaciones": "Viviendas de adobe"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_viv_01", "comunidad": "Nuevo Amanecer", "dano_parcial": 15, "dano_total": 4, "necesidades_inmediatas": "Carpas"}),
+            _ejemplo_con_foto({"id_seccion": "sec_viv_02", "comunidad": "San Juan", "dano_parcial": 8, "dano_total": 2}),
+        ]},
     },
     "danos-agricultura": {
         "Objeto único": {"value": _ejemplo_con_foto({
             "tipo_cultivo": "Maíz", "id_cultivo": 12, "hectareas_afectadas": 5,
             "hectareas_perdidas": 2, "necesidades_inmediatas": "Semillas", "observaciones": "Cultivo en floración"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_agri_01", "tipo_cultivo": "Maíz", "id_cultivo": 12, "hectareas_afectadas": 5, "hectareas_perdidas": 2, "necesidades_inmediatas": "Semillas"}),
+            _ejemplo_con_foto({"id_seccion": "sec_agri_02", "tipo_cultivo": "Trigo", "id_cultivo": 15, "hectareas_afectadas": 3, "hectareas_perdidas": 1}),
+        ]},
     },
     "danos-pecuarios": {
         "Objeto único": {"value": _ejemplo_con_foto({
             "especie": "Ganado vacuno", "id_especie": 3, "raza": "Cebuíno", "animales_afectados": 20,
             "animales_muertos": 6, "necesidades_inmediatas": "Forraje"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_pec_01", "especie": "Ganado vacuno", "id_especie": 3, "animales_afectados": 20, "animales_muertos": 6}),
+            _ejemplo_con_foto({"id_seccion": "sec_pec_02", "especie": "Ovinos", "id_especie": 8, "animales_afectados": 15, "animales_muertos": 3}),
+        ]},
     },
     "infra-productiva": {
         "Objeto único": {"value": _ejemplo_con_foto({"tipo": "Almacén", "dano_parcial": 0, "dano_total": 1})},
+        "Grupo (array)": {"value": [
+            _ejemplo_con_foto({"id_seccion": "sec_infp_01", "tipo": "Almacén", "dano_parcial": 0, "dano_total": 1}),
+            _ejemplo_con_foto({"id_seccion": "sec_infp_02", "tipo": "Molino", "dano_parcial": 1, "dano_total": 0}),
+        ]},
     },
     "proteccion": {
         "Objeto único": {"value": _ejemplo_sin_foto({
             "id_grupo_vulnerable_catalogo": 2, "mujeres": 10, "hombres": 8,
             "apoyo_psicologico": True, "reposicion_documentos": False, "observaciones": "Niños y niñas"})},
+        "Grupo (array)": {"value": [
+            _ejemplo_sin_foto({"id_seccion": "sec_prot_01", "id_grupo_vulnerable_catalogo": 2, "mujeres": 10, "hombres": 8, "apoyo_psicologico": True}),
+            _ejemplo_sin_foto({"id_seccion": "sec_prot_02", "id_grupo_vulnerable_catalogo": 5, "mujeres": 5, "hombres": 3, "observaciones": "Adultos mayores"}),
+        ]},
     },
     "primera-respuesta": {
         "Objeto único": {"value": _ejemplo_sin_foto({"busqueda": True, "salvamento": False, "evacuacion": True, "observaciones": "Evacuación preventiva"})},
@@ -288,6 +347,8 @@ def _registrar_seccion_1n(path, tag, label, tabla, create_fn, pk_col):
                              {"id": id_edan})["c"]
         return SuccessResponse(message=f"{label} listados", data=[dict(r) for r in rows], total=total)
 
+    schema_cls = PATH_TO_SCHEMA[path]
+
     @router.post(f"/localidades/{{id_localidad}}/{path}", status_code=201,
                  tags=[TAG_EDAN_LOCALIDADES, tag],
                  dependencies=[Depends(require_rol(*ROLES_LOCALES))],
@@ -298,7 +359,7 @@ def _registrar_seccion_1n(path, tag, label, tabla, create_fn, pk_col):
                              "**Modo offline:** `id_localidad` puede ser `id_local` (UUID) o `id_edan_localidad` (int).\n"
                              "Si usas `id_local`, el servidor resuelve automáticamente.\n\n"
                              "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).")
-    def _post(id_localidad: str, payload: dict | list = Body(...,
+    def _post(id_localidad: str, payload: schema_cls | list[schema_cls] = Body(...,
               openapi_examples=BODY_EXAMPLES_SECCIONES.get(path)),
               db: Session = Depends(get_db), _user=Depends(get_current_user)):
         id_edan = service._resolve_localidad_id(db, id_localidad)

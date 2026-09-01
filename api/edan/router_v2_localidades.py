@@ -37,6 +37,102 @@ def _validar_foto_gps(file: UploadFile | None, coordenada_lat: float | None, coo
         raise HTTPException(status_code=422, detail="Foto requiere coordenadas GPS (coordenada_lat y coordenada_lon)")
 
 
+def _normalizar_files(file, id_seccion, lat, lon):
+    """Normaliza las listas paralelas del carrete de fotos."""
+    files = file if isinstance(file, list) else [file]
+    secs = id_seccion if isinstance(id_seccion, list) else [id_seccion]
+    n = len(files)
+    if len(secs) == 1:
+        secs = secs * n
+    if len(secs) != n:
+        raise HTTPException(status_code=422,
+                            detail="Número de id_seccion debe coincidir con el de archivos (o enviar uno para todos)")
+    return files, secs, lat, lon
+
+
+def _carrete_resolve_localidad(db: Session, id_local: str | None, id_edan_localidad: int | None):
+    """Resuelve y valida la coherencia entre id_local (UUID) e id_edan_localidad (int)
+    para el carrete. Tolera cabecera ausente (offline): devuelve (id_edan, id_municipio)
+    con valores None cuando la localidad aún no existe."""
+    id_edan = id_edan_localidad if id_edan_localidad is not None else None
+    id_municipio = None
+
+    if id_local:
+        row = service._row(db, "SELECT id_edan_localidad, id_municipio FROM edan.edan_localidades WHERE id_local = :id_local",
+                           {"id_local": id_local})
+        if not row:
+            if id_edan is not None:
+                raise HTTPException(status_code=400,
+                                    detail="Incoherencia: id_local no existe en BD y no coincide con id_edan_localidad")
+            return None, None
+        if id_edan is None:
+            id_edan = row["id_edan_localidad"]
+        elif row["id_edan_localidad"] != id_edan:
+            raise HTTPException(status_code=400,
+                                detail="Incoherencia: id_local e id_edan_localidad apuntan a localidades distintas")
+        id_municipio = row["id_municipio"]
+
+    elif id_edan is not None:
+        row = service._row(db, "SELECT id_municipio FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                           {"id": id_edan})
+        if not row:
+            return id_edan, None
+        id_municipio = row["id_municipio"]
+
+    return id_edan, id_municipio
+
+
+TAG_FOTO_ID_SECCION = "EDAN_LOCALIDADES > Foto por id_seccion (carrete)"
+
+
+@router.post("/localidades/foto/subir", status_code=201, tags=[TAG_FOTO_ID_SECCION],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
+             summary="Subir una o varias fotos por id_seccion (carrete)",
+             description="Sube UNA foto o un ARRAY de fotos, cada una vinculada a su `id_seccion`.\n\n"
+                         "Comportamiento:\n"
+                         "- **GPS opcional**: si vienen coordenadas se devuelven; no se exigen (el GPS es dato "
+                         "de la sección, no de la foto).\n"
+                         "- **Coherencia de ids**: si se envían `id_local` y/o `id_edan_localidad` y la cabecera ya "
+                         "existe, el servidor los valida (deben apuntar a la misma localidad) y resuelve el "
+                         "municipio para la ruta `/uploads/reports/{codigo_ine}/...`.\n"
+                         "- **Offline**: si la cabecera aún no existe, la foto se guarda igual (carpeta "
+                         "`reports/general`) y devuelve el `path`; se asocia al guardar la sección sin foto.\n"
+                         "El `path` devuelto debe reenviarse en el campo `fotografia` al guardar la sección.")
+async def subir_foto_carrete(
+    file: list[UploadFile] = File(...,
+                                 description="Imagen JPG/PNG max 5MB. Una o varias (repetir el campo `file`)"),
+    id_seccion: list[str] = Form(..., description="ID único de la sección. Array paralelo a los archivos"),
+    id_local: str | None = Form(None, description="id_local UUID de la localidad (opcional)"),
+    id_edan_localidad: int | None = Form(None, description="id_edan_localidad int (opcional)"),
+    coordenada_lat: float | None = Form(None, description="Latitud GPS (opcional)"),
+    coordenada_lon: float | None = Form(None, description="Longitud GPS (opcional)"),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    try:
+        files, secs, _, _ = _normalizar_files(file, id_seccion, coordenada_lat, coordenada_lon)
+        id_edan, id_municipio = _carrete_resolve_localidad(db, id_local, id_edan_localidad)
+        results = []
+        for i, f in enumerate(files):
+            path = await save_upload_file(f, db, id_municipio, _user.get("id_usuario"))
+            item = {"id_seccion": secs[i], "path": path}
+            if coordenada_lat is not None:
+                item["coordenada_lat"] = coordenada_lat
+            if coordenada_lon is not None:
+                item["coordenada_lon"] = coordenada_lon
+            results.append(item)
+        data = {"results": results}
+        if id_edan is not None:
+            data["id_edan_localidad"] = id_edan
+        if id_local:
+            data["id_local"] = id_local
+        return SuccessResponse(message="Foto(s) subida(s) correctamente", data=data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise db_error(e)
+
+
 # ============================================================================
 #  ENDPOINTS CON-FOTO (multipart: foto + coordenadas + campos)
 #  Lógica v2: id_localidad puede ser UUID (id_local) o int (id_edan_localidad);

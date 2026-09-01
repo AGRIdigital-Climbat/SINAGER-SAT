@@ -232,6 +232,19 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         "imp_agropecuario": False,
         "imp_proteccion": False,
         "imp_necesidades": False,
+        "imp_impacto_poblacion": False,
+        "imp_salud_establecimientos": False,
+        "imp_danos_viales": False,
+        "imp_danos_infra_publica": False,
+        "imp_servicios_basicos": False,
+        "imp_unidades_educativas": False,
+        "imp_danos_vivienda": False,
+        "imp_danos_agricultura": False,
+        "imp_danos_pecuarios": False,
+        "imp_infra_productiva": False,
+        "imp_primera_respuesta": False,
+        "imp_necesidad_salud": False,
+        "imp_necesidad_humanitaria": False,
     }
     row = _row(db, "SELECT * FROM edan.edan_localidades WHERE id_edan_localidad = :id",
                {"id": id_localidad})
@@ -1301,6 +1314,8 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
         ).mappings().first()
     
     db.commit()
+    _marcar_impacto(db, data["_id"], table)
+    db.commit()
     row = dict(result) if result else {}
     if expand and row:
         for fk_col, (cat_table, cat_pk, cat_cols) in expand.items():
@@ -1496,6 +1511,8 @@ def _upsert_11(db: Session, table: str, id_localidad: int, data: dict,
                 RETURNING *
             """), {"id": id_localidad, **vals}).mappings().first()
     db.commit()
+    _marcar_impacto(db, id_localidad, table)
+    db.commit()
     return dict(row) if row else {}
 
 
@@ -1566,6 +1583,8 @@ def delete_seccion_item(db: Session, table: str, id_localidad: int,
     if deleted:
         _bump_localidad_fecha(db, id_localidad)
         db.commit()
+        _marcar_impacto(db, id_localidad, table)
+        db.commit()
     return deleted
 
 
@@ -1576,6 +1595,8 @@ def delete_seccion_todo(db: Session, table: str, id_localidad: int) -> int:
     n = result.rowcount
     if n:
         _bump_localidad_fecha(db, id_localidad)
+        db.commit()
+        _marcar_impacto(db, id_localidad, table)
         db.commit()
     return n
 
@@ -2449,6 +2470,52 @@ IMP_FLAGS = [
     "imp_educacion", "imp_vivienda", "imp_agropecuario", "imp_proteccion",
     "imp_necesidades",
 ]
+
+# 14 flags 1:1 (uno por tabla de sección), con nombres limpios por tabla.
+IMP_FLAGS_NUEVOS = [
+    "imp_impacto_poblacion", "imp_salud_establecimientos", "imp_danos_viales",
+    "imp_danos_infra_publica", "imp_servicios_basicos", "imp_unidades_educativas",
+    "imp_danos_vivienda", "imp_danos_agricultura", "imp_danos_pecuarios",
+    "imp_infra_productiva", "imp_proteccion", "imp_primera_respuesta",
+    "imp_necesidad_salud", "imp_necesidad_humanitaria",
+]
+
+# tabla de sección -> (flag 1:1, [flags legacy agrupados que se mantienen al dia])
+IMP_FLAG_POR_TABLA = {
+    "edan_localidades_impacto_poblacion": ("imp_impacto_poblacion", ["imp_poblacion"]),
+    "edan_localidades_salud_establecimientos": ("imp_salud_establecimientos", ["imp_salud"]),
+    "edan_localidades_danos_viales": ("imp_danos_viales", []),
+    "edan_localidades_danos_infra_publica": ("imp_danos_infra_publica", ["imp_infraestructura"]),
+    "edan_localidades_servicios_basicos": ("imp_servicios_basicos", ["imp_servicios"]),
+    "edan_localidades_unidades_educativas": ("imp_unidades_educativas", ["imp_educacion"]),
+    "edan_localidades_danos_vivienda": ("imp_danos_vivienda", ["imp_vivienda"]),
+    "edan_localidades_danos_agricultura": ("imp_danos_agricultura", ["imp_agropecuario"]),
+    "edan_localidades_danos_pecuario": ("imp_danos_pecuarios", ["imp_agropecuario"]),
+    "edan_localidades_infra_productiva": ("imp_infra_productiva", []),
+    "edan_localidades_proteccion": ("imp_proteccion", ["imp_proteccion"]),
+    "edan_localidades_primera_respuesta": ("imp_primera_respuesta", []),
+    "edan_localidades_salud_necesidades": ("imp_necesidad_salud", ["imp_salud", "imp_necesidades"]),
+    "edan_localidades_necesidades_humanitarias": ("imp_necesidad_humanitaria", ["imp_necesidades"]),
+}
+
+
+def _marcar_impacto(db: Session, id_localidad: int, tabla: str):
+    """Replica el/los flag(s) de impacto de una localidad según si su tabla de
+    sección tiene al menos una fila. Se invoca tras guardar/borrar una sección
+    para que los flags reflejen automáticamente la realidad de los datos."""
+    entry = IMP_FLAG_POR_TABLA.get(tabla)
+    if not entry:
+        return
+    nuevo, legacies = entry
+    if not _row(db, "SELECT 1 FROM edan.edan_localidades WHERE id_edan_localidad = :id", {"id": id_localidad}):
+        return
+    count = _row(db, f"SELECT COUNT(*) AS c FROM edan.{tabla} WHERE id_edan_localidad = :id",
+                 {"id": id_localidad})["c"] or 0
+    val = bool(count > 0)
+    cols = list(dict.fromkeys([nuevo] + legacies))
+    set_clause = ", ".join(f"{c} = :{c}" for c in cols)
+    db.execute(text(f"UPDATE edan.edan_localidades SET {set_clause} WHERE id_edan_localidad = :id"),
+               {"id": id_localidad, **{c: val for c in cols}})
 
 
 def _filters_from_query(

@@ -252,15 +252,28 @@ class LocalidadCreate(BaseModel):
     pendiente_actualizacion: bool = False
     pendiente_eliminacion: bool = False
     localidad: str = Field('', description="Nombre de la comunidad/barrio/ciudad")
-    imp_poblacion: bool = Field(False, description="¿Hubo impacto en población?")
-    imp_salud: bool = False
-    imp_infraestructura: bool = False
-    imp_servicios: bool = False
-    imp_educacion: bool = False
-    imp_vivienda: bool = False
-    imp_agropecuario: bool = False
-    imp_proteccion: bool = False
-    imp_necesidades: bool = False
+    imp_poblacion: bool = Field(False, description="¿Hubo impacto en población? (legacy agrupado)")
+    imp_salud: bool = Field(False, description="legacy agrupado")
+    imp_infraestructura: bool = Field(False, description="legacy agrupado")
+    imp_servicios: bool = Field(False, description="legacy agrupado")
+    imp_educacion: bool = Field(False, description="legacy agrupado")
+    imp_vivienda: bool = Field(False, description="legacy agrupado")
+    imp_agropecuario: bool = Field(False, description="legacy agrupado")
+    imp_proteccion: bool = Field(False, description="¿impacto en protección?")
+    imp_necesidades: bool = Field(False, description="legacy agrupado")
+    imp_impacto_poblacion: bool = Field(False, description="1:1 impacto-poblacion")
+    imp_salud_establecimientos: bool = Field(False, description="1:1 salud-establecimientos")
+    imp_danos_viales: bool = Field(False, description="1:1 danos-viales")
+    imp_danos_infra_publica: bool = Field(False, description="1:1 danos-infra-publica")
+    imp_servicios_basicos: bool = Field(False, description="1:1 servicios-basicos")
+    imp_unidades_educativas: bool = Field(False, description="1:1 unidades-educativas")
+    imp_danos_vivienda: bool = Field(False, description="1:1 danos-vivienda")
+    imp_danos_agricultura: bool = Field(False, description="1:1 danos-agricultura")
+    imp_danos_pecuarios: bool = Field(False, description="1:1 danos-pecuarios")
+    imp_infra_productiva: bool = Field(False, description="1:1 infra-productiva")
+    imp_primera_respuesta: bool = Field(False, description="1:1 primera-respuesta")
+    imp_necesidad_salud: bool = Field(False, description="1:1 necesidad-salud")
+    imp_necesidad_humanitaria: bool = Field(False, description="1:1 necesidad-humanitaria")
     impacto_poblacion: list[ImpactoPoblacion] = []
     necesidad_primera_respuesta: PrimeraRespuesta | None = None
     establecimientos_salud: list[EstablecimientoSalud] = []
@@ -318,15 +331,28 @@ class LocalidadCabeceraCreate(BaseModel):
     id_usuario: int | None = Field(None, description="Asignado por el servidor si no se envía")
     fecha_modificacion: str | None = Field(None, description="ISO timestamp")
     localidad: str = Field('', description="Nombre de la comunidad/barrio/ciudad")
-    imp_poblacion: bool = Field(False, description="¿Hubo impacto en población?")
-    imp_salud: bool = False
-    imp_infraestructura: bool = False
-    imp_servicios: bool = False
-    imp_educacion: bool = False
-    imp_vivienda: bool = False
-    imp_agropecuario: bool = False
-    imp_proteccion: bool = False
-    imp_necesidades: bool = False
+    imp_poblacion: bool = Field(False, description="¿Hubo impacto en población? (legacy agrupado)")
+    imp_salud: bool = Field(False, description="legacy agrupado")
+    imp_infraestructura: bool = Field(False, description="legacy agrupado")
+    imp_servicios: bool = Field(False, description="legacy agrupado")
+    imp_educacion: bool = Field(False, description="legacy agrupado")
+    imp_vivienda: bool = Field(False, description="legacy agrupado")
+    imp_agropecuario: bool = Field(False, description="legacy agrupado")
+    imp_proteccion: bool = Field(False, description="¿impacto en protección?")
+    imp_necesidades: bool = Field(False, description="legacy agrupado")
+    imp_impacto_poblacion: bool = Field(False, description="1:1 impacto-poblacion")
+    imp_salud_establecimientos: bool = Field(False, description="1:1 salud-establecimientos")
+    imp_danos_viales: bool = Field(False, description="1:1 danos-viales")
+    imp_danos_infra_publica: bool = Field(False, description="1:1 danos-infra-publica")
+    imp_servicios_basicos: bool = Field(False, description="1:1 servicios-basicos")
+    imp_unidades_educativas: bool = Field(False, description="1:1 unidades-educativas")
+    imp_danos_vivienda: bool = Field(False, description="1:1 danos-vivienda")
+    imp_danos_agricultura: bool = Field(False, description="1:1 danos-agricultura")
+    imp_danos_pecuarios: bool = Field(False, description="1:1 danos-pecuarios")
+    imp_infra_productiva: bool = Field(False, description="1:1 infra-productiva")
+    imp_primera_respuesta: bool = Field(False, description="1:1 primera-respuesta")
+    imp_necesidad_salud: bool = Field(False, description="1:1 necesidad-salud")
+    imp_necesidad_humanitaria: bool = Field(False, description="1:1 necesidad-humanitaria")
 
 
 class LocalidadEstadoUpdateV2(BaseModel):
@@ -394,6 +420,19 @@ class LocalidadNestedResponse(BaseModel):
     imp_agropecuario: bool = False
     imp_proteccion: bool = False
     imp_necesidades: bool = False
+    imp_impacto_poblacion: bool = False
+    imp_salud_establecimientos: bool = False
+    imp_danos_viales: bool = False
+    imp_danos_infra_publica: bool = False
+    imp_servicios_basicos: bool = False
+    imp_unidades_educativas: bool = False
+    imp_danos_vivienda: bool = False
+    imp_danos_agricultura: bool = False
+    imp_danos_pecuarios: bool = False
+    imp_infra_productiva: bool = False
+    imp_primera_respuesta: bool = False
+    imp_necesidad_salud: bool = False
+    imp_necesidad_humanitaria: bool = False
     tipo_localidad: dict | None = None
     estado_localidad: dict | None = None
     tipo_evento: dict | None = None
@@ -492,6 +531,19 @@ class LocalidadUpdate(BaseModel):
     imp_agropecuario: bool = False
     imp_proteccion: bool = False
     imp_necesidades: bool = False
+    imp_impacto_poblacion: bool = False
+    imp_salud_establecimientos: bool = False
+    imp_danos_viales: bool = False
+    imp_danos_infra_publica: bool = False
+    imp_servicios_basicos: bool = False
+    imp_unidades_educativas: bool = False
+    imp_danos_vivienda: bool = False
+    imp_danos_agricultura: bool = False
+    imp_danos_pecuarios: bool = False
+    imp_infra_productiva: bool = False
+    imp_primera_respuesta: bool = False
+    imp_necesidad_salud: bool = False
+    imp_necesidad_humanitaria: bool = False
     impacto_poblacion: list[ImpactoPoblacion] = []
     necesidad_primera_respuesta: PrimeraRespuesta | None = None
     establecimientos_salud: list[EstablecimientoSalud] | None = None

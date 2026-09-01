@@ -4,7 +4,7 @@ from ..dependencies import get_current_user
 from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
-from .schemas import EdanCreate, EdanUpdate, ConsolidarIn, EdanSyncIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate
+from .schemas import EdanCreate, EdanUpdate, ConsolidarIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate
 from .utils import require_rol, db_error
 from ..auth.permisos import module_permiso
 
@@ -231,44 +231,6 @@ def consolidar_pendientes(
                            data=data, total=len(data))
 
 
-@router.post("/sync", tags=[TAG_EDAN],
-             responses={200: {"model": SuccessResponse}},
-             summary="Sincronizar EDANs (push desde móvil)",
-             description="Recibe un lote de EDANs desde la app móvil. Por cada EDAN ejecuta un upsert.\n\n"
-                         "La respuesta devuelve por fila: `aplicado`, `id_local`, `id_edan`, `conflicto`, "
-                         "`tombstone`, `data`, `error`.")
-def sync_push(data: EdanSyncIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    uid = _user["id_usuario"]
-    results = []
-    for e in data.edans:
-        try:
-            results.append(service.sync_upsert(db, e.model_dump(), uid))
-        except Exception as exc:
-            db.rollback()
-            results.append({
-                "id_local": e.id_local, "sincronizado": False, "aplicado": False,
-                "error": db_error(exc).detail,
-            })
-    return SuccessResponse(message="EDANs sincronizados correctamente", data=results)
-
-
-@router.get("/sync/pull", tags=[TAG_EDAN],
-            responses={200: {"model": SuccessResponse}},
-            summary="Descargar EDANs para móvil (pull)",
-            description="Devuelve los EDANs del usuario. El móvil usa esto para convergencia offline-first.\n\n"
-                        "Query `fecha_desde` (ISO timestamp) filtra por `fecha_modificacion >= fecha_desde`\n"
-                        "para sincronización incremental.")
-def sync_pull(
-    id_usuario: int | None = Query(None),
-    fecha_desde: str | None = Query(None, description="Solo EDANs modificados después de esta fecha"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.list_edans_sync(db, uid, fecha_desde=fecha_desde, skip=skip, limit=limit)
-    return SuccessResponse(message="EDANs sincronizados correctamente", data=data, total=total)
 
 
 @router.get("/{id}", tags=[TAG_EDAN], summary="Obtener EDAN completo")
