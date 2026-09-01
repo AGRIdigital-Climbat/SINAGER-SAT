@@ -1,8 +1,19 @@
 # SINAGERSAT API — Despliegue y Documentación
 
-Guía completa de la API REST v1.3.2. Incluye despliegue, endpoints, autenticación, roles, permisos y ejemplos.
+Guía completa de la API REST v1.4.0. Incluye despliegue, endpoints, autenticación, roles, permisos y ejemplos.
 
-> **Novedad (v1.3.2):** sync incremental por secciones en `/api/v2` — cabecera primero, luego cada sección como recurso independiente con UPSERT por `id_seccion`, no destructivo y con aislamiento de errores por fila. Las v1 no se modifican. Ver [SINCRONIZACION.md](SINCRONIZACION.md#sincronización-incremental-por-secciones-v2--apiv2).
+> **API v2 disponible:** sync incremental por secciones en `/api/v2` — cabecera primero, luego cada sección como recurso independiente con UPSERT por `id_seccion`, no destructivo y con aislamiento de errores por fila. Ver [`EDAN_LOCALIDADES_V2.md`](EDAN_LOCALIDADES_V2.md) y [`DESPLIEGUE_API_V2.md`](DESPLIEGUE_API_V2.md).
+
+### URLs de documentación
+
+| URL | Contenido |
+|-----|-----------|
+| `http://localhost:8000/docs` | Selección v1 / v2 |
+| `http://localhost:8000/docs/v1` | Swagger UI API v1 (legacy) |
+| `http://localhost:8000/docs/v2` | Swagger UI API v2 (recomendada) |
+| `http://localhost:8000/openapi.json` | OpenAPI v1+v2 completo |
+| `http://localhost:8000/openapi.v1.json` | OpenAPI solo v1 |
+| `http://localhost:8000/openapi.v2.json` | OpenAPI solo v2 |
 
 ---
 

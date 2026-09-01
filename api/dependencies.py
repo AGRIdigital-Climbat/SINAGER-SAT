@@ -5,7 +5,11 @@ from .database import get_db
 from .auth.jwt import verify_token
 from sqlalchemy import text
 
-security = HTTPBearer()
+security = HTTPBearer(
+    scheme_name="JWT",
+    description="Token JWT obtenido del endpoint `/api/v1/auth/login` o `/api/v2/auth/login`. Formato: `Bearer <token>`",
+    auto_error=True,
+)
 
 
 def get_current_user(

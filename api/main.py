@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -161,6 +162,8 @@ async def get_openapi_v1():
         "info": {"title": "SINAGERSAT API v1", "version": "1.4.0", "description": "API v1 (legacy)"},
         "paths": v1_paths,
         "tags": _collect_tags(v1_paths),
+        "components": full.get("components", {}),
+        "security": full.get("security", []),
     }
 
 
@@ -173,6 +176,8 @@ async def get_openapi_v2():
         "info": {"title": "SINAGERSAT API v2", "version": "1.4.0", "description": "API v2 (EDAN por secciones + EDAN cabecera + auth/shared/upload)"},
         "paths": v2_paths,
         "tags": _collect_tags(v2_paths),
+        "components": full.get("components", {}),
+        "security": full.get("security", []),
     }
 
 
@@ -334,5 +339,3 @@ def root():
 def health():
     return {"status": "ok"}
 
-
-import json
