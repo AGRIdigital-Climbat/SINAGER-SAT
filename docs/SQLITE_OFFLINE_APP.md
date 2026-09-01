@@ -152,6 +152,90 @@ CREATE TABLE foto_pendiente (
 );
 ```
 
+### 2.4 Cómo se conectan las secciones con la cabecera offline (puente hacia el servidor)
+
+**El problema.** En línea, cada sección cuelga de la cabecera por
+`id_edan_localidad` (int que asigna el servidor):
+```
+edan_localidades (id_edan_localidad=337)
+   ├── edan_localidades_danos_viales          (id_edan_localidad=337)
+   └── edan_localidades_unidades_educativas   (id_edan_localidad=337)
+```
+Pero **offline** ese id aún **no existe** (el servidor no ha respondido). No se
+puede usar como llave de relación local.
+
+**Cadena de identidad local por UUID.** El SQLite usa dos claves que **la propia
+app genera y no dependen del servidor**:
+- `id_local` (UUID) → identidad estable de la **cabecera**.
+- `id_seccion` (UUID) → identidad estable de **cada fila de sección**.
+
+Cada fila de sección local guarda `id_local` como **FK puente** a su cabecera, y
+un `id_edan_localidad` que empieza en **NULL**:
+```
+localidad (id_local='aaa...')
+   ├── seccion_danos_viales       (id_seccion='x1', id_local='aaa...', id_edan_localidad=NULL)
+   └── seccion_unidades_educativas(id_seccion='x2', id_local='aaa...', id_edan_localidad=NULL)
+```
+La relación local es `seccion.id_local → localidad.id_local`. Así, sin red, se
+sabe qué secciones pertenecen a qué formulario.
+
+**El puente (acople único).** Al subir la cabecera:
+```
+POST /localidades/cabecera  { id_local:'aaa...', ... }
+   → el servidor crea la localidad y responde  id_edan_localidad: 337
+```
+La app entonces:
+1. Guarda `id_edan_localidad=337` en la fila `localidad`.
+2. **Propaga el mismo valor a todas sus secciones** por `id_local`:
+   ```sql
+   UPDATE seccion_danos_viales        SET id_edan_localidad = 337 WHERE id_local = 'aaa...';
+   UPDATE seccion_unidades_educativas SET id_edan_localidad = 337 WHERE id_local = 'aaa...';
+   -- ... repetir para las 14 tablas de sección
+   ```
+3. Marca `pendiente = 0` en la cabecera.
+
+A partir de ahí, **local y servidor quedan idénticos**: cada sección lleva el
+mismo `id_edan_localidad`, y `id_seccion` es la misma clave en ambos lados.
+
+**Por qué el servidor acepta ambas referencias.** El backend (`_resolve_localidad_id`)
+permite subir secciones con `id_edan_localidad` (int) **o** con `id_local` (UUID),
+resolviendo él mismo la correspondencia. Por eso el **orden del push importa**:
+cabecera primero (para obtener y propagar el id), secciones después.
+
+**Diagrama del puente.**
+```
+OFFLINE (SQLite local)
+ id_local='aaa...' (UUID, genera la app)
+   ├─ seccion x1 (id_seccion='x1', id_local='aaa...', id_edan_localidad=NULL)
+   ├─ seccion x2 (id_seccion='x2', id_local='aaa...', id_edan_localidad=NULL)
+   └─ ...14
+      │
+      │  PUSH (ordenado)
+      ▼
+ 1. POST /cabecera {id_local:'aaa...'}  ──►  servidor responde id_edan_localidad=337
+      │
+      │  "nodo de puente": UPDATE todas las secciones
+      │  SET id_edan_localidad=337 WHERE id_local='aaa...'
+      ▼
+ 2. POST /foto/subir  (carrete)         ──►  path_servidor
+ 3. POST /337/{seccion} ×14             ──►  cada una sube con id_edan_localidad=337
+      │
+      ▼
+ONLINE (servidor)
+ edan_localidades (id_edan_localidad=337)
+   ├── danos_viales       (id_edan_localidad=337)
+   └── unidades_educativas(id_edan_localidad=337)
+```
+
+**Reglas del diseño.**
+- La unión local es por `id_local` (UUID); `id_edan_localidad` es el relleno final.
+- El puente se hace **una sola vez**, cuando la cabecera responde el id, y se
+  propaga a todas las secciones hijas.
+- `id_seccion` **no cambia** entre offline y online: es la misma clave, por eso el
+  UPSERT del servidor coincide (INSERT nuevo vs UPDATE del mismo).
+- `id_local` es **estable para siempre** (se genera al crear y nunca se modifica);
+  sirve de llave de reconciliación entre dispositivos.
+
 ---
 
 ## 3. Mapa de tablas de sección (backend real)
@@ -234,7 +318,12 @@ async function sync() {
   // Fase 1: cabeceras pendientes
   for (const loc of await db.localidad.where(pendiente=1)) {
     const r = await post('/edan/localidades/cabecera', loc);
+    // PUENTE offline → online: guardar el id y PROPAGARLO a todas sus secciones
     await db.localidad.update(loc.id_local, { id_edan_localidad: r.id_edan_localidad, pendiente: 0 });
+    for (const [tabla] of SECCIONES) {
+      await db[tabla].where({ id_local: loc.id_local })
+                      .update({ id_edan_localidad: r.id_edan_localidad });
+    }
     loc.id_edan_localidad = r.id_edan_localidad;
   }
 
