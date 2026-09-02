@@ -45,7 +45,7 @@ TAG_DANOS_PECUARIOS = "EDAN_LOCALIDADES > Danos Pecuario"
 TAG_INFRA_PRODUCTIVA = "EDAN_LOCALIDADES > Infra Productiva"
 TAG_PROTECCION = "EDAN_LOCALIDADES > Proteccion"
 TAG_NECESIDAD_HUMANITARIA = "EDAN_LOCALIDADES > Necesidades Humanitarias"
-TAG_DOCUMENTO = "EDAN_LOCALIDADES > Documento"
+TAG_DOCUMENTO = "EDAN_LOCALIDADES > edan_local_completo"
 
 ROLES_LOCALES = (6, 7)  # UGR municipio + Responsable local
 
@@ -150,30 +150,33 @@ def obtener_localidad_completa(id_localidad: str,
 
 
 # ----------------------------------------------------------------------------
-#  DOCUMENTO COMPLETO (grupo exclusivo v2) — sync simétrico
-#  GET  /documento  → descarga la localidad como documento completo
-#                     (modo comprimido: solo secciones con datos + fechas).
-#  POST /documento  → crea la localidad a partir del documento (id_local key).
-#  PUT  /documento  → actualiza una localidad existente desde el documento.
-#  Cada sección lleva su fecha_modificacion (LWW); el doc trae la top-level.
+#  LOCALIDAD COMPLETA / TODO-EN-UNO (grupo exclusivo v2) — sync simétrico, SIEMPRE compacto.
+#  GET  /documento          → descarga la localidad completa (solo secciones true + fechas).
+#  POST /documento          → crea la localidad a partir del JSON (id_local key).
+#  PUT  /documento          → actualiza una localidad existente desde el JSON.
+#  SIEMPRE COMPACTO: la salida muestra solo las secciones con imp_*=true o con datos;
+#  la entrada recibe las true. No existe modo completo/extendido.
+#  Cada sección lleva su fecha_modificacion (LWW); el JSON trae la top-level.
 # ----------------------------------------------------------------------------
 
 @router.get("/localidades/{id_localidad}/documento",
             tags=[TAG_EDAN_LOCALIDADES, TAG_DOCUMENTO],
             response_model=SuccessResponse,
             responses={200: {"model": LocalidadDocumentoResponse}},
-            summary="Obtener localidad como DOCUMENTO completo (sync simétrico v2)",
-            description="Devuelve la localidad como un JSON simétrico listo para reenviar en "
-                        "POST/PUT /documento. Incluye cabecera + 23 flags `imp_*` + SOLO las "
+            summary="Obtener localidad completa (todo en uno, siempre compacto)",
+            description="Devuelve la localidad como un JSON simétrico ready-to-send para "
+                        "POST/PUT /documento. Include cabecera + 23 flags `imp_*` + SOLO las "
                         "secciones con datos (11 array + 3 objeto), cada una con su "
                         "`fecha_modificacion` (LWW por fila) y la `fecha_modificacion` top-level.\n\n"
-                        "**Modo offline:** `id_localidad` puede ser `id_local` (UUID) o `id_edan_localidad` (int).")
+                        "**SIEMPRE COMPACTO:** la salida muestra solo las secciones con `imp_*=true` "
+                        "o con datos; las `false`/vacías se omiten. `id_localidad` acepta `id_local` (UUID) "
+                        "o `id_edan_localidad` (int).")
 def obtener_documento(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     id_edan = service._resolve_localidad_id(db, id_localidad)
     result = service.serialize_document(db, id_edan)
     if not result:
         raise HTTPException(status_code=404, detail=f"Localidad {id_localidad} no encontrada")
-    return SuccessResponse(message="Documento de localidad obtenido correctamente", data=result)
+    return SuccessResponse(message="Localidad completa obtenida correctamente", data=result)
 
 
 @router.post("/localidades/documento", status_code=201,
@@ -181,12 +184,13 @@ def obtener_documento(id_localidad: str, db: Session = Depends(get_db), _user=De
              dependencies=[Depends(require_rol(*ROLES_LOCALES))],
              response_model=SuccessResponse,
              responses={201: {"model": LocalidadDocumentoResponse}},
-             summary="Crear localidad desde DOCUMENTO completo (sync simétrico v2)",
-             description="Crea la localidad (cabecera + flags + secciones) desde un solo documento. "
+             summary="Crear localidad completa (todo en uno, siempre compacto)",
+             description="Crea la localidad (cabecera + flags + secciones) desde un solo JSON. "
                          "`id_local` (UUID offline) es la clave de dedupe: si ya existe, actualiza; "
-                         "si no, crea. La sección solo se procesa si viene en el doc (flag `imp_*`=true).\n\n"
-                         "**Fotos:** no van inline; subir binarios primero con `/localidades/foto/subir` "
-                         "y enviar el `path` devuelto en `fotografia` de cada sección.\n\n"
+                         "si no, crea. Solo se procesan las secciones enviadas (flag `imp_*`=true).\n\n"
+                         "**SIEMPRE COMPACTO:** se envía lo `true`; las secciones no enviadas (false) "
+                         "no se recrean ni se tocan. **Fotos:** no van inline; subir binarios primero con "
+                         "`/localidades/foto/subir` y enviar el `path` devuelto en `fotografia`.\n\n"
                          "**Forma fija:** las 11 secciones 1:N aceptan objeto único o array (se normalizan "
                          "a array); las 3 secciones 1:1 (primera-respuesta, necesidad-salud, "
                          "necesidad-humanitaria) reciben UN solo objeto (array de >1 → 400).")
@@ -201,7 +205,7 @@ def crear_documento(data: LocalidadCreate, db: Session = Depends(get_db), _user=
     except Exception as e:
         db.rollback()
         raise db_error(e)
-    return SuccessResponse(message="Localidad creada desde documento correctamente", data=result)
+    return SuccessResponse(message="Localidad creada correctamente", data=result)
 
 
 @router.put("/localidades/{id_localidad}/documento",
@@ -209,11 +213,11 @@ def crear_documento(data: LocalidadCreate, db: Session = Depends(get_db), _user=
             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
             response_model=SuccessResponse,
             responses={200: {"model": LocalidadDocumentoResponse}},
-            summary="Actualizar localidad desde DOCUMENTO completo (sync simétrico v2)",
-            description="Aplica el documento sobre una localidad existente: cabecera + flags + secciones. "
+            summary="Actualizar localidad completa (todo en uno, siempre compacto)",
+            description="Aplica el JSON sobre una localidad existente: cabecera + flags + secciones. "
                         "Cada sección con UPSERT por `id_seccion` y LWW (`GREATEST` de `fecha_modificacion`). "
-                        "Las secciones ausentes en el doc se dejan intactas (no destructivo).\n\n"
-                        "**Forma fija / fotos / 400 en 1:1:** igual que POST /documento.")
+                        "Las secciones ausentes en el JSON se dejan intactas (no destructivo).\n\n"
+                        "**SIEMPRE COMPACTO / Forma fija / fotos / 400 en 1:1:** igual que POST /documento.")
 def actualizar_documento(id_localidad: str, data: LocalidadCreate,
                          db: Session = Depends(get_db), _user=Depends(get_current_user)):
     id_edan = service._resolve_localidad_id(db, id_localidad)

@@ -1,12 +1,17 @@
-# Documento completo EDAN v2 — sync todo-en-uno
+# Localidad completa EDAN v2 — sync todo en uno (SIEMPRE compacto)
 
 > **Documento GLOBAL.** Este es el flujo recomendado para la app/web actual.
 > Reemplaza la sincronización sección por sección (ver `SQLITE_OFFLINE_APP.md`)
-> por **UN solo documento JSON** que viaja completo en cada dirección: el
+> por **UN solo JSON de la localidad completa** que viaja en cada dirección: el
 > servidor lo descarga (`GET /documento`) y la app lo sube (`POST` o `PUT /documento`).
 > Es **simétrico**: lo que el GET devuelve, el PUT lo acepta.
+>
+> **SIEMPRE COMPACTO:** no existe modo completo/extendido. La **salida** (`GET`)
+> muestra **solo las secciones con `imp_*=true` o con datos** (las `false`/vacías
+> se omiten); la **entrada** (`POST`/`PUT`) **recibe** las secciones `true` y las
+> que no se envían (false) no se recrean ni se tocan.
 
-## 1. Endpoints (grupo Swagger *EDAN_LOCALIDADES > Documento*)
+## 1. Endpoints (grupo Swagger *EDAN_LOCALIDADES > edan_local_completo*)
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -40,6 +45,8 @@ DEBE emitir y esperar estas formas:
 
 El documento trae los flags `imp_*` (9 legacy + 14 por sección). Regla:
 
+- **SIEMPRE COMPACTO:** el JSON **solo viaja con las secciones `true` o con datos**;
+  las `false`/vacías se omiten de la salida y no se envían en la entrada.
 - **Sección presente** en el JSON → se procesa (con o sin flag).
 - **flag true + sin datos** → normal (p. ej. se marcó "hay daños en viales" pero
   aún no se ingresan filas). No rompe nada.
