@@ -234,6 +234,31 @@ def actualizar_documento(id_localidad: str, data: LocalidadCreate,
     return SuccessResponse(message="Localidad actualizada desde documento correctamente", data=result)
 
 
+@router.delete("/localidades/{id_localidad}/documento",
+               tags=[TAG_EDAN_LOCALIDADES, TAG_DOCUMENTO],
+               dependencies=[Depends(require_rol(*ROLES_LOCALES))],
+               response_model=MessageResponse,
+               summary="Eliminar localidad completa (todo en uno)",
+               description="Elimina FÍSICAMENTE la localidad completa (cabecera + flags + todas las "
+                           "secciones) del documento todo-en-uno v2. Acepta `id_localidad` como "
+                           "`id_edan_localidad` (int) o `id_local` (UUID).\n\n"
+                           "**Regla de negocio:** SOLO se puede borrar si la localidad es HUÉRFANA "
+                           "(id_edan NULL). Si está consolidada en un EDAN (id_edan NOT NULL) la API "
+                           "responde 403: debe eliminarse con `DELETE /edan/{id}/localidades/{id_localidad}`.")
+def eliminar_documento(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    try:
+        service.delete_document(db, id_localidad)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise db_error(e)
+    return MessageResponse(message="Localidad eliminada correctamente")
+
+
 # ----------------------------------------------------------------------------
 #  1) CABECERA — 1er paso del flujo (crea/actualiza solo la cabecera)
 # ----------------------------------------------------------------------------

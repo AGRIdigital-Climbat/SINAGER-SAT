@@ -18,10 +18,14 @@
 | `GET`  | `/api/v2/edan/localidades/{id_localidad}/documento` | Descarga la localidad completa |
 | `POST` | `/api/v2/edan/localidades/documento` | Crea una localidad nueva desde el documento |
 | `PUT`  | `/api/v2/edan/localidades/{id_localidad}/documento` | Actualiza una localidad existente |
+| `DELETE` | `/api/v2/edan/localidades/{id_localidad}/documento` | Elimina físicamente la localidad completa (solo huérfanas) |
 
 - `id_localidad` acepta el `id_local` (UUID offline) **o** el `id_edan_localidad` (int).
 - `POST` usa `id_local` como clave de dedupe: si ya existe, **actualiza**; si no, **crea**.
 - `PUT` **nunca crea**: fuerza la localidad indicada en el path (evita duplicados).
+- `DELETE` **solo borra si la localidad es huérfana** (`id_edan` NULL). Si está
+  consolidada en un EDAN responde **403** (debe eliminarse con
+  `DELETE /edan/{id}/localidades/{id_localidad}`).
 
 ## 2. Contrato simétrico → FORMA FIJA por sección
 
@@ -190,6 +194,35 @@ Comportamiento LWW observable:
   guardada a las `14:15` → **datos se actualizan**, pero la `fecha_modificacion`
   **se mantiene en 14:15** (no retrocede).
 - Enviar con fecha **más nueva** → fecha y datos **se adoptan**.
+
+### 5.4 `DELETE /localidades/{id_localidad}/documento` — eliminar la localidad completa
+
+Elimina **físicamente** la localidad (cabecera + flags + **todas** sus secciones).
+Acepta `id_edan_localidad` (int) o `id_local` (UUID).
+
+```bash
+curl -X DELETE -H "Authorization: Bearer <TOKEN>" \
+  http://host:8000/api/v2/edan/localidades/340/documento
+
+# también por id_local (UUID)
+curl -X DELETE -H "Authorization: Bearer <TOKEN>" \
+  http://host:8000/api/v2/edan/localidades/SINAGER-340-ABC123/documento
+```
+
+Respuesta (éxito):
+
+```json
+{ "message": "Localidad eliminada correctamente", "id": null }
+```
+
+**Regla de negocio (importante):** solo se borra si la localidad es **huérfana**
+(`id_edan` NULL). Si está **consolidada** en un EDAN, la API responde **403**:
+
+```json
+{
+  "detail": "La localidad está consolidada en un EDAN (id_edan) y no se puede eliminar desde el documento. Elimínela con `DELETE /edan/{id}/localidades/{id_localidad}`."
+}
+```
 
 ## 6. Errores (HTTP 400) ejemplo
 

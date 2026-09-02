@@ -3095,6 +3095,31 @@ def apply_document(db: Session, id_localidad: int | None, doc: dict,
     return result
 
 
+def delete_document(db: Session, id_localidad: str) -> None:
+    """Elimina físicamente una localidad completa (todo-en-uno) por DELETE versión 2.
+
+    Acepta `id_localidad` como `id_edan_localidad` (int) o `id_local` (UUID),
+    igual que GET/PUT /documento. Regla de negocio:
+    - Si la localidad NO existe → HTTP 400 (via _resolve_localidad_id).
+    - Si está CONSOLIDADA en un EDAN (id_edan NOT NULL) → NO se permite borrar:
+      se responde 400/403 para que se elimine desde `DELETE /edan/{id}/localidades/{id}`.
+    - Si es huérfana (id_edan NULL) → borrado físico (localidad + todas sus secciones).
+    """
+    id_edan_localidad = _resolve_localidad_id(db, id_localidad)
+    row = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+               {"id": id_edan_localidad})
+    if row and row["id_edan"] is not None:
+        from fastapi import HTTPException as _H
+        raise _H(
+            status_code=403,
+            detail="La localidad está consolidada en un EDAN (id_edan) y no se puede eliminar "
+                   "desde el documento. Elimínela con `DELETE /edan/{id}/localidades/{id_localidad}`."
+        )
+    if not delete_localidad(db, id_edan_localidad):
+        raise ValueError(f"No se pudo eliminar la localidad id_edan_localidad={id_edan_localidad}")
+    return None
+
+
 # ============================================================================
 #  REPORTES AGREGADOS
 # ============================================================================
