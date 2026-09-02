@@ -168,6 +168,7 @@ def _impacto_poblacion(db, id_localidad):
             "heridos": ip["heridos"],
             "desaparecidos": ip["desaparecidos"],
             "observaciones": ip["observaciones"] or "",
+            "fecha_modificacion": ip.get("fecha_modificacion"),
         } for ip in rows
     ]
 
@@ -196,6 +197,7 @@ def _grupos_vulnerables(db, id_localidad):
             "apoyo_psicologico": p["apoyo_psicologico"],
             "reposicion_documentos": p["reposicion_documentos"],
             "observaciones": p["observaciones"] or "",
+            "fecha_modificacion": p.get("fecha_modificacion"),
         } for p in rows
     ]
 
@@ -386,6 +388,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
         "salvamento": pr["salvamento"] if pr else False,
         "evacuacion": pr["evacuacion"] if pr else False,
         "observaciones": pr["observaciones"] if pr else "",
+        "fecha_modificacion": pr.get("fecha_modificacion") if pr else None,
     }
     if pr:
         con_datos.add("necesidad_primera_respuesta")
@@ -418,6 +421,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
         "numero_personas": ns["numero_personas"] if ns else 0,
         "otras_necesidades": ns["otras_necesidades"] if ns else "",
         "observaciones": ns["observaciones"] if ns else "",
+        "fecha_modificacion": ns.get("fecha_modificacion") if ns else None,
     }
     if ns:
         con_datos.add("necesidad_salud")
@@ -523,6 +527,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
     else:
         loc["necesidad_humanitaria"] = {k: (False if not k.startswith("obs_") else "")
                                         for k in _NH_FIELDS}
+        loc["necesidad_humanitaria"]["fecha_modificacion"] = None
 
     # Modo comprimido: dejar solo las secciones con datos (los flags siempre quedan)
     if solo_con_datos:
@@ -1328,14 +1333,22 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
     # DEFAULT de la BD; en UPDATE se omiten las columnas ausentes/null (sync
     # no-destructivo a nivel de campo).
     present = [k for k in columns if data.get(k) is not None]
-    
+    # LWW por sección: la app envía su fecha UTC de edición. El servidor adopta
+    # la del cliente si es más nueva que la actual (GREATEST); si no viene,
+    # usa la fecha actual de persistencia.
+    fmod = data.get("fecha_modificacion") if data.get("fecha_modificacion") else None
+    f_ph = ":fmod" if fmod else "NOW()"
+    f_val = {"fmod": fmod} if fmod else {}
+
     if id_seccion:
         # UPSERT sin ON CONFLICT: primero UPDATE por id_seccion; si la fila no
         # existe, INSERT (los campos ausentes toman el DEFAULT de la BD).
         params = {"id_sec": id_seccion, "id_loc": data["_id"]}
         if present:
             update_set = ", ".join(f"{k} = :{k}" for k in present)
+            update_set += f", fecha_modificacion = GREATEST(fecha_modificacion, {f_ph})"
             params |= {k: data[k] for k in present}
+            params |= f_val
             result = db.execute(
                 text(f"""
                     UPDATE edan.{table} SET {update_set}
@@ -1347,21 +1360,23 @@ def _insert_single_row(db: Session, table: str, columns: list[str], data: dict,
         else:
             result = None
         if not result:
-            cols = ", ".join(["id_seccion"] + present)
-            ph = ", ".join([":id_seccion"] + [f":{k}" for k in present])
+            cols = ", ".join(["id_seccion"] + present + ["fecha_modificacion"])
+            ph = ", ".join([":id_seccion"] + [f":{k}" for k in present] + [f_ph])
             result = db.execute(
                 text(f"""
                     INSERT INTO edan.{table} (id_edan_localidad, {cols})
                     VALUES (:id, {ph})
                     RETURNING *
                 """),
-                {"id": data["_id"], "id_seccion": id_seccion} | {k: data[k] for k in present},
+                {"id": data["_id"], "id_seccion": id_seccion}
+                | {k: data[k] for k in present}
+                | f_val,
             ).mappings().first()
     else:
         # INSERT normal (compatibilidad con código existente)
-        cols = ", ".join(present)
-        ph = ", ".join(f":{k}" for k in present)
-        params = {"id": data["_id"]} | {k: data[k] for k in present if k != "id_edan_localidad"}
+        cols = ", ".join(present + ["fecha_modificacion"])
+        ph = ", ".join([f":{k}" for k in present] + [f_ph])
+        params = {"id": data["_id"]} | {k: data[k] for k in present if k != "id_edan_localidad"} | f_val
         result = db.execute(
             text(f"""
                 INSERT INTO edan.{table} (id_edan_localidad, {cols})
@@ -1534,29 +1549,35 @@ def _upsert_11(db: Session, table: str, id_localidad: int, data: dict,
     insert_cols = columns
     vals = {k: (data.get(k) if data.get(k) is not None else value_defaults.get(k, False))
             for k in insert_cols}
+    # LWW por sección 1:1 (misma regla que _insert_single_row).
+    fmod = data.get("fecha_modificacion") if data.get("fecha_modificacion") else None
+    f_ph = ":fmod" if fmod else "NOW()"
+    f_val = {"fmod": fmod} if fmod else {}
 
     row = None
     if id_seccion:
         if present:
             update_set = ", ".join(f"{k} = :{k}" for k in present)
+            update_set += f", fecha_modificacion = GREATEST(fecha_modificacion, {f_ph})"
             params = {"id_sec": id_seccion, "id_loc": id_localidad,
-                      **{k: data[k] for k in present}}
+                      **{k: data[k] for k in present}, **f_val}
             row = db.execute(text(f"""
                 UPDATE edan.{table} SET {update_set}
                 WHERE id_seccion = :id_sec AND id_edan_localidad = :id_loc
                 RETURNING *
             """), params).mappings().first()
         if not row:
-            all_cols = ["id_seccion"] + insert_cols
+            all_cols = ["id_seccion"] + insert_cols + ["fecha_modificacion"]
             row = db.execute(text(f"""
                 INSERT INTO edan.{table} (id_edan_localidad, {", ".join(all_cols)})
-                VALUES (:id, :id_seccion, {", ".join(f":{k}" for k in insert_cols)})
+                VALUES (:id, :id_seccion, {", ".join(f":{k}" for k in insert_cols)}, {f_ph})
                 RETURNING *
-            """), {"id": id_localidad, "id_seccion": id_seccion, **vals}).mappings().first()
+            """), {"id": id_localidad, "id_seccion": id_seccion, **vals, **f_val}).mappings().first()
     else:
         if present:
             update_set = ", ".join(f"{k} = :{k}" for k in present)
-            params = {"id_loc": id_localidad, **{k: data[k] for k in present}}
+            update_set += f", fecha_modificacion = GREATEST(fecha_modificacion, {f_ph})"
+            params = {"id_loc": id_localidad, **{k: data[k] for k in present}, **f_val}
             row = db.execute(text(f"""
                 UPDATE edan.{table} SET {update_set}
                 WHERE id_edan_localidad = :id_loc
@@ -1564,10 +1585,10 @@ def _upsert_11(db: Session, table: str, id_localidad: int, data: dict,
             """), params).mappings().first()
         if not row:
             row = db.execute(text(f"""
-                INSERT INTO edan.{table} (id_edan_localidad, {", ".join(insert_cols)})
-                VALUES (:id, {", ".join(f":{k}" for k in insert_cols)})
+                INSERT INTO edan.{table} (id_edan_localidad, {", ".join(insert_cols)}, fecha_modificacion)
+                VALUES (:id, {", ".join(f":{k}" for k in insert_cols)}, {f_ph})
                 RETURNING *
-            """), {"id": id_localidad, **vals}).mappings().first()
+            """), {"id": id_localidad, **vals, **f_val}).mappings().first()
     db.commit()
     _marcar_impacto(db, id_localidad, table)
     db.commit()

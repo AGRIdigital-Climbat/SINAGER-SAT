@@ -13,6 +13,7 @@ class ImpactoPoblacion(BaseModel):
     La fuente de verdad es id_grupo_etario (FK a edan.grupo_etario).
     El campo rango se mantiene solo por compatibilidad de lectura en v1 (calculado)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     id_grupo_etario: int | None = Field(None, description="FK a edan.grupo_etario (recomendado). Si falta, se resuelve por rango/codigo.")
     rango: str | None = Field(None, description="DEPRECATED: usar id_grupo_etario. Solo se acepta para compatibilidad v1 (resolución por nombre).")
     fallecidos: int = Field(0, ge=0)
@@ -24,6 +25,7 @@ class ImpactoPoblacion(BaseModel):
 class PrimeraRespuesta(BaseModel):
     """→ edan.edan_localidades_primera_respuesta (1:1 por localidad)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente)")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     busqueda: bool = False
     salvamento: bool = False
     evacuacion: bool = False
@@ -33,6 +35,7 @@ class PrimeraRespuesta(BaseModel):
 class EstablecimientoSalud(BaseModel):
     """→ edan.edan_localidades_salud_establecimientos (1:N)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     nombre_establecimiento: str = ''
     comunidad: str = ''
     nivel_atencion: str = Field('', description="Ej: '1er Nivel', '2do Nivel', '3er Nivel'")
@@ -49,6 +52,7 @@ class EstablecimientoSalud(BaseModel):
 class NecesidadSalud(BaseModel):
     """→ edan.edan_localidades_salud_necesidades (1:1)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente)")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     numero_personas: int = Field(0, ge=0)
     otras_necesidades: str = ''
     observaciones: str = ''
@@ -57,6 +61,7 @@ class NecesidadSalud(BaseModel):
 class DanoVial(BaseModel):
     """→ edan.edan_localidades_danos_viales (1:N)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     via: bool = Field(False, description="Daño en vía/carretera")
     puente: bool = Field(False, description="Daño en puente")
     tramo: str = ''
@@ -73,6 +78,7 @@ class DanoVial(BaseModel):
 class DanoInfraPublica(BaseModel):
     """→ edan.edan_localidades_danos_infra_publica (1:N)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     comunidad: str = ''
     tipo_estructura: str = Field('', description="Ej: 'Alcaldía', 'Iglesia', 'Plaza'")
     dano_parcial: bool = False
@@ -89,6 +95,7 @@ class ServicioBasicoDetalle(BaseModel):
     'energia_electrica', 'agua_potable', 'alcantarillado', 'gas_domiciliario', 'telecomunicaciones'
     """
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     tipo: str = Field('', description="energia_electrica|agua_potable|alcantarillado|gas_domiciliario|telecomunicaciones")
     dano_parcial: bool = False
     dano_total: bool = False
@@ -102,6 +109,7 @@ class ServicioBasicoDetalle(BaseModel):
 class UnidadEducativa(BaseModel):
     """→ edan.edan_localidades_unidades_educativas (1:N)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     nombre_establecimiento: str = ''
     comunidad: str = ''
     dano_parcial: bool = False
@@ -123,6 +131,7 @@ class DanoVivienda(BaseModel):
     Cantidades de viviendas con daño parcial/total.
     """
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     comunidad: str = ''
     dano_parcial: int = Field(0, ge=0)
     dano_total: int = Field(0, ge=0)
@@ -138,6 +147,7 @@ class DanoAgricultura(BaseModel):
     Si id_cultivo está presente, se vincula al catálogo shared.cultivo.
     """
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     tipo_cultivo: str = ''
     id_cultivo: int | None = Field(None, description="FK a shared.cultivo (opcional)")
     hectareas_afectadas: int = Field(0, ge=0)
@@ -154,6 +164,7 @@ class DanoPecuario(BaseModel):
     Si id_especie está presente, se vincula al catálogo shared.pecuario.
     """
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     especie: str = ''
     id_especie: int | None = Field(None, description="FK a shared.pecuario (opcional)")
     raza: str = ''
@@ -168,6 +179,7 @@ class DanoPecuario(BaseModel):
 class InfraProductiva(BaseModel):
     """→ edan.edan_localidades_infra_productiva (1:N)."""
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     tipo: str = Field('', description="Ej: 'Molino', 'Almacén', 'Tienda comunitaria'")
     dano_parcial: int = Field(0, ge=0)
     dano_total: int = Field(0, ge=0)
@@ -181,6 +193,7 @@ class GrupoVulnerable(BaseModel):
     Ahora vinculado a catálogo edan.grupo_vulnerable via FK.
     """
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente). Ej: '1a0357323cb-659d0c9c3d415'")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     id_grupo_vulnerable: int | None = None  # PK técnica (serial)
     id_grupo_vulnerable_catalogo: int | None = None  # FK a edan.grupo_vulnerable
     grupo: dict | None = None  # { id, codigo, nombre, orden } (catálogo anidado)
@@ -197,6 +210,7 @@ class NecesidadHumanitaria(BaseModel):
     Cada bool indica si se requiere esa ayuda. Cada obs_* es texto libre.
     """
     id_seccion: str | None = Field(None, description="ID único offline (generado por cliente)")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
     alimentos: bool = False
     refugio_vivienda: bool = False
     ropa_cama: bool = False

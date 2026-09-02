@@ -81,6 +81,31 @@ Cada sección repite las columnas del backend más:
 - Banderas: `insertada_en_server` (1 = ya existe en el server, aplicar UPDATE;
   0 = no existe, aplicar INSERT), `marcado_borrar` (1 = imprimir DELETE) y
   `editada` (1 = la fila cambió localmente y falta reenviar).
+- `fecha_modificacion_local` (**ISO 8601 en UTC, texto**): marca de tiempo local de
+  la última edición de **esa fila**. El servidor la usa para la resolución LWW
+  (última escritura gana **por fila**, no por cabecera).
+
+> **Formato de fecha obligatorio (dispositivo / web) para `fecha_modificacion`.**
+> El campo `fecha_modificacion` que el cliente envía en cada sección debe ser un
+> string **ISO 8601 con zona horaria (UTC preferida)**, por ejemplo:
+>
+> ```
+> 2026-09-02T09:15:00Z
+> 2026-09-02T09:15:00.123Z          (con milisegundos)
+> 2026-09-02T09:15:00-04:00         (con offset explícito, se normaliza a UTC)
+> ```
+>
+> Reglas para el cliente:
+> - Generar SIEMPRE el timestamp en **UTC** y con el sufijo `Z` (o un offset
+>   fijo `-04:00`/`-05:00` si el dispositivo no puede UTC) — **nunca** `fecha`
+>   suelta sin zona ni `"YYYY/MM/DD"`.
+> - Guardarlo como texto ISO en la columna local `fecha_modificacion_local`.
+> - Enviarlo intacto en el payload de cada sección (campo `fecha_modificacion`).
+> - Si `fecha_modificacion` **no se envía**, el servidor usa `NOW()`.
+> - El servidor aplica `GREATEST(fecha_modificacion, :enviada)` en el UPDATE: si
+>   el valor enviado es **más viejo** que el guardado, **no** se retrocede la
+>   fecha (la escritura de un dispositivo desactualizado no "adelanta" al que ya
+>   estaba al día), aunque sí aplica el cambio de datos de esa fila.
 
 **Sección 1:N con foto** — ejemplo `seccion_danos_viales`:
 ```sql
@@ -100,6 +125,7 @@ CREATE TABLE seccion_danos_viales (
   coordenada_lat REAL,
   coordenada_lon REAL,
 
+  fecha_modificacion_local TEXT DEFAULT (datetime('now')),
   insertada_en_server INTEGER DEFAULT 0,
   marcado_borrar      INTEGER DEFAULT 0,
   editada             INTEGER DEFAULT 0   -- 1 si la fila cambió localmente (falta reenviar)
@@ -117,6 +143,7 @@ CREATE TABLE seccion_impacto_poblacion (
   heridos       INTEGER,
   desaparecidos INTEGER,
   observaciones TEXT,
+  fecha_modificacion_local TEXT DEFAULT (datetime('now')),
   insertada_en_server INTEGER DEFAULT 0,
   marcado_borrar      INTEGER DEFAULT 0,
   editada             INTEGER DEFAULT 0   -- 1 si la fila cambió localmente (falta reenviar)
@@ -134,6 +161,7 @@ CREATE TABLE seccion_primera_respuesta (
   salvamento   INTEGER,
   evacuacion   INTEGER,
   observaciones TEXT,
+  fecha_modificacion_local TEXT DEFAULT (datetime('now')),
   insertada_en_server INTEGER DEFAULT 0,
   marcado_borrar      INTEGER DEFAULT 0,
   editada             INTEGER DEFAULT 0   -- 1 si la fila cambió localmente (falta reenviar)
@@ -333,15 +361,31 @@ En `modo=comprimido` la respuesta trae la cabecera + los **22 flags `imp_*`**
 (la app los usa para saber qué secciones habilitar/mostrar) + **solo las
 secciones que tienen datos**. No trae las secciones vacías (`[]`/defaults), por
 eso es el modo recomendado para refrescar la lista sin payload pesado.
+Además, **cada sección que llega incluye su `fecha_modificacion`** (y la cabecera
+la suya) para que la app pueda comparar fecha a fecha por fila.
 
 > `modo=completo` (default) trae las 14 secciones siempre; solo útil para
 > editar. En el flujo de caché de la app se recomienda **siempre
 > `modo=comprimido`** para minimizar datos.
 
-La app compara por `id_seccion` (y `id_local`) y aplica los cambios venidos del
-servidor (ej. consolidación de UGR u otras PC). Última escritura gana. Al aplicar
-un registro remoto se marca `insertada_en_server=1` y `editada=0` (ya está al
-día); si la local viene de un cambio local sin enviar (`editada=1`), se conserva
+La app compara **fila por fila** usando `id_seccion` (y `id_local`) y aplica
+**LWW (última escritura gana) por fecha de esa fila**:
+
+1. **No se borra la tabla entera en cada pull.** Solo se reconcilian los
+   registros vistos en esta respuesta.
+2. Para cada sección traída, se hace el UPSERT normal por `id_seccion`:
+   - Fila local con `editada=0` (sin cambios pagados): se **reemplaza** por la
+     versión del servidor (que ya va al día).
+   - Fila local con `editada=1` (cambio local sin enviar): se **conserva** local
+     y se **compara** `fecha_modificacion_local` vs `fecha_modificacion` del server:
+     - si la local es **más nueva** → se deja la local (`editada=1`) y el próximo
+       push la manda; el server hará `GREATEST` y quedará la mayor.
+     - si la del server es **igual o más nueva** → se sobrescribe con la del server
+       (`insertada_en_server=1`, `editada=0`).
+3. El flag `editada` de una fila remota recién aplicada siempre queda `0`.
+
+Al aplicar un registro remoto al día se marca `insertada_en_server=1` y
+`editada=0`; si la local viene de un cambio sin enviar (`editada=1`) se conserva
 ese flag para subirse en el próximo push.
 
 ---
@@ -379,7 +423,8 @@ async function sync() {
     //  editada=1  → cambió localmente       insertada_en_server=0 → nueva
     const filas = await db[tabla].where(editada=1 OR insertada_en_server=0);
     for (const item of filas) {
-      const payload = armarPayload(item);      // poner fotografia=path_servidor y GPS
+      const payload = armarPayload(item);   // poner fotografia=path_servidor y GPS
+      payload.fecha_modificacion = item.fecha_modificacion_local;  // ISO UTC (LWW)
       await post(`/edan/localidades/${item.id_edan_localidad}/${nombreSeccion}`,
                  payload.length===1 ? payload[0] : payload);
       // Tras el 2xx: ya está en el servidor y sin cambios pendientes
@@ -410,9 +455,17 @@ async function sync() {
   devuelven cabecera + los 22 flags `imp_*` + **solo las secciones con datos**
   (se omiten las vacías). Los flags siempre vienen para que la app sepa qué
   secciones habilitar; no es necesario traer las secciones `false`.
+  **Cada sección que se incluye trae su `fecha_modificacion`**, y la cabecera
+  trae la suya, para que la app resuelva **por fila** (LWW) en el pull.
 - **Push selectivo (`editada`/`pendiente`):** solo se suben al servidor las
   cabeceras con `pendiente=1` y las filas de sección con `editada=1`,
   `insertada_en_server=0` o `marcado_borrar=1`. Así no se reenvía todo: si hay
   15 filas y se editaron 3, se envían solo esas 3, evitando datos en blanco.
+- **Formato de `fecha_modificacion` (obligatorio):** el dispositivo/web envía la
+  marca de tiempo de cada sección como **string ISO 8601 con zona horaria**
+  (`2026-09-02T09:15:00Z`, o con offset `-04:00`), siempre en UTC preferida. El
+  servidor hace `GREATEST(fecha_modificacion, :enviada)` en el UPDATE, por lo que
+  una fecha enviada **más vieja** que la guardada **no retrocede** la fecha. Si no
+  se envía, el servidor usa `NOW()`.
 - Todo este modelo asume el **Modelo A (por secciones)**; el Modelo B (`/sync`)
   fue eliminado del v2.
