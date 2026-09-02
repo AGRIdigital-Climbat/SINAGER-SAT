@@ -2893,7 +2893,9 @@ def list_mis_edans_estados(db: Session, id_usuario: int, skip: int = 0, limit: i
 
 
 def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int = 50,
-                       solo_huerfanas: bool | None = None, solo_con_datos: bool = False):
+                       solo_huerfanas: bool | None = None, solo_con_datos: bool = False,
+                       id_departamento: int | None = None,
+                       id_municipio: int | None = None):
     """Lista TODAS las localidades del usuario (huérfanas + consolidadas).
 
     Args:
@@ -2903,17 +2905,29 @@ def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int 
                         Si None, devuelve todas.
         solo_con_datos: True (modo comprimido) → cada localidad sale con los 22
                         flags y SOLO las secciones que tienen datos.
+        id_departamento: Filtrar por departamento.
+        id_municipio: Filtrar por municipio.
     """
     where_extra = ""
     if solo_huerfanas is True:
         where_extra = "AND l.id_edan IS NULL"
     elif solo_huerfanas is False:
         where_extra = "AND l.id_edan IS NOT NULL"
+    if id_departamento is not None:
+        where_extra += " AND l.id_departamento = :id_departamento"
+    if id_municipio is not None:
+        where_extra += " AND l.id_municipio = :id_municipio"
+
+    params = {"uid": id_usuario}
+    if id_departamento is not None:
+        params["id_departamento"] = id_departamento
+    if id_municipio is not None:
+        params["id_municipio"] = id_municipio
 
     total = db.execute(text(f"""
         SELECT COUNT(*) FROM edan.edan_localidades l
         WHERE l.id_usuario = :uid {where_extra}
-    """), {"uid": id_usuario}).scalar()
+    """), params).scalar()
     rows = _rows(db, f"""
         SELECT l.*,
                te.nombre AS tipo_evento_nombre,
@@ -2934,8 +2948,151 @@ def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int 
         WHERE l.id_usuario = :uid {where_extra}
         ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
         LIMIT :limit OFFSET :skip
-    """, {"uid": id_usuario, "limit": limit, "skip": skip})
+    """, {**params, "limit": limit, "skip": skip})
     return [_build_localidad(db, r["id_edan_localidad"], solo_con_datos=solo_con_datos) for r in rows], total
+
+
+# ============================================================================
+#  DOCUMENTO (grupo exclusivo v2): serializar/deserializar la localidad COMPLETA
+#  como un JSON simétrico (GET devuelve lo que POST/PUT aceptan).
+#  - Secciones SOLO presentes si su flag imp_* = true (o hay datos).
+#  - Forma fija: 11 secciones SIEMPRE array (aunque haya 1 solo), 3 SIEMPRE objeto.
+#  - LWW por fila de sección + fecha_modificacion top-level (cabecera).
+# ============================================================================
+
+# key de _build_localidad -> (forma, tabla backend, create_fn, flag 1:1).
+# Las 14 claves coinciden con SECCION_KEYS.
+DOCUMENT_SECCION: dict[str, dict] = {
+    "impacto_poblacion":            {"forma": "array",  "tabla": "edan_localidades_impacto_poblacion",           "create": create_impacto_poblacion},
+    "establecimientos_salud":       {"forma": "array",  "tabla": "edan_localidades_salud_establecimientos",      "create": create_establecimiento_salud},
+    "danos_viales":                 {"forma": "array",  "tabla": "edan_localidades_danos_viales",                "create": create_dano_vial},
+    "danos_infra_publica":          {"forma": "array",  "tabla": "edan_localidades_danos_infra_publica",         "create": create_dano_infra_publica},
+    "servicios_basicos":            {"forma": "array",  "tabla": "edan_localidades_servicios_basicos",           "create": create_servicio_basico},
+    "unidades_educativas":          {"forma": "array",  "tabla": "edan_localidades_unidades_educativas",         "create": create_unidad_educativa},
+    "danos_vivienda":               {"forma": "array",  "tabla": "edan_localidades_danos_vivienda",              "create": create_dano_vivienda},
+    "danos_agricultura":            {"forma": "array",  "tabla": "edan_localidades_danos_agricultura",           "create": create_dano_agricultura},
+    "danos_pecuarios":              {"forma": "array",  "tabla": "edan_localidades_danos_pecuario",              "create": create_dano_pecuario},
+    "infra_productiva":             {"forma": "array",  "tabla": "edan_localidades_infra_productiva",            "create": create_infra_productiva},
+    "proteccion":                   {"forma": "array",  "tabla": "edan_localidades_proteccion",                  "create": create_proteccion},
+    "necesidad_primera_respuesta":  {"forma": "objeto", "tabla": "edan_localidades_primera_respuesta",           "create": create_primera_respuesta},
+    "necesidad_salud":              {"forma": "objeto", "tabla": "edan_localidades_salud_necesidades",           "create": create_necesidad_salud},
+    "necesidad_humanitaria":        {"forma": "objeto", "tabla": "edan_localidades_necesidades_humanitarias",    "create": create_necesidad_humanitaria},
+}
+
+
+def normalize_seccion_doc(key: str, value) -> tuple[list | dict, str]:
+    """Coerciona una sección del documento a su forma fija (array u objeto).
+
+    Retorna (valor_normalizado, nullable).
+    - 1:N (array): si llega un objeto único se envuelve en [objeto]; si None -> [].
+    - 1:1 (objeto): si llega un array de 1 se toma [0]; si array de >1 -> ValueError
+      con un mensaje explicativo (el router lo traduce a HTTP 400). None -> None.
+    """
+    meta = DOCUMENT_SECCION.get(key)
+    if meta is None:
+        return (value, None)
+    if value is None:
+        return ([] if meta["forma"] == "array" else None, meta["forma"])
+    if meta["forma"] == "array":
+        return (value if isinstance(value, list) else [value], "array")
+    # objeto (1:1)
+    if isinstance(value, list):
+        if len(value) == 1:
+            return (value[0], "objeto")
+        if len(value) > 1:
+            raise ValueError(
+                f"La sección '{key}' es de relación 1:1 (un solo objeto). Se recibió un "
+                f"array de {len(value)} elementos. Envía un solo objeto o un array de 1 elemento."
+            )
+        return (None, "objeto")
+    return (value, "objeto")
+
+
+def serialize_document(db: Session, id_localidad: int) -> dict:
+    """Serializa la localidad como documento completo en modo comprimido
+    (solo secciones con datos + fecha_modificacion por fila y top-level)."""
+    return _build_localidad(db, id_localidad, solo_con_datos=True)
+
+
+def apply_document(db: Session, id_localidad: int | None, doc: dict,
+                   id_usuario: int | None = None) -> dict:
+    """Deserializa un documento completo y lo persiste (UPSERT por sección con LWW).
+
+    `id_localidad` puede ser:
+    - un int (id_edan_localidad) existente → PUT (actualiza esa localidad);
+    - None o 0 → POST (crea la localidad por `doc['id_local']` y resuelve el id).
+
+    Reglas:
+    - Cabecera: se actualiza con upsert_cabecera (flags imp_* legacy declarados se
+      respetan, pero la verdad por datos se impone luego con _marcar_impacto).
+    - Secciones: SOLO se procesan las presentes en `doc` (las que su flag = true).
+      Cada fila lleva su `fecha_modificacion` (LWW GREATEST); si la fila no la trae,
+      se usa el `fecha_modificacion` top-level del documento como fallback.
+    - Forma fija: las 1:N se iteran como array; las 1:1 se aplican como objeto.
+    - Nunca borra secciones ausentes (flag false sin datos no destruye lo existente).
+    """
+    if id_usuario is not None:
+        doc = {**doc, "id_usuario": doc.get("id_usuario") or id_usuario}
+    # Modo PUT: id_localidad ya existe. Forzamos el id_local real de la fila para
+    # que upsert_cabecera ACTUALICE esa localidad y NO cree una nueva por un
+    # id_local ajeno del documento (evita duplicar localidades en el sync).
+    if id_localidad:
+        row = _row(db, "SELECT id_local FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+                   {"id": id_localidad})
+        if not row:
+            raise ValueError(f"No existe la localidad id_edan_localidad={id_localidad}")
+        if row["id_local"]:
+            doc["id_local"] = row["id_local"]
+        else:
+            doc.pop("id_local", None)
+    cabecera = upsert_cabecera(db, doc)
+    db.commit()
+    if not id_localidad:
+        built = cabecera or {}
+        id_localidad = built.get("id_edan_localidad")
+    if not id_localidad:
+        raise ValueError("No se pudo resolver el id_edan_localidad para el documento (falta 'id_local').")
+
+    top_fmod = doc.get("fecha_modificacion") or None
+    errors: list[dict] = []
+    for key, meta in DOCUMENT_SECCION.items():
+        raw = doc.get(key)
+        # Solo procesa si el cliente envió la sección.
+        if raw is None:
+            continue
+        try:
+            value, _forma = normalize_seccion_doc(key, raw)
+            if meta["forma"] == "array":
+                for item in value:
+                    row = dict(item or {})
+                    if not row.get("fecha_modificacion") and top_fmod:
+                        row["fecha_modificacion"] = top_fmod
+                    row["_id"] = id_localidad
+                    meta["create"](db, id_localidad, row)
+            else:
+                item = dict(value or {})
+                if not item.get("fecha_modificacion") and top_fmod:
+                    item["fecha_modificacion"] = top_fmod
+                item["_id"] = id_localidad
+                meta["create"](db, id_localidad, item)
+            db.commit()
+        except ValueError as e:
+            # Error de contrato (p.ej. sección 1:1 recibida como array de >1).
+            # Se propaga para que la ruta responda HTTP 400 con mensaje claro.
+            db.rollback()
+            raise ValueError(str(e))
+        except Exception as e:
+            db.rollback()
+            errors.append({"seccion": key, "detail": _seccion_error_detail(e)})
+            continue
+    # Reconciliar los flags reales (verdad por datos) tras persistir secciones.
+    for key, meta in DOCUMENT_SECCION.items():
+        _marcar_impacto(db, id_localidad, meta["tabla"])
+    _bump_localidad_fecha(db, id_localidad)
+    db.commit()
+    result = _build_localidad(db, id_localidad, solo_con_datos=True)
+    result["_errores"] = errors if errors else []
+    return result
 
 
 # ============================================================================

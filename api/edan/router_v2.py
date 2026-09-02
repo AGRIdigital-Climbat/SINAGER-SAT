@@ -9,7 +9,8 @@ from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
 from .schemas import (
-    LocalidadCabeceraCreate, LocalidadEstadoUpdateV2,
+    LocalidadCabeceraCreate, LocalidadEstadoUpdateV2, LocalidadCreate,
+    LocalidadDocumentoResponse,
     ImpactoPoblacion, EstablecimientoSalud, DanoVial, DanoInfraPublica,
     ServicioBasicoDetalle, UnidadEducativa, DanoVivienda, DanoAgricultura,
     DanoPecuario, InfraProductiva, GrupoVulnerable,
@@ -44,6 +45,7 @@ TAG_DANOS_PECUARIOS = "EDAN_LOCALIDADES > Danos Pecuario"
 TAG_INFRA_PRODUCTIVA = "EDAN_LOCALIDADES > Infra Productiva"
 TAG_PROTECCION = "EDAN_LOCALIDADES > Proteccion"
 TAG_NECESIDAD_HUMANITARIA = "EDAN_LOCALIDADES > Necesidades Humanitarias"
+TAG_DOCUMENTO = "EDAN_LOCALIDADES > Documento"
 
 ROLES_LOCALES = (6, 7)  # UGR municipio + Responsable local
 
@@ -82,6 +84,8 @@ def mis_reportes_localidades(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
     solo_huerfanas: bool | None = Query(None, description="True=huérfanas, False=consolidadas, None=todas"),
+    id_departamento: int | None = Query(None, description="Filtrar por departamento (FK shared.departamento)"),
+    id_municipio: int | None = Query(None, description="Filtrar por municipio (FK shared.municipio)"),
     modo: Literal["completo", "comprimido"] = Query("completo",
                                                     description="completo=todas las secciones, comprimido=solo las que tienen datos"),
     db: Session = Depends(get_db),
@@ -90,7 +94,9 @@ def mis_reportes_localidades(
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
     data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit,
                                               solo_huerfanas=solo_huerfanas,
-                                              solo_con_datos=(modo == "comprimido"))
+                                              solo_con_datos=(modo == "comprimido"),
+                                              id_departamento=id_departamento,
+                                              id_municipio=id_municipio)
     return SuccessResponse(message="Mis localidades listadas correctamente", data=data, total=total)
 
 
@@ -141,6 +147,87 @@ def obtener_localidad_completa(id_localidad: str,
     if not result:
         raise HTTPException(status_code=404, detail=f"Localidad {id_localidad} no encontrada")
     return SuccessResponse(message="Localidad obtenida correctamente", data=result)
+
+
+# ----------------------------------------------------------------------------
+#  DOCUMENTO COMPLETO (grupo exclusivo v2) — sync simétrico
+#  GET  /documento  → descarga la localidad como documento completo
+#                     (modo comprimido: solo secciones con datos + fechas).
+#  POST /documento  → crea la localidad a partir del documento (id_local key).
+#  PUT  /documento  → actualiza una localidad existente desde el documento.
+#  Cada sección lleva su fecha_modificacion (LWW); el doc trae la top-level.
+# ----------------------------------------------------------------------------
+
+@router.get("/localidades/{id_localidad}/documento",
+            tags=[TAG_EDAN_LOCALIDADES, TAG_DOCUMENTO],
+            response_model=SuccessResponse,
+            responses={200: {"model": LocalidadDocumentoResponse}},
+            summary="Obtener localidad como DOCUMENTO completo (sync simétrico v2)",
+            description="Devuelve la localidad como un JSON simétrico listo para reenviar en "
+                        "POST/PUT /documento. Incluye cabecera + 23 flags `imp_*` + SOLO las "
+                        "secciones con datos (11 array + 3 objeto), cada una con su "
+                        "`fecha_modificacion` (LWW por fila) y la `fecha_modificacion` top-level.\n\n"
+                        "**Modo offline:** `id_localidad` puede ser `id_local` (UUID) o `id_edan_localidad` (int).")
+def obtener_documento(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    id_edan = service._resolve_localidad_id(db, id_localidad)
+    result = service.serialize_document(db, id_edan)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Localidad {id_localidad} no encontrada")
+    return SuccessResponse(message="Documento de localidad obtenido correctamente", data=result)
+
+
+@router.post("/localidades/documento", status_code=201,
+             tags=[TAG_EDAN_LOCALIDADES, TAG_DOCUMENTO],
+             dependencies=[Depends(require_rol(*ROLES_LOCALES))],
+             response_model=SuccessResponse,
+             responses={201: {"model": LocalidadDocumentoResponse}},
+             summary="Crear localidad desde DOCUMENTO completo (sync simétrico v2)",
+             description="Crea la localidad (cabecera + flags + secciones) desde un solo documento. "
+                         "`id_local` (UUID offline) es la clave de dedupe: si ya existe, actualiza; "
+                         "si no, crea. La sección solo se procesa si viene en el doc (flag `imp_*`=true).\n\n"
+                         "**Fotos:** no van inline; subir binarios primero con `/localidades/foto/subir` "
+                         "y enviar el `path` devuelto en `fotografia` de cada sección.\n\n"
+                         "**Forma fija:** las 11 secciones 1:N aceptan objeto único o array (se normalizan "
+                         "a array); las 3 secciones 1:1 (primera-respuesta, necesidad-salud, "
+                         "necesidad-humanitaria) reciben UN solo objeto (array de >1 → 400).")
+def crear_documento(data: LocalidadCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    try:
+        result = service.apply_document(db, None, data.model_dump(), id_usuario=_user["id_usuario"])
+    except HTTPException:
+        raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise db_error(e)
+    return SuccessResponse(message="Localidad creada desde documento correctamente", data=result)
+
+
+@router.put("/localidades/{id_localidad}/documento",
+            tags=[TAG_EDAN_LOCALIDADES, TAG_DOCUMENTO],
+            dependencies=[Depends(require_rol(*ROLES_LOCALES))],
+            response_model=SuccessResponse,
+            responses={200: {"model": LocalidadDocumentoResponse}},
+            summary="Actualizar localidad desde DOCUMENTO completo (sync simétrico v2)",
+            description="Aplica el documento sobre una localidad existente: cabecera + flags + secciones. "
+                        "Cada sección con UPSERT por `id_seccion` y LWW (`GREATEST` de `fecha_modificacion`). "
+                        "Las secciones ausentes en el doc se dejan intactas (no destructivo).\n\n"
+                        "**Forma fija / fotos / 400 en 1:1:** igual que POST /documento.")
+def actualizar_documento(id_localidad: str, data: LocalidadCreate,
+                         db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    id_edan = service._resolve_localidad_id(db, id_localidad)
+    try:
+        result = service.apply_document(db, id_edan, data.model_dump(), id_usuario=_user["id_usuario"])
+    except HTTPException:
+        raise
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise db_error(e)
+    return SuccessResponse(message="Localidad actualizada desde documento correctamente", data=result)
 
 
 # ----------------------------------------------------------------------------

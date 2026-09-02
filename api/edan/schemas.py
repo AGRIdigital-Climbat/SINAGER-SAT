@@ -288,19 +288,105 @@ class LocalidadCreate(BaseModel):
     imp_primera_respuesta: bool = Field(False, description="1:1 primera-respuesta")
     imp_necesidad_salud: bool = Field(False, description="1:1 necesidad-salud")
     imp_necesidad_humanitaria: bool = Field(False, description="1:1 necesidad-humanitaria")
-    impacto_poblacion: list[ImpactoPoblacion] = []
+    # 1:N y 1:1 — entrada LAXA (aceptan objeto o array según lo que mande la app).
+    # service.normalize_seccion_doc impone la FORMA FIJA (11 array / 3 objeto),
+    # y rechaza (HTTP 400 con mensaje) o acepta según el contrato.
+    impacto_poblacion: list[ImpactoPoblacion] | dict | None = None
+    necesidad_primera_respuesta: PrimeraRespuesta | list[dict] | None = None
+    establecimientos_salud: list[EstablecimientoSalud] | dict | None = None
+    necesidad_salud: NecesidadSalud | list[dict] | None = None
+    danos_viales: list[DanoVial] | dict | None = None
+    danos_infra_publica: list[DanoInfraPublica] | dict | None = None
+    servicios_basicos: list[ServicioBasicoDetalle] | dict | None = None
+    unidades_educativas: list[UnidadEducativa] | dict | None = None
+    danos_vivienda: list[DanoVivienda] | dict | None = None
+    danos_agricultura: list[DanoAgricultura] | dict | None = None
+    danos_pecuarios: list[DanoPecuario] | dict | None = None
+    infra_productiva: list[InfraProductiva] | dict | None = None
+    proteccion: list[GrupoVulnerable] | dict | None = None
+    necesidad_humanitaria: NecesidadHumanitaria | list[dict] | None = None
+
+
+# ----------------------------------------------------------------------------
+#  DOCUMENTO COMPLETO (grupo exclusivo v2).
+#  JSON simétrico: GET /documento devuelve lo que POST/PUT /documento aceptan.
+#  - Secciones SOLO presentes si su flag imp_* = true (o hay datos).
+#  - Forma fija: 11 secciones array (aunque venga 1 solo), 3 secciones objeto.
+#  - En la SALIDA (modo comprimido) las secciones sin datos se omiten (None).
+# ----------------------------------------------------------------------------
+
+class LocalidadDocumentoResponse(BaseModel):
+    """Documento completo de una localidad (salida del GET /documento).
+
+    Es como LocalidadCreate pero con las secciones OPCIONALES (None si no hay
+    datos / flag false): refleja el `modo=comprimido` usado por el sync.
+    La cabecera trae los 23 flags imp_* y `fecha_modificacion` top-level; cada
+    sección presente lleva su propia `fecha_modificacion` (LWW por fila).
+    """
+    id_edan_localidad: int | None = None
+    id_edan: int | None = None
+    es_huerfana: bool = True
+    id_tipo_localidad: int | None = None
+    id_edan_localidad_estado: int | None = None
+    tipo_localidad: dict | None = None
+    id_tipo_evento: int | None = None
+    tipo_evento: dict | None = None
+    id_departamento: int | None = None
+    id_provincia: int | None = None
+    id_municipio: int | None = None
+    departamento: dict | None = None
+    provincia: dict | None = None
+    municipio: dict | None = None
+    fecha_llenado: str | None = None
+    fecha_evento: str | None = None
+    hora_evento: str | None = None
+    total_poblacion_afectada: int = 0
+    total_familias_afectadas: int = 0
+    total_familias_damnificadas: int = 0
+    id_local: str | None = None
+    id_usuario: int | None = None
+    fecha_modificacion: str | None = None
+    pendiente_actualizacion: bool = False
+    pendiente_eliminacion: bool = False
+    localidad: str = ''
+    edan: dict | None = None
+    # 23 flags imp_* (9 legacy + 14 1:1)
+    imp_poblacion: bool = False
+    imp_salud: bool = False
+    imp_infraestructura: bool = False
+    imp_servicios: bool = False
+    imp_educacion: bool = False
+    imp_vivienda: bool = False
+    imp_agropecuario: bool = False
+    imp_proteccion: bool = False
+    imp_necesidades: bool = False
+    imp_impacto_poblacion: bool = False
+    imp_salud_establecimientos: bool = False
+    imp_danos_viales: bool = False
+    imp_danos_infra_publica: bool = False
+    imp_servicios_basicos: bool = False
+    imp_unidades_educativas: bool = False
+    imp_danos_vivienda: bool = False
+    imp_danos_agricultura: bool = False
+    imp_danos_pecuarios: bool = False
+    imp_infra_productiva: bool = False
+    imp_primera_respuesta: bool = False
+    imp_necesidad_salud: bool = False
+    imp_necesidad_humanitaria: bool = False
+    # Secciones (forma fija): 11 array + 3 objeto; None si sin datos (comprimido).
+    impacto_poblacion: list[ImpactoPoblacion] | None = None
+    establecimientos_salud: list[EstablecimientoSalud] | None = None
+    danos_viales: list[DanoVial] | None = None
+    danos_infra_publica: list[DanoInfraPublica] | None = None
+    servicios_basicos: list[ServicioBasicoDetalle] | None = None
+    unidades_educativas: list[UnidadEducativa] | None = None
+    danos_vivienda: list[DanoVivienda] | None = None
+    danos_agricultura: list[DanoAgricultura] | None = None
+    danos_pecuarios: list[DanoPecuario] | None = None
+    infra_productiva: list[InfraProductiva] | None = None
+    proteccion: list[GrupoVulnerable] | None = None
     necesidad_primera_respuesta: PrimeraRespuesta | None = None
-    establecimientos_salud: list[EstablecimientoSalud] = []
     necesidad_salud: NecesidadSalud | None = None
-    danos_viales: list[DanoVial] = []
-    danos_infra_publica: list[DanoInfraPublica] = []
-    servicios_basicos: list[ServicioBasicoDetalle] = []
-    unidades_educativas: list[UnidadEducativa] = []
-    danos_vivienda: list[DanoVivienda] = []
-    danos_agricultura: list[DanoAgricultura] = []
-    danos_pecuarios: list[DanoPecuario] = []
-    infra_productiva: list[InfraProductiva] = []
-    proteccion: list[GrupoVulnerable] = []
     necesidad_humanitaria: NecesidadHumanitaria | None = None
 
 
