@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -67,9 +69,12 @@ PATH_TO_SCHEMA = {
 # ----------------------------------------------------------------------------
 
 @router.get("/localidades/mis-reportes", tags=[TAG_EDAN_LOCALIDADES, TAG_CABECERA],
-            summary="Listar mis localidades (completo, todas las secciones)",
-            description="Devuelve TODAS las localidades del usuario autenticado, "
-                        "cada una con la estructura completa anidada (todas las secciones).\n\n"
+            summary="Listar mis localidades (completo o comprimido, todas las secciones)",
+            description="Devuelve TODAS las localidades del usuario autenticado.\n\n"
+                        "- `modo=completo` (default): estructura completa anidada (las 14 secciones, "
+                        "tengan datos o no).\n"
+                        "- `modo=comprimido`: cabecera + los 22 flags `imp_*` + SOLO las secciones que "
+                        "tienen datos (payload mínimo; los flags indican qué secciones habilitar).\n\n"
                         "**Roles con scope propio:** 6 (UGR municipio), 7 (Responsable local) — solo ven las propias.\n"
                         "Otros roles (1-5, 8, 9) pueden consultar por `id_usuario`.")
 def mis_reportes_localidades(
@@ -77,11 +82,15 @@ def mis_reportes_localidades(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
     solo_huerfanas: bool | None = Query(None, description="True=huérfanas, False=consolidadas, None=todas"),
+    modo: Literal["completo", "comprimido"] = Query("completo",
+                                                    description="completo=todas las secciones, comprimido=solo las que tienen datos"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
     uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit, solo_huerfanas=solo_huerfanas)
+    data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit,
+                                              solo_huerfanas=solo_huerfanas,
+                                              solo_con_datos=(modo == "comprimido"))
     return SuccessResponse(message="Mis localidades listadas correctamente", data=data, total=total)
 
 
@@ -118,12 +127,17 @@ def mis_estados_localidades(
 @router.get("/localidades/{id_localidad}", tags=[TAG_EDAN_LOCALIDADES, TAG_CABECERA],
             summary="Obtener UNA localidad completa (todas las secciones)",
             description="Devuelve una sola localidad con TODAS sus secciones anidadas (`_build_localidad`).\n\n"
+                        "- `modo=completo` (default): las 14 secciones.\n"
+                        "- `modo=comprimido`: cabecera + los 22 flags `imp_*` + SOLO las secciones con datos.\n\n"
                         "**Modo offline:** `id_localidad` puede ser `id_local` (UUID) o `id_edan_localidad` (int).\n"
                         "**Uso web:** al hacer clic en un ítem de la lista, esta API carga todo el contenido.")
-def obtener_localidad_completa(id_localidad: str, db: Session = Depends(get_db),
+def obtener_localidad_completa(id_localidad: str,
+                               modo: Literal["completo", "comprimido"] = Query("completo",
+                                                                                description="completo=todas las secciones, comprimido=solo las que tienen datos"),
+                               db: Session = Depends(get_db),
                                _user=Depends(get_current_user)):
     id_edan = service._resolve_localidad_id(db, id_localidad)
-    result = service._build_localidad(db, id_edan)
+    result = service._build_localidad(db, id_edan, solo_con_datos=(modo == "comprimido"))
     if not result:
         raise HTTPException(status_code=404, detail=f"Localidad {id_localidad} no encontrada")
     return SuccessResponse(message="Localidad obtenida correctamente", data=result)

@@ -67,7 +67,10 @@ CREATE TABLE localidad (
 
   -- sincronización local (NO se envían al servidor)
   creada_offset INTEGER DEFAULT 0,      -- timestamp local para ordenar
-  pendiente     INTEGER DEFAULT 1       -- 1 = falta push de cabecera / 0 = sincronizada
+  -- 1 = la cabecera cambió (primera creación o edición posterior) y falta
+  -- reenviarla al servidor / 0 = sincronizada. El servidor hace UPSERT por
+  -- id_local, así no duplica aunque se envíe varias veces.
+  pendiente     INTEGER DEFAULT 1
 );
 ```
 
@@ -76,7 +79,8 @@ Cada sección repite las columnas del backend más:
 - `id_seccion` como **PK local** (clave de dedup).
 - `id_local` (FK a la localidad dueña).
 - Banderas: `insertada_en_server` (1 = ya existe en el server, aplicar UPDATE;
-  0 = no existe, aplicar INSERT) y `marcado_borrar` (1 = imprimir DELETE).
+  0 = no existe, aplicar INSERT), `marcado_borrar` (1 = imprimir DELETE) y
+  `editada` (1 = la fila cambió localmente y falta reenviar).
 
 **Sección 1:N con foto** — ejemplo `seccion_danos_viales`:
 ```sql
@@ -97,7 +101,8 @@ CREATE TABLE seccion_danos_viales (
   coordenada_lon REAL,
 
   insertada_en_server INTEGER DEFAULT 0,
-  marcado_borrar      INTEGER DEFAULT 0
+  marcado_borrar      INTEGER DEFAULT 0,
+  editada             INTEGER DEFAULT 0   -- 1 si la fila cambió localmente (falta reenviar)
 );
 ```
 
@@ -113,7 +118,8 @@ CREATE TABLE seccion_impacto_poblacion (
   desaparecidos INTEGER,
   observaciones TEXT,
   insertada_en_server INTEGER DEFAULT 0,
-  marcado_borrar      INTEGER DEFAULT 0
+  marcado_borrar      INTEGER DEFAULT 0,
+  editada             INTEGER DEFAULT 0   -- 1 si la fila cambió localmente (falta reenviar)
 );
 ```
 
@@ -129,7 +135,8 @@ CREATE TABLE seccion_primera_respuesta (
   evacuacion   INTEGER,
   observaciones TEXT,
   insertada_en_server INTEGER DEFAULT 0,
-  marcado_borrar      INTEGER DEFAULT 0
+  marcado_borrar      INTEGER DEFAULT 0,
+  editada             INTEGER DEFAULT 0   -- 1 si la fila cambió localmente (falta reenviar)
 );
 ```
 
@@ -266,10 +273,18 @@ Columnas con foto (a replicar tal cual en el DDL de cada sección con foto):
 
 1. Crear localidad → `INSERT localidad` con `id_local=UUID`, `pendiente=1`.
 2. Agregar/editar secciones → INSERT/UPDATE en su tabla manteniendo siempre el
-   mismo `id_seccion`.
+   mismo `id_seccion`, y **marcando `editada=1`** en cada fila que cambie.
 3. Tomar fotos → `INSERT foto_pendiente` (binario en disco, `subida=0`).
 4. Nada toca la red. Toda la identidad se sustenta en `id_local` + `id_seccion`
    estables.
+
+> **Marcado `editada` (push selectivo).** Cuando el usuario edita una fila de
+> sección, la app marca `editada=1` en esa fila **y** `pendiente=1` en la
+> cabecera. Así, en el siguiente push **solo se envían las filas con `editada=1`
+>** (o nuevas con `insertada_en_server=0`, o borradas con `marcado_borrar=1`).
+> El resto de filas sincronizadas no se reenvían → se evita subir datos en blanco
+> y se reduce el payload (modo comprimido). Ejemplo: 15 registros en la app, solo
+> se editaron 3 → se suben solo esos 3.
 
 ---
 
@@ -288,14 +303,16 @@ fotos, y las secciones necesitan `id_edan_localidad`.
      `id_edan_localidad`/`id_local` + GPS opcional.
    - → guardar `path_servidor`, `subida=1`.
 
-3. **Fase 3 — Secciones**
+3. **Fase 3 — Secciones** (solo las que cambiaron)
    `POST /api/v2/edan/localidades/{id}/{seccion}`
+   - Se envían **únicamente** las filas marcadas `editada=1` (o `insertada_en_server=0`
+     para nuevas, o `marcado_borrar=1`); el resto ya está sincronizado.
    - Body: **objeto único o array directo** de la misma sección. (NO envolver en
      `{"items": [...]}`: eso genera la fila con campos vacíos.)
    - Pasar `fotografia=path_servidor` y GPS en el item.
    - `insertada_en_server=0` → id_seccion nuevo (server hace INSERT).
    - `insertada_en_server=1` → reenviar el **mismo id_seccion** (server hace
-     UPDATE, no duplica). Marcar `insertada_en_server=1` tras el 2xx.
+     UPDATE, no duplica). Tras el 2xx: `insertada_en_server=1` y **`editada=0`**.
 
 4. **Fase 4 — Borrados**
    `DELETE /api/v2/edan/localidades/{id}/{seccion}/seccion/{id_seccion}`
@@ -305,9 +322,27 @@ fotos, y las secciones necesitan `id_edan_localidad`.
 
 ## 6. Flujo de pull / reconciliación
 
-`GET /api/v2/edan/localidades/{id}` devuelve todas las secciones anidadas.
+La app usa el endpoint **con `modo=comprimido`**:
+
+```
+GET /api/v2/edan/localidades/{id}?modo=comprimido
+GET /api/v2/edan/localidades/mis-reportes?modo=comprimido
+```
+
+En `modo=comprimido` la respuesta trae la cabecera + los **22 flags `imp_*`**
+(la app los usa para saber qué secciones habilitar/mostrar) + **solo las
+secciones que tienen datos**. No trae las secciones vacías (`[]`/defaults), por
+eso es el modo recomendado para refrescar la lista sin payload pesado.
+
+> `modo=completo` (default) trae las 14 secciones siempre; solo útil para
+> editar. En el flujo de caché de la app se recomienda **siempre
+> `modo=comprimido`** para minimizar datos.
+
 La app compara por `id_seccion` (y `id_local`) y aplica los cambios venidos del
-servidor (ej. consolidación de UGR u otras PC). Última escritura gana.
+servidor (ej. consolidación de UGR u otras PC). Última escritura gana. Al aplicar
+un registro remoto se marca `insertada_en_server=1` y `editada=0` (ya está al
+día); si la local viene de un cambio local sin enviar (`editada=1`), se conserva
+ese flag para subirse en el próximo push.
 
 ---
 
@@ -315,7 +350,7 @@ servidor (ej. consolidación de UGR u otras PC). Última escritura gana.
 
 ```typescript
 async function sync() {
-  // Fase 1: cabeceras pendientes
+  // Fase 1: cabeceras pendientes (creadas o editadas)
   for (const loc of await db.localidad.where(pendiente=1)) {
     const r = await post('/edan/localidades/cabecera', loc);
     // PUENTE offline → online: guardar el id y PROPAGARLO a todas sus secciones
@@ -339,14 +374,16 @@ async function sync() {
     await db.foto_pendiente.update(item.id_foto, { path_servidor: r.path, subida: 1 });
   }
 
-  // Fase 3: secciones
+  // Fase 3: secciones — SOLO las que cambiaron (editadas o nuevas)
   for (const [tabla, nombreSeccion] of SECCIONES) {
-    const filas = await db[tabla].where(marcado_borrar=0);
+    //  editada=1  → cambió localmente       insertada_en_server=0 → nueva
+    const filas = await db[tabla].where(editada=1 OR insertada_en_server=0);
     for (const item of filas) {
       const payload = armarPayload(item);      // poner fotografia=path_servidor y GPS
       await post(`/edan/localidades/${item.id_edan_localidad}/${nombreSeccion}`,
                  payload.length===1 ? payload[0] : payload);
-      await db[tabla].update(item.id_seccion, { insertada_en_server: 1 });
+      // Tras el 2xx: ya está en el servidor y sin cambios pendientes
+      await db[tabla].update(item.id_seccion, { insertada_en_server: 1, editada: 0 });
     }
   }
 
@@ -368,5 +405,14 @@ async function sync() {
   se guarda igual (carpeta `reports/general`) y se asocia al guardar la sección.
 - **GPS de la foto es opcional** en el carrete (el GPS corresponde a la sección,
   no a la foto). En los endpoints `con-foto` antiguos el GPS sí es obligatorio.
+- **Modo comprimido (v2):** los endpoints de lectura
+  `GET /localidades/{id}?modo=comprimido` y `mis-reportes?modo=comprimido`
+  devuelven cabecera + los 22 flags `imp_*` + **solo las secciones con datos**
+  (se omiten las vacías). Los flags siempre vienen para que la app sepa qué
+  secciones habilitar; no es necesario traer las secciones `false`.
+- **Push selectivo (`editada`/`pendiente`):** solo se suben al servidor las
+  cabeceras con `pendiente=1` y las filas de sección con `editada=1`,
+  `insertada_en_server=0` o `marcado_borrar=1`. Así no se reenvía todo: si hay
+  15 filas y se editaron 3, se envían solo esas 3, evitando datos en blanco.
 - Todo este modelo asume el **Modelo A (por secciones)**; el Modelo B (`/sync`)
   fue eliminado del v2.

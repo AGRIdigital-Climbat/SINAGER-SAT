@@ -200,7 +200,24 @@ def _grupos_vulnerables(db, id_localidad):
     ]
 
 
-def _build_localidad(db: Session, id_localidad: int) -> dict:
+# Claves de salida de las 14 secciones dentro de _build_localidad.
+SECCION_KEYS = [
+    "impacto_poblacion", "necesidad_primera_respuesta", "establecimientos_salud",
+    "necesidad_salud", "danos_viales", "danos_infra_publica",
+    "servicios_basicos", "unidades_educativas", "danos_vivienda",
+    "danos_agricultura", "danos_pecuarios", "infra_productiva",
+    "proteccion", "necesidad_humanitaria",
+]
+
+
+def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = False) -> dict:
+    """Construye la localidad completa (cabecera + flags + 14 secciones).
+
+    Si `solo_con_datos=True` (modo comprimido), elimina de la respuesta las
+    secciones sin datos (lista vacía o 1:1 sin registro). Los 22 flags imp_*
+    siempre se devuelven para que la app sepa qué secciones habilitar.
+    """
+    con_datos: set[str] = set()
     loc = {
         "id_edan_localidad": id_localidad,
         "id_edan": None,
@@ -357,7 +374,10 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         loc["usuario"] = None
 
     # 1. Impacto en población (1:N por rango etario)
-    loc["impacto_poblacion"] = _impacto_poblacion(db, id_localidad)
+    impactos = _impacto_poblacion(db, id_localidad)
+    loc["impacto_poblacion"] = impactos
+    if impactos:
+        con_datos.add("impacto_poblacion")
 
     # 2. Primera respuesta (1:1)
     pr = _one(db, "edan_localidades_primera_respuesta", id_localidad)
@@ -367,6 +387,8 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         "evacuacion": pr["evacuacion"] if pr else False,
         "observaciones": pr["observaciones"] if pr else "",
     }
+    if pr:
+        con_datos.add("necesidad_primera_respuesta")
 
 # 3. Establecimientos de salud (1:N)
     est = _all(db, "edan_localidades_salud_establecimientos", id_localidad,
@@ -386,7 +408,9 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
             "coordenada_lat": r.get("coordenada_lat"),
             "coordenada_lon": r.get("coordenada_lon"),
         } for r in est
-    ]   
+    ]
+    if est:
+        con_datos.add("establecimientos_salud")
 
     # 4. Necesidades de salud (1:1)
     ns = _one(db, "edan_localidades_salud_necesidades", id_localidad)
@@ -395,25 +419,42 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         "otras_necesidades": ns["otras_necesidades"] if ns else "",
         "observaciones": ns["observaciones"] if ns else "",
     }
+    if ns:
+        con_datos.add("necesidad_salud")
 
     # 5. Daños viales (1:N)
-    loc["danos_viales"] = _all(db, "edan_localidades_danos_viales", id_localidad,
-                               "ORDER BY id_dano_vial")
+    dv = _all(db, "edan_localidades_danos_viales", id_localidad,
+              "ORDER BY id_dano_vial")
+    loc["danos_viales"] = dv
+    if dv:
+        con_datos.add("danos_viales")
 
     # 6. Daños infraestructura pública (1:N)
-    loc["danos_infra_publica"] = _all(db, "edan_localidades_danos_infra_publica",
-                                      id_localidad, "ORDER BY id_dano_infra")
+    dip = _all(db, "edan_localidades_danos_infra_publica",
+               id_localidad, "ORDER BY id_dano_infra")
+    loc["danos_infra_publica"] = dip
+    if dip:
+        con_datos.add("danos_infra_publica")
 
     # 7. Servicios básicos (1:N)
-    loc["servicios_basicos"] = _servicios_basicos(db, id_localidad)
+    sb = _servicios_basicos(db, id_localidad)
+    loc["servicios_basicos"] = sb
+    if sb:
+        con_datos.add("servicios_basicos")
 
     # 8. Unidades educativas (1:N)
-    loc["unidades_educativas"] = _all(db, "edan_localidades_unidades_educativas",
-                                      id_localidad, "ORDER BY id_unidad_educativa")
+    ue = _all(db, "edan_localidades_unidades_educativas",
+              id_localidad, "ORDER BY id_unidad_educativa")
+    loc["unidades_educativas"] = ue
+    if ue:
+        con_datos.add("unidades_educativas")
 
     # 9. Daños vivienda (1:N)
-    loc["danos_vivienda"] = _all(db, "edan_localidades_danos_vivienda",
-                                 id_localidad, "ORDER BY id_dano_vivienda")
+    dvv = _all(db, "edan_localidades_danos_vivienda",
+               id_localidad, "ORDER BY id_dano_vivienda")
+    loc["danos_vivienda"] = dvv
+    if dvv:
+        con_datos.add("danos_vivienda")
 
     # 10. Agricultura (1:N) + cultivo anidado
     ag_rows = _rows(db, """
@@ -434,6 +475,8 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
             "grupo": r.get("c_grupo"),
         } if c else None
         loc["danos_agricultura"].append(item)
+    if ag_rows:
+        con_datos.add("danos_agricultura")
 
     # 11. Pecuario (1:N) + especie anidada
     pe_rows = _rows(db, """
@@ -454,13 +497,21 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
             "grupo": r.get("pe_grupo"),
         } if pe else None
         loc["danos_pecuarios"].append(item)
+    if pe_rows:
+        con_datos.add("danos_pecuarios")
 
     # 12. Infraestructura productiva (1:N)
-    loc["infra_productiva"] = _all(db, "edan_localidades_infra_productiva",
-                                   id_localidad, "ORDER BY id_infra_productiva")
+    ipr = _all(db, "edan_localidades_infra_productiva",
+               id_localidad, "ORDER BY id_infra_productiva")
+    loc["infra_productiva"] = ipr
+    if ipr:
+        con_datos.add("infra_productiva")
 
     # 13. Protección (1:N por grupo vulnerable)
-    loc["proteccion"] = _grupos_vulnerables(db, id_localidad)
+    prot = _grupos_vulnerables(db, id_localidad)
+    loc["proteccion"] = prot
+    if prot:
+        con_datos.add("proteccion")
 
     # 14. Necesidades humanitarias (1:1)
     nh = _one(db, "edan_localidades_necesidades_humanitarias", id_localidad)
@@ -468,9 +519,16 @@ def _build_localidad(db: Session, id_localidad: int) -> dict:
         nh = dict(nh)
         nh.pop("id_edan_localidad", None)
         loc["necesidad_humanitaria"] = nh
+        con_datos.add("necesidad_humanitaria")
     else:
         loc["necesidad_humanitaria"] = {k: (False if not k.startswith("obs_") else "")
                                         for k in _NH_FIELDS}
+
+    # Modo comprimido: dejar solo las secciones con datos (los flags siempre quedan)
+    if solo_con_datos:
+        for k in SECCION_KEYS:
+            if k not in con_datos:
+                loc.pop(k, None)
 
     return loc
 
@@ -2814,7 +2872,7 @@ def list_mis_edans_estados(db: Session, id_usuario: int, skip: int = 0, limit: i
 
 
 def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int = 50,
-                       solo_huerfanas: bool | None = None):
+                       solo_huerfanas: bool | None = None, solo_con_datos: bool = False):
     """Lista TODAS las localidades del usuario (huérfanas + consolidadas).
 
     Args:
@@ -2822,6 +2880,8 @@ def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int 
         skip/limit: Paginación.
         solo_huerfanas: Si True, solo id_edan IS NULL. Si False, solo consolidadas.
                         Si None, devuelve todas.
+        solo_con_datos: True (modo comprimido) → cada localidad sale con los 22
+                        flags y SOLO las secciones que tienen datos.
     """
     where_extra = ""
     if solo_huerfanas is True:
@@ -2854,7 +2914,7 @@ def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int 
         ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
         LIMIT :limit OFFSET :skip
     """, {"uid": id_usuario, "limit": limit, "skip": skip})
-    return [_build_localidad(db, r["id_edan_localidad"]) for r in rows], total
+    return [_build_localidad(db, r["id_edan_localidad"], solo_con_datos=solo_con_datos) for r in rows], total
 
 
 # ============================================================================
