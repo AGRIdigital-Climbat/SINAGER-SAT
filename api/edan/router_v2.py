@@ -10,7 +10,7 @@ from ..response import SuccessResponse, MessageResponse
 from . import service
 from .schemas import (
     LocalidadCabeceraCreate, LocalidadEstadoUpdateV2, LocalidadCreate,
-    LocalidadDocumentoResponse,
+    LocalidadDocumentoCreate, LocalidadDocumentoResponse,
     ImpactoPoblacion, EstablecimientoSalud, DanoVial, DanoInfraPublica,
     ServicioBasicoDetalle, UnidadEducativa, DanoVivienda, DanoAgricultura,
     DanoPecuario, InfraProductiva, GrupoVulnerable,
@@ -194,7 +194,7 @@ def obtener_documento(id_localidad: str, db: Session = Depends(get_db), _user=De
                          "**Forma fija:** las 11 secciones 1:N aceptan objeto único o array (se normalizan "
                          "a array); las 3 secciones 1:1 (primera-respuesta, necesidad-salud, "
                          "necesidad-humanitaria) reciben UN solo objeto (array de >1 → 400).")
-def crear_documento(data: LocalidadCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def crear_documento(data: LocalidadDocumentoCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         result = service.apply_document(db, None, data.model_dump(), id_usuario=_user["id_usuario"])
     except HTTPException:
@@ -218,7 +218,7 @@ def crear_documento(data: LocalidadCreate, db: Session = Depends(get_db), _user=
                         "Cada sección con UPSERT por `id_seccion` y LWW (`GREATEST` de `fecha_modificacion`). "
                         "Las secciones ausentes en el JSON se dejan intactas (no destructivo).\n\n"
                         "**SIEMPRE COMPACTO / Forma fija / fotos / 400 en 1:1:** igual que POST /documento.")
-def actualizar_documento(id_localidad: str, data: LocalidadCreate,
+def actualizar_documento(id_localidad: str, data: LocalidadDocumentoCreate,
                          db: Session = Depends(get_db), _user=Depends(get_current_user)):
     id_edan = service._resolve_localidad_id(db, id_localidad)
     try:

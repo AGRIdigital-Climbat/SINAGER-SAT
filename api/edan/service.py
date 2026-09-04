@@ -153,7 +153,6 @@ def _impacto_poblacion(db, id_localidad):
     """, {"id": id_localidad})
     return [
         {
-            "id_impacto_poblacion": ip["id_impacto_poblacion"],
             "id_seccion": ip["id_seccion"],
             "id_grupo_etario": ip["id_grupo_etario"],
             "grupo_etario": {
@@ -188,7 +187,7 @@ def _grupos_vulnerables(db, id_localidad):
     """, {"id": id_localidad})
     return [
         {
-            "id_grupo_vulnerable": p["id_grupo_vulnerable"],
+            "id_seccion": p["id_seccion"] if p.get("id_seccion") else None,
             "id_grupo_vulnerable_catalogo": p["id_grupo_vulnerable_catalogo"],
             "grupo": {"id": p["id_grupo_vulnerable_catalogo"], "codigo": p["codigo"], "nombre": p["nombre"], "orden": p["orden"], "activo": p["activo"]},
             "mujeres": p["mujeres"] or 0,
@@ -384,6 +383,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
     # 2. Primera respuesta (1:1)
     pr = _one(db, "edan_localidades_primera_respuesta", id_localidad)
     loc["necesidad_primera_respuesta"] = {
+        "id_seccion": pr["id_seccion"] if pr else None,
         "busqueda": pr["busqueda"] if pr else False,
         "salvamento": pr["salvamento"] if pr else False,
         "evacuacion": pr["evacuacion"] if pr else False,
@@ -398,7 +398,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
                "ORDER BY id_establecimiento_salud")
     loc["establecimientos_salud"] = [
         {
-            "id_establecimiento_salud": r["id_establecimiento_salud"],
+            "id_seccion": r["id_seccion"] if r.get("id_seccion") else None,
             "nombre_establecimiento": r["nombre_establecimiento"],
             "comunidad": r["comunidad"],
             "nivel_atencion": r["nivel_atencion"],
@@ -418,6 +418,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
     # 4. Necesidades de salud (1:1)
     ns = _one(db, "edan_localidades_salud_necesidades", id_localidad)
     loc["necesidad_salud"] = {
+        "id_seccion": ns["id_seccion"] if ns else None,
         "numero_personas": ns["numero_personas"] if ns else 0,
         "otras_necesidades": ns["otras_necesidades"] if ns else "",
         "observaciones": ns["observaciones"] if ns else "",
@@ -535,6 +536,51 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
             if k not in con_datos:
                 loc.pop(k, None)
 
+    return loc
+
+
+# IDs internos del backend (PK de filas que la app NO debe ver). El único
+# identificador del documento es `id_seccion` (UUID generado por el cliente).
+_INTERNAL_ROW_IDS = {
+    "impacto_poblacion":        {"id_impacto_poblacion"},
+    "establecimientos_salud":   {"id_establecimiento_salud"},
+    "danos_viales":             {"id_dano_vial"},
+    "danos_infra_publica":      {"id_dano_infra"},
+    "servicios_basicos":        {"id_servicio_basico"},
+    "unidades_educativas":      {"id_unidad_educativa"},
+    "danos_vivienda":           {"id_dano_vivienda"},
+    "danos_agricultura":        {"id_dano_agricultura"},
+    "danos_pecuarios":          {"id_dano_pecuario"},
+    "infra_productiva":         {"id_infra_productiva"},
+    "proteccion":               {"id_grupo_vulnerable"},
+    "necesidad_primera_respuesta": set(),
+    "necesidad_salud":          set(),
+    "necesidad_humanitaria":    set(),
+}
+
+
+def _sanitizar_doc(loc: dict) -> dict:
+    """Elimina de cada sección del documento los IDs internos del backend
+    (`id_<pk>` de fila e `id_edan_localidad`), dejando solo `id_seccion` + campos
+    de negocio. Es **exclusivo del flujo v2**: lo aplican `serialize_document`
+    y `get_mis_localidades` (mis-reportes), sin alterar el output v1.
+    """
+    for key, meta in DOCUMENT_SECCION.items():
+        if key not in loc:
+            continue
+        strip = _INTERNAL_ROW_IDS.get(key, set()) | {"id_edan_localidad"}
+        if meta["forma"] == "array":
+            items = loc[key]
+            if not isinstance(items, list):
+                continue
+            loc[key] = [
+                {k: v for k, v in (item or {}).items() if k not in strip}
+                for item in items
+            ]
+        else:
+            item = loc[key]
+            if isinstance(item, dict):
+                loc[key] = {k: v for k, v in item.items() if k not in strip}
     return loc
 
 
@@ -2949,7 +2995,7 @@ def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int 
         ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
         LIMIT :limit OFFSET :skip
     """, {**params, "limit": limit, "skip": skip})
-    return [_build_localidad(db, r["id_edan_localidad"], solo_con_datos=solo_con_datos) for r in rows], total
+    return [_sanitizar_doc(_build_localidad(db, r["id_edan_localidad"], solo_con_datos=solo_con_datos)) for r in rows], total
 
 
 # ============================================================================
@@ -3010,8 +3056,9 @@ def normalize_seccion_doc(key: str, value) -> tuple[list | dict, str]:
 
 def serialize_document(db: Session, id_localidad: int) -> dict:
     """Serializa la localidad como documento completo en modo comprimido
-    (solo secciones con datos + fecha_modificacion por fila y top-level)."""
-    return _build_localidad(db, id_localidad, solo_con_datos=True)
+    (solo secciones con datos + fecha_modificacion por fila y top-level).
+    Reconstruye cada sección para exponer SOLO `id_seccion` (sin IDs internos)."""
+    return _sanitizar_doc(_build_localidad(db, id_localidad, solo_con_datos=True))
 
 
 def apply_document(db: Session, id_localidad: int | None, doc: dict,
@@ -3062,6 +3109,31 @@ def apply_document(db: Session, id_localidad: int | None, doc: dict,
             continue
         try:
             value, _forma = normalize_seccion_doc(key, raw)
+            # v2: contrato SIEMPRE COMPACTO exige id_seccion (UUID generado por
+            # la app) en CADA sección. Es el único identificador aceptado.
+            if _forma == "array":
+                vistos: set = set()
+                for row in value:
+                    isec = (row or {}).get("id_seccion")
+                    if not isec or not str(isec).strip():
+                        raise ValueError(
+                            f"La sección '{key}' es 1:N y requiere 'id_seccion' (UUID offline "
+                            f"generado por el cliente) en cada fila. El backend no lo genera."
+                        )
+                    if isec in vistos:
+                        raise ValueError(
+                            f"La sección '{key}' tiene 'id_seccion' duplicado ('{isec}') en el "
+                            f"mismo payload. Cada fila debe tener un id_seccion único."
+                        )
+                    vistos.add(isec)
+            else:
+                item = dict(value or {})
+                isec = item.get("id_seccion")
+                if not isec or not str(isec).strip():
+                    raise ValueError(
+                        f"La sección '{key}' es 1:1 y requiere 'id_seccion' (UUID offline "
+                        f"generado por el cliente). El backend no lo genera."
+                    )
             if meta["forma"] == "array":
                 for item in value:
                     row = dict(item or {})
@@ -3090,7 +3162,7 @@ def apply_document(db: Session, id_localidad: int | None, doc: dict,
         _marcar_impacto(db, id_localidad, meta["tabla"])
     _bump_localidad_fecha(db, id_localidad)
     db.commit()
-    result = _build_localidad(db, id_localidad, solo_con_datos=True)
+    result = _sanitizar_doc(_build_localidad(db, id_localidad, solo_con_datos=True))
     result["_errores"] = errors if errors else []
     return result
 

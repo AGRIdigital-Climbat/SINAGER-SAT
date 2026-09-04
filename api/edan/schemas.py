@@ -231,6 +231,135 @@ class NecesidadHumanitaria(BaseModel):
     obs_banos: str = ''
 
 
+# ============================================================================
+#  MODELOS DEL DOCUMENTO TODO-EN-UNO v2 (edan_local_completo / /documento).
+#  Iguales a las secciones compartidas (v1) pero con `id_seccion` REQUERIDO:
+#  en el flujo v2 el único identificador es `id_seccion` (UUID offline generado
+#  por el cliente). El backend NUNCA lo genera; si la app no lo envía, 400.
+#  Estos modelos solo se usan en POST/PUT/GET /documento y el response.
+#  NO tocan los modelos compartidos v1 (id_seccion sigue opcional ahí).
+# ============================================================================
+
+class ImpactoPoblacionDoc(ImpactoPoblacion):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class PrimeraRespuestaDoc(PrimeraRespuesta):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class EstablecimientoSaludDoc(EstablecimientoSalud):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class NecesidadSaludDoc(NecesidadSalud):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class DanoVialDoc(DanoVial):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class DanoInfraPublicaDoc(DanoInfraPublica):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class ServicioBasicoDetalleDoc(ServicioBasicoDetalle):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class UnidadEducativaDoc(UnidadEducativa):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class DanoViviendaDoc(DanoVivienda):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class DanoAgriculturaDoc(DanoAgricultura):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class DanoPecuarioDoc(DanoPecuario):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class InfraProductivaDoc(InfraProductiva):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+class GrupoVulnerableDoc(BaseModel):
+    """→ edan.edan_localidades_proteccion (1:N por grupo vulnerable) — v2 documento.
+    Definido sin herencia para NO exponer la PK interna `id_grupo_vulnerable`."""
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp UTC de la última edición local de la fila (LWW). Formato ISO 8601, ej: '2026-09-02T09:15:00Z'")
+    id_grupo_vulnerable_catalogo: int | None = None  # FK a edan.grupo_vulnerable
+    grupo: dict | None = None  # { id, codigo, nombre, orden } (catálogo anidado)
+    mujeres: int = Field(0, ge=0)
+    hombres: int = Field(0, ge=0)
+    total: int = Field(0, ge=0, description="Calculado: mujeres + hombres")
+    apoyo_psicologico: bool | None = None
+    reposicion_documentos: bool | None = None
+    observaciones: str = ''
+
+class NecesidadHumanitariaDoc(NecesidadHumanitaria):
+    id_seccion: str = Field(..., description="REQUERIDO v2: ID único offline (UUID generado por el cliente). El backend no lo genera.")
+
+
+class LocalidadDocumentoCreate(BaseModel):
+    """Entrada POST/PUT /documento v2 (todo-en-uno, SIEMPRE COMPACTO).
+
+    Igual que el `LocalidadCreate` compartido (v1) pero aquí CADA sección usa su
+    modelo Doc con `id_seccion` REQUERIDO. La forma es la misma que la salida
+    (`LocalidadDocumentoResponse`), por eso es un JSON simétrico ready-to-send.
+    El único identificador de sección es `id_seccion` (UUID offline del cliente).
+    """
+    id_tipo_localidad: int | None = Field(None, description="FK a edan.tipo_localidad")
+    id_edan_localidad_estado: int | None = Field(None, description="FK a edan.edan_localidades_estado")
+    tipo_localidad: str | None = Field(None, description="Nombre libre (alternativa al id)")
+    id_tipo_evento: int | None = Field(None, description="FK a edan.tipo_evento")
+    id_departamento: int | None = Field(None, description="FK a shared.departamento")
+    id_provincia: int | None = Field(None, description="FK a shared.provincia")
+    id_municipio: int | None = Field(None, description="FK a shared.municipio")
+    fecha_llenado: str | None = Field(None, description="ISO date YYYY-MM-DD")
+    fecha_evento: str | None = Field(None, description="ISO date YYYY-MM-DD")
+    hora_evento: str | None = Field(None, description="HH:MM:SS")
+    total_poblacion_afectada: int = Field(0, ge=0)
+    total_familias_afectadas: int = Field(0, ge=0)
+    total_familias_damnificadas: int = Field(0, ge=0)
+    id_local: str | None = Field(None, description="UUID del móvil (offline-first dedupe)")
+    id_usuario: int | None = Field(None, description="Asignado por el servidor si no se envía")
+    fecha_modificacion: str | None = Field(None, description="ISO timestamp (LWW top-level)")
+    pendiente_actualizacion: bool = False
+    pendiente_eliminacion: bool = False
+    localidad: str = Field('', description="Nombre de la comunidad/barrio/ciudad")
+    imp_poblacion: bool = Field(False, description="legacy agrupado")
+    imp_salud: bool = Field(False, description="legacy agrupado")
+    imp_infraestructura: bool = Field(False, description="legacy agrupado")
+    imp_servicios: bool = Field(False, description="legacy agrupado")
+    imp_educacion: bool = Field(False, description="legacy agrupado")
+    imp_vivienda: bool = Field(False, description="legacy agrupado")
+    imp_agropecuario: bool = Field(False, description="legacy agrupado")
+    imp_proteccion: bool = Field(False, description="¿impacto en protección?")
+    imp_necesidades: bool = Field(False, description="legacy agrupado")
+    imp_impacto_poblacion: bool = Field(False, description="1:1 impacto-poblacion")
+    imp_salud_establecimientos: bool = Field(False, description="1:1 salud-establecimientos")
+    imp_danos_viales: bool = Field(False, description="1:1 danos-viales")
+    imp_danos_infra_publica: bool = Field(False, description="1:1 danos-infra-publica")
+    imp_servicios_basicos: bool = Field(False, description="1:1 servicios-basicos")
+    imp_unidades_educativas: bool = Field(False, description="1:1 unidades-educativas")
+    imp_danos_vivienda: bool = Field(False, description="1:1 danos-vivienda")
+    imp_danos_agricultura: bool = Field(False, description="1:1 danos-agricultura")
+    imp_danos_pecuarios: bool = Field(False, description="1:1 danos-pecuarios")
+    imp_infra_productiva: bool = Field(False, description="1:1 infra-productiva")
+    imp_primera_respuesta: bool = Field(False, description="1:1 primera-respuesta")
+    imp_necesidad_salud: bool = Field(False, description="1:1 necesidad-salud")
+    imp_necesidad_humanitaria: bool = Field(False, description="1:1 necesidad-humanitaria")
+    # 1:N y 1:1 — forma fija (11 array / 3 objeto), cada sección con id_seccion REQUERIDO.
+    impacto_poblacion: list[ImpactoPoblacionDoc] | dict | None = None
+    necesidad_primera_respuesta: PrimeraRespuestaDoc | list[dict] | None = None
+    establecimientos_salud: list[EstablecimientoSaludDoc] | dict | None = None
+    necesidad_salud: NecesidadSaludDoc | list[dict] | None = None
+    danos_viales: list[DanoVialDoc] | dict | None = None
+    danos_infra_publica: list[DanoInfraPublicaDoc] | dict | None = None
+    servicios_basicos: list[ServicioBasicoDetalleDoc] | dict | None = None
+    unidades_educativas: list[UnidadEducativaDoc] | dict | None = None
+    danos_vivienda: list[DanoViviendaDoc] | dict | None = None
+    danos_agricultura: list[DanoAgriculturaDoc] | dict | None = None
+    danos_pecuarios: list[DanoPecuarioDoc] | dict | None = None
+    infra_productiva: list[InfraProductivaDoc] | dict | None = None
+    proteccion: list[GrupoVulnerableDoc] | dict | None = None
+    necesidad_humanitaria: NecesidadHumanitariaDoc | list[dict] | None = None
+
+
 class Responsable(BaseModel):
     """Datos del responsable del EDAN (cabecera del formulario)."""
     nombre: str = ''
@@ -374,20 +503,21 @@ class LocalidadDocumentoResponse(BaseModel):
     imp_necesidad_salud: bool = False
     imp_necesidad_humanitaria: bool = False
     # Secciones (forma fija): 11 array + 3 objeto; None si sin datos (comprimido).
-    impacto_poblacion: list[ImpactoPoblacion] | None = None
-    establecimientos_salud: list[EstablecimientoSalud] | None = None
-    danos_viales: list[DanoVial] | None = None
-    danos_infra_publica: list[DanoInfraPublica] | None = None
-    servicios_basicos: list[ServicioBasicoDetalle] | None = None
-    unidades_educativas: list[UnidadEducativa] | None = None
-    danos_vivienda: list[DanoVivienda] | None = None
-    danos_agricultura: list[DanoAgricultura] | None = None
-    danos_pecuarios: list[DanoPecuario] | None = None
-    infra_productiva: list[InfraProductiva] | None = None
-    proteccion: list[GrupoVulnerable] | None = None
-    necesidad_primera_respuesta: PrimeraRespuesta | None = None
-    necesidad_salud: NecesidadSalud | None = None
-    necesidad_humanitaria: NecesidadHumanitaria | None = None
+    # Solo `id_seccion` (UUID offline) las identifica; sin IDs internos del backend.
+    impacto_poblacion: list[ImpactoPoblacionDoc] | None = None
+    establecimientos_salud: list[EstablecimientoSaludDoc] | None = None
+    danos_viales: list[DanoVialDoc] | None = None
+    danos_infra_publica: list[DanoInfraPublicaDoc] | None = None
+    servicios_basicos: list[ServicioBasicoDetalleDoc] | None = None
+    unidades_educativas: list[UnidadEducativaDoc] | None = None
+    danos_vivienda: list[DanoViviendaDoc] | None = None
+    danos_agricultura: list[DanoAgriculturaDoc] | None = None
+    danos_pecuarios: list[DanoPecuarioDoc] | None = None
+    infra_productiva: list[InfraProductivaDoc] | None = None
+    proteccion: list[GrupoVulnerableDoc] | None = None
+    necesidad_primera_respuesta: PrimeraRespuestaDoc | None = None
+    necesidad_salud: NecesidadSaludDoc | None = None
+    necesidad_humanitaria: NecesidadHumanitariaDoc | None = None
 
 
 class LocalidadCabeceraCreate(BaseModel):

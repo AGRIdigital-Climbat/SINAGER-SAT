@@ -45,6 +45,61 @@ DEBE emitir y esperar estas formas:
 - Una 1:1 recibida como array de **1** se acepta (se toma el objeto); array de
   **>1** responde **HTTP 400** con el motivo.
 
+## 2.2 `id_seccion` → único identificador de cada sección (OBLIGATORIO)
+
+**`id_seccion` es el único identificador** de las secciones del documento; es un
+**UUID generado por el cliente** (offline) y guardado tal cual en la BD.
+
+- **El backend NUNCA lo genera.** En las 14 tablas `edan.edan_localidades_*` la
+  columna `id_seccion` es `varchar` SIEMPRE nula `NULL` (sin default, sin
+  secuencia, sin trigger). Si la app no lo envía, **no hay valor** para persistir.
+- Por eso, en el flujo v2:
+  - **1:N** (arrays) y **1:1** (objetos) exigen `id_seccion`.
+  - Si falta → **HTTP 422** (validación de esquema, `Field required`) o **400**
+    con mensaje explícito en el servicio.
+  - Si una misma sección repite `id_seccion` dentro del mismo payload → **HTTP 400**.
+- **No se exponen IDs internos del backend.** Antes, cada fila 1:N traía su PK
+  propia (`id_establecimiento_salud`, `id_dano_vial`, `id_servicio_basico`,
+  `id_impacto_poblacion`, …) además de `id_seccion`. **Ahora NO**: la salida del
+  documento (GET/mis-reportes) filtra esos IDs y el `id_edan_localidad` interno,
+  devolviendo **solo `id_seccion` + campos del formulario**.
+
+Ejemplos de la forma en que viaja cada sección (solo `id_seccion`, sin ids internos):
+
+```jsonc
+// 1:N — array; cada fila con su id_seccion y SIN id_establecimiento_salud / id_edan_localidad
+"establecimientos_salud": [
+  {
+    "id_seccion": "1k1kdcj20-339a7185b8dea",
+    "nombre_establecimiento": "Centro de Salud 15 de Agosto",
+    "comunidad": "Nuevo Amanecer",
+    "nivel_atencion": "2do Nivel",
+    "dano_parcial": true,
+    "dano_total": false,
+    "medicos_afectados": 1,
+    "enfermeras_afectadas": 0,
+    "otros_afectados": 0,
+    "fotografia": "/uploads/reports/2/centro.jpg",
+    "coordenada_lat": -16.50, "coordenada_lon": -68.13,
+    "fecha_modificacion": "2026-09-02T09:15:00Z"
+  }
+]
+```
+
+```jsonc
+// 1:1 — objeto; id_seccion obligatorio, SIN id_edan_localidad
+"necesidad_salud": {
+  "id_seccion": "1k1kdbblu-d7bfb874ee9d0",
+  "numero_personas": 250,
+  "otras_necesidades": "Mis necesidades",
+  "observaciones": "",
+  "fecha_modificacion": "2026-09-02T09:15:00Z"
+}
+```
+
+Este cambio es **exclusivo del flujo v2** (grupo `edan_local_completo` y
+`mis-reportes`). El flujo v1 por-secciones conserva `id_seccion` opcional.
+
 ## 3. Los flags `imp_*` son el corazón
 
 El documento trae los flags `imp_*` (9 legacy + 14 por sección). Regla:
