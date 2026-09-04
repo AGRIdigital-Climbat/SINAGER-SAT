@@ -100,6 +100,132 @@ Ejemplos de la forma en que viaja cada sección (solo `id_seccion`, sin ids inte
 Este cambio es **exclusivo del flujo v2** (grupo `edan_local_completo` y
 `mis-reportes`). El flujo v1 por-secciones conserva `id_seccion` opcional.
 
+### 2.3 Editar con `PUT all in one` — qué cambia y qué NO
+
+El `PUT /localidades/{id_localidad}/documento` identifica cada fila **solo por su
+`id_seccion`** y edita los **campos del formulario** (datos de negocio). El propio
+`id_seccion` **nunca se modifica**: es la **llave** (clave de dedupe / UPSERT).
+
+- **Se edita (siempre que venga en el JSON):** cualquier campo de negocio de la
+  fila, p. ej. `medicos_afectados`, `dano_total`, `observaciones`, `mujeres`, etc.
+- **NO se edita:** el `id_seccion` de la fila. No se "renombra". Para cambiar de
+  dónde vive un dato, se envía el `id_seccion` nuevo (crea una fila nueva) y se
+  borra el viejo con `DELETE .../seccion/{id_seccion}`.
+- **Si el `id_seccion` enviado ya existe** → **UPDATE** de esa fila.
+- **Si el `id_seccion` enviado NO existe** → **INSERT** (crea una fila con ese
+  `id_seccion`).
+
+> **⚠ Cuidado con las ediciones "parciales" — los campos ausentes se ponen en su
+> valor por defecto.** No es una edición no-destructiva a nivel de campo. Al
+> validar el body, FastAPI llena los campos que NO envías con su **default** del
+> esquema (`''`, `0`, `false`) y el servidor los actualiza con ese valor:
+> - Desde el modelo `EstablecimientoSalud`: `nombre_establecimiento=''`,
+>   `comunidad=''`, `nivel_atencion=''`, `dano_parcial=false`, `dano_total=false`,
+>   `medicos_afectados=0`, `enfermeras_afectadas=0`, `otros_afectados=0`.
+> - Los campos de default `None` (`fotografia`, `coordenada_lat`, `coordenada_lon`)
+>   **sí** se conservan si no los envías.
+>
+> Por eso, para **editar** una fila conviene reenviarla **completa** (la forma
+> `GET` devuelve la fila completa y `PUT` la acepta tal cual). Reenviar solo un
+> campo **borra los demás** que tienen default no-nulo. De la misma forma, en las
+> 1:1 el valor "ausente" de un string numérico se lleva a `0`/`''`/`false`.
+
+Ejemplo — editar `medicos_afectados` de una fila de `establecimientos_salud` que
+**ya existe** (mismo `id_seccion`):
+
+```bash
+# ⚠ OJO: esté ejemplo REENVÍA SOLO UN CAMPO → los demás se ponen en su default.
+curl -X PUT -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  http://host:8000/api/v2/edan/localidades/340/documento \
+  -d '{
+    "imp_establecimientos_salud": true,
+    "fecha_modificacion": "2026-09-02T12:00:00Z",
+    "establecimientos_salud": [
+      {
+        "id_seccion": "1k1kdcj20-339a7185b8dea",
+        "medicos_afectados": 3,
+        "fecha_modificacion": "2026-09-02T12:00:00Z"
+      }
+    ]
+  }'
+```
+
+- Antes de este PUT, la fila `1k1kdcj20-339a7185b8dea` tenía
+  `medicos_afectados=1`, `dano_total=true`, `nombre_establecimiento="Centro de
+  Salud 15 de Agosto"`, `comunidad="Nuevo Amanecer"`, …
+- Después del PUT: `medicos_afectados=3` se actualiza, **`id_seccion` sigue
+  siendo el mismo**, y `fotografia`/`coordenadas` se conservan — pero
+  **`nombre_establecimiento` y `comunidad` quedan en `""`** (los puso el default
+  del esquema). Esto es lo inesperado que NO debes hacer.
+
+La forma **correcta** de editar es reenviar la fila **completa** (lo que devuelve
+`GET`), cambiando solo el campo deseado:
+
+```bash
+curl -X PUT -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  http://host:8000/api/v2/edan/localidades/340/documento \
+  -d '{
+    "imp_establecimientos_salud": true,
+    "fecha_modificacion": "2026-09-02T12:00:00Z",
+    "establecimientos_salud": [
+      {
+        "id_seccion": "1k1kdcj20-339a7185b8dea",
+        "nombre_establecimiento": "Centro de Salud 15 de Agosto",
+        "comunidad": "Nuevo Amanecer",
+        "nivel_atencion": "2do Nivel",
+        "dano_parcial": true,
+        "dano_total": false,
+        "medicos_afectados": 3,
+        "enfermeras_afectadas": 0,
+        "otros_afectados": 0,
+        "fotografia": "/uploads/reports/2/centro.jpg",
+        "coordenada_lat": -16.50, "coordenada_lon": -68.13,
+        "fecha_modificacion": "2026-09-02T12:00:00Z"
+      }
+    ]
+  }'
+```
+
+Ahora `medicos_afectados=3` se actualiza y el resto se mantiene tal cual
+(también se reenvía, con sus valores actuales). **`id_seccion` permanece
+`1k1kdcj20-339a7185b8dea`**.
+- Si en lugar de reenviar `1k1kdcj20-339a7185b8dea` se envía un `id_seccion`
+  distinto (p. ej. `1k1kdcj20-aaaa-bbbb`), se **crea una fila nueva**; la anterior
+  queda intacta.
+
+### 2.4 Verbos del documento todo-en-uno (GET / POST / PUT / DELETE)
+
+Resumen de los cuatro verbos de `edan_local_completo` y qué hace cada uno con las
+secciones y `id_seccion`:
+
+| Verbo  | Ruta                                    | Qué hace                                                            |
+| -------| ----------------------------------------| ------------------------------------------------------------------- |
+| `GET`  | `/localidades/{id}/documento`           | Descarga cabecera + flags + **solo** secciones con datos (vacías se omiten). Forma SIMÉTRICA a la entrada. |
+| `POST` | `/localidades/documento`                | Crea la localidad por su `id_local`. Si `id_local` **ya existe**, la **actualiza** (no duplica). Devuelve `id_edan_localidad`. |
+| `PUT`  | `/localidades/{id_localidad}/documento` | Actualiza la localidad existente del path. Solo procesa **las secciones presentes**; las **secciones ausentes** del JSON no se borran. Edita campos por `id_seccion`; recalcula flags; LWW. ⚠ Para editar una fila reenvíala **completa** (los campos ausentes se ponen en su default, ver §2.3). |
+| `DELETE`| `/localidades/{id}/documento`          | Elimina **físicamente** cabecera + flags + **todas** sus secciones. Solo si la localidad es **huérfana** (`id_edan` NULL); si está consolidada → **403**. |
+
+Puntos comunes a los cuatro:
+
+- **`id_seccion` es la llave** (ver §2.3): identifica la fila; **no se edita**;
+  solo viaja en la sección. `GET` lo devuelve tal cual, `POST`/`PUT` lo exigen,
+  `DELETE` del documento y `DELETE .../seccion/{id_seccion}` lo usan para borrar.
+- **`GET` y la entrada son SIMÉTRICOS**: lo que `GET` devuelve, `POST`/`PUT` lo
+  aceptan tal cual (misma forma fija: 11 array / 3 objeto).
+- **`POST`** además de crear sirve como **upsert de cabecera** por `id_local`:
+  reenviar el mismo `id_local` actualiza la localidad en vez de duplicarla.
+
+Ejemplo de `DELETE` de **una sola fila** (mantener la localidad, quitar solo un
+ítem por su `id_seccion`). Ruta del recurso sección (v2):
+
+```bash
+# elimina únicamente la fila 'sec_ue_01' de unidades_educativas
+curl -X DELETE -H "Authorization: Bearer <TOKEN>" \
+  http://host:8000/api/v2/edan/localidades/340/unidades-educativas/seccion/sec_ue_01
+
+# error si ese id_seccion no existe → 404
+```
+
 ## 3. Los flags `imp_*` son el corazón
 
 El documento trae los flags `imp_*` (9 legacy + 14 por sección). Regla:
@@ -126,6 +252,29 @@ El documento trae los flags `imp_*` (9 legacy + 14 por sección). Regla:
   tampoco hay, el servidor usa `NOW()`.
 - **Formato obligatorio:** string ISO 8601 con zona horaria,
   ej. `2026-09-02T09:15:00Z` o `2026-09-02T09:15:00-04:00` (preferir UTC `Z`).
+
+**Ejemplo LWW con `id_seccion`.** La app guarda la fila `1k1kdcj20-...` con
+`fecha_modificacion = 14:15`. En el móvil se vuelve a editar esa misma fila y se
+reenvía:
+
+```jsonc
+// PUT del mismo id_seccion (fila ya existe) — se actualizan SOLO estos campos
+"establecimientos_salud": [
+  {
+    "id_seccion": "1k1kdcj20-339a7185b8dea",   // ídem al guardado → UPDATE
+    "medicos_afectados": 2,
+    "fecha_modificacion": "2026-09-02T15:00:00Z"
+  }
+]
+```
+
+- La `fecha_modificacion` del envío es **más nueva** (15:00) → se adopta
+  `medicos_afectados=2` **y** la fecha pasa a `15:00`.
+- Si el envío trajera una fecha **más vieja** (p. ej. `11:00`) **los datos se
+  actualizan igual** (`medicos_afectados=2`), pero la `fecha_modificacion`
+  **se mantiene en 14:15** (la columna no retrocede por `GREATEST`).
+- Recordar: en ambos casos el `id_seccion` **no cambia**; solo identifica qué fila
+  editar.
 
 ## 5. Ejemplos de uso por endpoint
 
@@ -224,8 +373,13 @@ Respuesta:
 
 ### 5.3 `PUT /localidades/{id_localidad}/documento` — actualizar una localidad existente
 
-Actualiza la cabecera y **solo las secciones presentes** en el JSON. Las secciones
-ausentes NO se borran. El servidor recalcula flags y aplica LWW (`GREATEST`).
+Actualiza la cabecera y **solo las secciones presentes** en el JSON. Las **secciones
+ausentes** NO se borran (a nivel de sección es no-destructivo). El servidor recalcula
+flags y aplica LWW (`GREATEST`).
+
+> ⚠ Recordatorio de §2.3: a **nivel de campo** el PUT ejemplo, si solo reenvías una
+> parte de la fila, pone en columnas de default (`''`/`0`/`false`) lo que no venga.
+> Para editar, reenvía la **fila completa**.
 
 ```bash
 # actualización parcial (solo impacto_poblacion)
@@ -249,6 +403,39 @@ Comportamiento LWW observable:
   guardada a las `14:15` → **datos se actualizan**, pero la `fecha_modificacion`
   **se mantiene en 14:15** (no retrocede).
 - Enviar con fecha **más nueva** → fecha y datos **se adoptan**.
+- En todos los casos, el `id_seccion` del ejemplo (`ip_doc_1`) **es la llave y no
+  cambia**: el PUT edita `fallecidos`, `heridos` y `desaparecidos` de **esa** fila.
+  Si esa fila no existiera, se crea con ese mismo `id_seccion`.
+
+Ejemplo de edición de **varios campos a la vez** sobre una fila existente (aquí
+`unidades_educativas`, 1:N): se reenvía el mismo `id_seccion` y se actualiza lo
+que vino; el resto de la fila y las demás filas quedan intactas.
+
+```bash
+curl -X PUT -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  http://host:8000/api/v2/edan/localidades/340/documento \
+  -d '{
+    "imp_unidades_educativas": true,
+    "fecha_modificacion": "2026-09-02T13:10:00Z",
+    "unidades_educativas": [
+      {
+        "id_seccion": "sec_ue_01",
+        "nombre_establecimiento": "Escuela Nuevo Amanecer",
+        "comunidad": "Nuevo Amanecer",
+        "estudiantes": 145,
+        "suspension_clases": true,
+        "fecha_modificacion": "2026-09-02T13:10:00Z"
+      }
+    ]
+  }'
+```
+
+Este PUT actualiza `nombre_establecimiento`, `estudiantes` y `suspension_clases`
+de la fila `sec_ue_01`. **`id_seccion` permanece `sec_ue_01`** (es la llave).
+Pero fíjate en el detalle (ver §2.3): como este ejemplo **no reenvía**
+`dano_parcial`, `dano_total`, `perdida_material`, `funciona_albergue`, esos campos
+se ponen en su default del esquema (`false`/0). Por eso, para editar solo un campo
+conviene reenviar la fila completa (lo que devuelve `GET`).
 
 ### 5.4 `DELETE /localidades/{id_localidad}/documento` — eliminar la localidad completa
 
@@ -301,6 +488,47 @@ curl -X PUT -H "Authorization: Bearer <TOKEN>" \
   "detail": "La seccion 'necesidad_salud' es de relacion 1:1 (un solo objeto); se recibieron 2 elementos. Envie un objeto unico o un array de un solo elemento."
 }
 ```
+
+**`id_seccion` requerido (1:N y 1:1).** Si una sección del PUT/POST no trae
+`id_seccion`, se rechaza (el backend no lo genera):
+
+```jsonc
+// sección 1:N sin id_seccion → HTTP 400
+"danos_viales": [
+  { "via": true, "tramo": "Carretera norte km 5" }   // falta id_seccion
+]
+```
+
+```json
+{
+  "detail": "La sección 'danos_viales' es 1:N y requiere 'id_seccion' (UUID offline generado por el cliente) en cada fila. El backend no lo genera."
+}
+```
+
+Si por el contrario el body no cumple el esquema (falta el campo en el modelo),
+FastAPI responde **HTTP 422** `Field required` para `id_seccion`.
+
+**`id_seccion` duplicado dentro de la misma sección.** Si un mismo `id_seccion`
+se repite **en el mismo payload** → HTTP 400:
+
+```jsonc
+// dos filas con el mismo id_seccion en la misma sección → HTTP 400
+"establecimientos_salud": [
+  { "id_seccion": "1k1kdcj20-339a7185b8dea", "nombre_establecimiento": "A" },
+  { "id_seccion": "1k1kdcj20-339a7185b8dea", "nombre_establecimiento": "B" }
+]
+```
+
+```json
+{
+  "detail": "La sección 'establecimientos_salud' tiene 'id_seccion' duplicado ('1k1kdcj20-339a7185b8dea') en el mismo payload. Cada fila debe tener un id_seccion único."
+}
+```
+
+> Nota: cada `id_seccion` debe ser único **por sección** dentro de un mismo
+> documento (la validación de duplicados es por sección). Reenviar el mismo
+> `id_seccion` **en requests distintos** NO es duplicado: es cómo se **edita**
+> esa fila (ver §2.3).
 
 ## 7. Fotografías del carrete (NO van inline)
 
