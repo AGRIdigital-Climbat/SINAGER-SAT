@@ -466,6 +466,67 @@ Respuesta (éxito):
 }
 ```
 
+### 5.5 `GET /localidades/filtrar` — listar localidades completas con filtros
+
+**Endpoint de búsqueda/consulta** (solo lectura). Devuelve **TODAS** las localidades
+de cualquier usuario, cada una en formato **documento v2 comprimido** (cabecera +
+los 22 flags `imp_*` + **solo** las secciones con datos, sin IDs internos).
+Sirve para mapear / sincronizar / auditar sin tocar `mis-reportes`.
+
+| Método | Ruta | Tags |
+|---|---|---|
+| `GET` | `/api/v2/edan/localidades/filtrar` | `EDAN_LOCALIDADES` › `EDAN_LOCALIDADES > Buscar` |
+
+**Parámetros (todos opcionales, combinables con AND):**
+
+| Parámetro | Tipo | Filtra por |
+|---|---|---|
+| `fecha_llenado_desde` / `fecha_llenado_hasta` | `date` | rango de **fecha de llenado del reporte** (cabecera) |
+| `id_tipo_evento` | `int` | tipo de evento (FK `edan.tipo_evento`) |
+| `id_tipo_localidad` | `int` | tipo de localidad (FK `edan.tipo_localidad`) |
+| `id_departamento` | `int` | departamento (FK `shared.departamento`) |
+| `id_provincia` | `int` | provincia (FK `shared.provincia`) |
+| `id_municipio` | `int` | municipio (FK `shared.municipio`) |
+| `id_estado` | `int` | estado de la localidad (FK `edan.edan_localidades_estado`) |
+| `solo_huerfanas` | `bool` | `true`=huérfanas (`id_edan NULL`), `false`=consolidadas, sin enviar=todas |
+| `id_usuario` | `int` | limita a las localidades de un usuario específico (opcional) |
+| `skip` / `limit` | `int` | paginación (`limit` máx. 1000, default 50) |
+
+```bash
+# todas las localidades (primeras 50)
+curl -H "Authorization: Bearer <TOKEN>" \
+  http://host:8000/api/v2/edan/localidades/filtrar
+
+# combinado: departamento + tipo de evento + rango de fecha, paginado
+curl -H "Authorization: Bearer <TOKEN>" \
+  "http://host:8000/api/v2/edan/localidades/filtrar?id_departamento=7&id_tipo_evento=4&fecha_llenado_desde=2026-09-01&fecha_llenado_hasta=2026-09-30&skip=0&limit=100"
+```
+
+Respuesta:
+
+```json
+{
+  "message": "Localidades filtradas correctamente",
+  "total": 3,
+  "data": [
+    {
+      "id_edan_localidad": 353,
+      "id_local": "SINAGER-353-XXXXXXXX",
+      "es_huerfana": true,
+      "fecha_llenado": "2026-09-04",
+      "departamento": { "id": 7, "nombre": "..." },
+      "tipo_evento": { "id_tipo_evento": 4, "nombre": "..." },
+      "imp_impacto_poblacion": true,
+      "impacto_poblacion": [ { "id_seccion": "ip_1", "..." : "..." } ]
+    }
+  ]
+}
+```
+
+**Nota:** cada objeto de `data` es **exactamente** el mismo layout que devuelve
+`GET /localidades/{id_localidad}/documento` (por eso es "los filtros de la
+cabecera + el documento comprimido de cada localidad").
+
 ## 6. Errores (HTTP 400) ejemplo
 
 Relaciones 1:1 enviadas como **array de >1** se rechazan con mensaje explicativo:

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -2996,6 +2996,78 @@ def get_mis_localidades(db: Session, id_usuario: int, skip: int = 0, limit: int 
         LIMIT :limit OFFSET :skip
     """, {**params, "limit": limit, "skip": skip})
     return [_sanitizar_doc(_build_localidad(db, r["id_edan_localidad"], solo_con_datos=solo_con_datos)) for r in rows], total
+
+
+def filtrar_localidades_documento(db: Session,
+                                  skip: int = 0, limit: int = 50,
+                                  fecha_llenado_desde: date | None = None,
+                                  fecha_llenado_hasta: date | None = None,
+                                  id_tipo_evento: int | None = None,
+                                  id_tipo_localidad: int | None = None,
+                                  id_departamento: int | None = None,
+                                  id_provincia: int | None = None,
+                                  id_municipio: int | None = None,
+                                  id_estado: int | None = None,
+                                  solo_huerfanas: bool | None = None,
+                                  id_usuario: int | None = None):
+    """Lista localidades (TODAS, de cualquier usuario) como documento v2
+    COMPRIMIDO (cabecera + 22 flags imp_* + solo las secciones con datos),
+    aplicando filtros opcionales de la cabecera.
+
+    Filtros (todos opcionales, combinables con AND):
+        fecha_llenado_desde/hasta: rango de fecha de llenado del formulario.
+        id_tipo_evento, id_tipo_localidad, id_departamento, id_provincia,
+        id_municipio, id_estado: igualdad por FK.
+        solo_huerfanas: True=id_edan IS NULL, False=id_edan IS NOT NULL.
+        id_usuario: si viene, limita a las localidades de ese usuario.
+    """
+    conds: list[str] = []
+    params: dict = {}
+    if fecha_llenado_desde is not None:
+        conds.append("l.fecha_llenado >= :fecha_llenado_desde")
+        params["fecha_llenado_desde"] = fecha_llenado_desde
+    if fecha_llenado_hasta is not None:
+        conds.append("l.fecha_llenado <= :fecha_llenado_hasta")
+        params["fecha_llenado_hasta"] = fecha_llenado_hasta
+    if id_tipo_evento is not None:
+        conds.append("l.id_tipo_evento = :id_tipo_evento")
+        params["id_tipo_evento"] = id_tipo_evento
+    if id_tipo_localidad is not None:
+        conds.append("l.id_tipo_localidad = :id_tipo_localidad")
+        params["id_tipo_localidad"] = id_tipo_localidad
+    if id_departamento is not None:
+        conds.append("l.id_departamento = :id_departamento")
+        params["id_departamento"] = id_departamento
+    if id_provincia is not None:
+        conds.append("l.id_provincia = :id_provincia")
+        params["id_provincia"] = id_provincia
+    if id_municipio is not None:
+        conds.append("l.id_municipio = :id_municipio")
+        params["id_municipio"] = id_municipio
+    if id_estado is not None:
+        conds.append("l.id_edan_localidad_estado = :id_estado")
+        params["id_estado"] = id_estado
+    if solo_huerfanas is True:
+        conds.append("l.id_edan IS NULL")
+    elif solo_huerfanas is False:
+        conds.append("l.id_edan IS NOT NULL")
+    if id_usuario is not None:
+        conds.append("l.id_usuario = :id_usuario")
+        params["id_usuario"] = id_usuario
+    where = f"WHERE {' AND '.join(conds)}" if conds else ""
+
+    total = db.execute(text(f"""
+        SELECT COUNT(*) FROM edan.edan_localidades l {where}
+    """), params).scalar()
+    rows = _rows(db, f"""
+        SELECT l.id_edan_localidad
+        FROM edan.edan_localidades l
+        {where}
+        ORDER BY l.fecha_modificacion DESC NULLS LAST, l.id_edan_localidad DESC
+        LIMIT :limit OFFSET :skip
+    """, {**params, "limit": limit, "skip": skip})
+    items = [_sanitizar_doc(_build_localidad(db, r["id_edan_localidad"], solo_con_datos=True)) for r in rows]
+    return items, total
 
 
 # ============================================================================

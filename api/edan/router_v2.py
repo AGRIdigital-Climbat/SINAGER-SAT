@@ -1,4 +1,5 @@
 from typing import Literal
+from datetime import date
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -46,6 +47,7 @@ TAG_INFRA_PRODUCTIVA = "EDAN_LOCALIDADES > Infra Productiva"
 TAG_PROTECCION = "EDAN_LOCALIDADES > Proteccion"
 TAG_NECESIDAD_HUMANITARIA = "EDAN_LOCALIDADES > Necesidades Humanitarias"
 TAG_DOCUMENTO = "EDAN_LOCALIDADES > edan_local_completo"
+TAG_BUSCAR = "EDAN_LOCALIDADES > Buscar"
 
 ROLES_LOCALES = (6, 7)  # UGR municipio + Responsable local
 
@@ -98,6 +100,50 @@ def mis_reportes_localidades(
                                               id_departamento=id_departamento,
                                               id_municipio=id_municipio)
     return SuccessResponse(message="Mis localidades listadas correctamente", data=data, total=total)
+
+
+@router.get("/localidades/filtrar", tags=[TAG_EDAN_LOCALIDADES, TAG_BUSCAR],
+            summary="Filtrar localidades (comprimido) con filtros de cabecera",
+            description="Devuelve TODAS las localidades (de cualquier usuario) en formato **documento v2 "
+                        "COMPRIMIDO**: cabecera + los 22 flags `imp_*` + SOLO las secciones que tienen datos "
+                        "(las vacías se omiten).\n\n"
+                        "Todos los filtros son **opcionales** y combinables (AND):\n"
+                        "- `fecha_llenado_desde` / `fecha_llenado_hasta`: rango de fecha de llenado de la cabecera.\n"
+                        "- `id_tipo_evento`, `id_tipo_localidad`, `id_departamento`, `id_provincia`, `id_municipio`, "
+                        "`id_estado`: filtros por FK.\n"
+                        "- `solo_huerfanas`: `true`=huérfanas (`id_edan IS NULL`), `false`=consolidadas, `null`=todas.\n"
+                        "- `id_usuario`: si se envía, limita a las localidades de ese usuario.\n\n"
+                        "Si se omite `id_departamento` y `id_municipio`, trae localidades de todo el país.")
+def filtrar_localidades(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+    fecha_llenado_desde: date | None = Query(None, description="Filtrar por rango: fecha de llenado del reporte (inclusive)"),
+    fecha_llenado_hasta: date | None = Query(None, description="Filtrar por rango: fecha de llenado del reporte (inclusive)"),
+    id_tipo_evento: int | None = Query(None, description="Filtrar por tipo de evento (FK edan.tipo_evento)"),
+    id_tipo_localidad: int | None = Query(None, description="Filtrar por tipo de localidad (FK edan.tipo_localidad)"),
+    id_departamento: int | None = Query(None, description="Filtrar por departamento (FK shared.departamento)"),
+    id_provincia: int | None = Query(None, description="Filtrar por provincia (FK shared.provincia)"),
+    id_municipio: int | None = Query(None, description="Filtrar por municipio (FK shared.municipio)"),
+    id_estado: int | None = Query(None, description="Filtrar por estado de localidad (FK edan.edan_localidades_estado)"),
+    solo_huerfanas: bool | None = Query(None, description="true=huérfanas (id_edan NULL), false=consolidadas, null=todas"),
+    id_usuario: int | None = Query(None, description="Filtrar por usuario específico (opcional)"),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    data, total = service.filtrar_localidades_documento(
+        db, skip=skip, limit=limit,
+        fecha_llenado_desde=fecha_llenado_desde,
+        fecha_llenado_hasta=fecha_llenado_hasta,
+        id_tipo_evento=id_tipo_evento,
+        id_tipo_localidad=id_tipo_localidad,
+        id_departamento=id_departamento,
+        id_provincia=id_provincia,
+        id_municipio=id_municipio,
+        id_estado=id_estado,
+        solo_huerfanas=solo_huerfanas,
+        id_usuario=id_usuario,
+    )
+    return SuccessResponse(message="Localidades filtradas correctamente", data=data, total=total)
 
 
 @router.get("/localidades/mis-resumen", tags=[TAG_EDAN_LOCALIDADES, TAG_CABECERA],
