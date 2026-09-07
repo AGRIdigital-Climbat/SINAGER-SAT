@@ -3274,43 +3274,47 @@ def _reporte_where(f: dict) -> tuple[str, dict]:
 
 
 def reporte_resumen(db: Session, f: dict | None = None):
+    """Resumen agregado de localidades (TODAS: huérfanas + consolidadas).
+    Filtros aplicados sobre la tabla edan.edan_localidades.
+    """
     f = f or {}
-    where, params = _reporte_where(f)
+    # Usar filtros sobre localidades en lugar de EDAN
+    where, params = _where_localidades(f) if "id_departamento" in (f or {}) or "id_estado" in (f or {}) else _reporte_where(f)
+    
+    # Contar localidades totales y desglose
     total = db.execute(text(f"""
-        SELECT COUNT(*) AS total_edans,
-               COALESCE(SUM(e.total_poblacion_afectada), 0) AS total_poblacion,
-               COALESCE(SUM(e.total_familias_afectadas), 0) AS total_familias_afectadas,
-               COALESCE(SUM(e.total_familias_damnificadas), 0) AS total_familias_damnificadas
-        FROM edan.edan e{where}
+        SELECT COUNT(*) AS total_localidades,
+               COUNT(*) FILTER (WHERE id_edan IS NULL) AS total_huerfanas,
+               COUNT(*) FILTER (WHERE id_edan IS NOT NULL) AS total_consolidadas,
+               COALESCE(SUM(total_poblacion_afectada), 0) AS total_poblacion_afectada,
+               COALESCE(SUM(total_familias_afectadas), 0) AS total_familias_afectadas,
+               COALESCE(SUM(total_familias_damnificadas), 0) AS total_familias_damnificadas
+        FROM edan.edan_localidades l{where}
     """), params).mappings().first()
-    total_localidades = db.execute(text(f"""
-        SELECT COUNT(*) FROM edan.edan_localidades l
-        JOIN edan.edan e ON e.id_edan = l.id_edan{where}
-    """), params).scalar()
-
+    
     por_estado = [dict(r) for r in _rows(db, f"""
-        SELECT es.nombre AS estado, e.id_estado, COUNT(*) AS cantidad
-        FROM edan.edan e
-        LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado{where}
-        GROUP BY e.id_estado, es.nombre ORDER BY cantidad DESC
+        SELECT l.id_edan_localidad_estado, ele.nombre AS estado, COUNT(*) AS cantidad
+        FROM edan.edan_localidades l
+        LEFT JOIN edan.edan_localidades_estado ele
+            ON ele.id_edan_localidad_estado = l.id_edan_localidad_estado{where}
+        GROUP BY l.id_edan_localidad_estado, ele.nombre ORDER BY cantidad DESC
     """, params)]
 
     por_tipo_evento = [dict(r) for r in _rows(db, f"""
-        SELECT e.id_tipo_evento,
-               COALESCE(te.nombre, 'Sin tipo') AS tipo_evento,
-               COUNT(*) AS cantidad
-        FROM edan.edan e
-        LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = e.id_tipo_evento{where}
-        GROUP BY e.id_tipo_evento, te.nombre ORDER BY cantidad DESC
+        SELECT l.id_tipo_evento, COALESCE(te.nombre, 'Sin tipo') AS tipo_evento, COUNT(*) AS cantidad
+        FROM edan.edan_localidades l
+        LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = l.id_tipo_evento{where}
+        GROUP BY l.id_tipo_evento, te.nombre ORDER BY cantidad DESC
     """, params)]
 
     return {
         "totales": {
-            "total_edans": total["total_edans"],
-            "total_localidades": total_localidades,
-            "total_poblacion_afectada": total["total_poblacion"],
-            "total_familias_afectadas": total["total_familias_afectadas"],
-            "total_familias_damnificadas": total["total_familias_damnificadas"],
+            "total_localidades": total["total_localidades"] if total else 0,
+            "total_huerfanas": total["total_huerfanas"] if total else 0,
+            "total_consolidadas": total["total_consolidadas"] if total else 0,
+            "total_poblacion_afectada": total["total_poblacion_afectada"] if total else 0,
+            "total_familias_afectadas": total["total_familias_afectadas"] if total else 0,
+            "total_familias_damnificadas": total["total_familias_damnificadas"] if total else 0,
         },
         "por_estado": por_estado,
         "por_tipo_evento": por_tipo_evento,
@@ -3340,6 +3344,7 @@ def reporte_geografico(db: Session, f: dict | None = None):
 
 
 def reporte_agricultura(db: Session, f: dict | None = None):
+    """Agricultura sobre TODAS las localidades (no solo consolidadas en EDAN)."""
     f = f or {}
     where, params = _reporte_where(f)
     rows = _rows(db, f"""
@@ -3348,12 +3353,10 @@ def reporte_agricultura(db: Session, f: dict | None = None):
                c.nombre AS cultivo_nombre,
                c.grupo AS cultivo_grupo,
                COUNT(*) AS total_registros,
-               COUNT(DISTINCT e.id_edan) AS total_edans,
                COALESCE(SUM(a.hectareas_afectadas), 0) AS hectareas_afectadas,
                COALESCE(SUM(a.hectareas_perdidas), 0) AS hectareas_perdidas
         FROM edan.edan_localidades_danos_agricultura a
         JOIN edan.edan_localidades l ON l.id_edan_localidad = a.id_edan_localidad
-        JOIN edan.edan e ON e.id_edan = l.id_edan
         LEFT JOIN shared.cultivo c ON c.id = a.id_cultivo
         {where}
         GROUP BY a.tipo_cultivo, a.id_cultivo, c.nombre, c.grupo
@@ -3363,6 +3366,7 @@ def reporte_agricultura(db: Session, f: dict | None = None):
 
 
 def reporte_pecuario(db: Session, f: dict | None = None):
+    """Pecuario sobre TODAS las localidades (no solo consolidadas en EDAN)."""
     f = f or {}
     where, params = _reporte_where(f)
     rows = _rows(db, f"""
@@ -3371,12 +3375,10 @@ def reporte_pecuario(db: Session, f: dict | None = None):
                p.nombre AS especie_catalogo,
                p.grupo AS especie_grupo,
                COUNT(*) AS total_registros,
-               COUNT(DISTINCT e.id_edan) AS total_edans,
                COALESCE(SUM(a.animales_afectados), 0) AS animales_afectados,
                COALESCE(SUM(a.animales_muertos), 0) AS animales_muertos
         FROM edan.edan_localidades_danos_pecuario a
         JOIN edan.edan_localidades l ON l.id_edan_localidad = a.id_edan_localidad
-        JOIN edan.edan e ON e.id_edan = l.id_edan
         LEFT JOIN shared.pecuario p ON p.id = a.id_especie
         {where}
         GROUP BY a.especie, a.id_especie, p.nombre, p.grupo
