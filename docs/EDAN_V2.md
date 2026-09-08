@@ -72,11 +72,27 @@ escribir nada.
 NO acepta estos campos (no son columnas de la tabla, se eliminaron del
 schema `EdanUpdateV2` en 2026-09-08):
 
-- `estado` (string) → el estado va por `icon`/`id_estado` (cambiar con
+- `estado` (string) → el estado va por `id_estado` (cambiar con
   `PUT /api/v2/edan/{id}/estado`, body `{"id_estado": N}`).
 - `responsable` {nombre, cargo, fono, correo} → el contacto del alcalde se
   **lee** por JOIN con `usuarios.usuario`; no se escribe.
 - `fecha_modificacion` → la genera el servicio con `NOW()` en cada UPDATE.
+
+> **Estricto desde 2026-09-08:** `EdanUpdateV2` usa `extra="forbid"`. Cualquier
+> campo desconocido (`nombre_alcalde`, `fono_alcalde`, `responsable`, typo del
+> campo correcto) devuelve **422** ("Extra inputs are not permitted") — no se
+> ignora silenciosamente.
+
+### Matriz de roles del `PUT /api/v2/edan/{id}`
+
+| Rol | Puede modificar |
+|---|---|
+| 1 (superadmin), 2 (admin), 3 (VIDECI Regional), 4 (UGR Sectores), 5 (DGR), 9 (VIDECI Departamental) | Todas las 17 columnas |
+| 6 (UGR Municipio), 7 (Responsable Local) | **Solo `id_usuario_alcalde`** — asignar el alcalde. Cualquier otro campo → **403** |
+| 8 (Alcalde) | Sin acceso (403, permiso de módulo) |
+
+`id_usuario_alcalde` debe ser un `usuarios.usuario` con **rol 8 (Alcalde)**;
+si el usuario no existe → 404, si tiene otro rol → **400**.
 
 ### Campos aceptados (17)
 
@@ -89,21 +105,32 @@ schema `EdanUpdateV2` en 2026-09-08):
 
 ### Ejemplos reales
 
-Asignar alcalde (EDAN 76, UGR = usuario 28, alcalde = usuario con
-`id_usuario_alcalde`):
+Asignar el alcalde — hecho por un **UGR Municipio (rol 6)** sobre un EDAN ya
+consolidado (EDAN 76, `070101/2026/002`; el usuario 25 es rol Alcalde):
 
 ```json
 {
-  "id_usuario_alcalde": 28
+  "id_usuario_alcalde": 25
 }
 ```
 
-`id_usuario_alcalde` se guarda tal cual en `edan.edan`; el desglose
-`responsable_*` (nombre, cargo, fono, correo) sale del JOIN
-`usuarios.usuario` en la respuesta `GET /api/v2/edan/76`.
+- `id_usuario_alcalde` se guarda en `edan.edan`; el desglose `responsable_*`
+  (nombre, cargo, fono, correo) sale del JOIN `usuarios.usuario` en la
+  respuesta `GET /api/v2/edan/76`.
+- Validación (rol 6 probado en 2026-09-08): `id_usuario_alcalde: 25` → `200`;
+  `id_usuario_alcalde: 28` (usuario rol 6, no alcalde) →
+  `400 {"detail": "id_usuario_alcalde debe ser un usuario con rol Alcalde (8)"}`.
 
-Ajustar localización y un total (si se manda `id_municipio` y faltan depto/
-provincia, el servicio los deduce de `shared.municipio`):
+Intentos prohibidos para rol 6 (verificados):
+
+```text
+PUT /api/v2/edan/76  {"id_estado": 2}     -> 403 "Rol 6 solo puede modificar id_usuario_alcalde. Campos no permitidos: id_estado"
+PUT /api/v2/edan/76  {"nombre_alcalde": "X"}  -> 422 (extra_forbidden)
+PUT /api/v2/edan/76  {"id_usuario_alcalde": "abc"} -> 422 (debe ser int)
+```
+
+Ajustar localización y un total (rol 1-5 / 9; si se manda `id_municipio` y
+faltan depto/provincia, el servicio los deduce de `shared.municipio`):
 
 ```json
 {

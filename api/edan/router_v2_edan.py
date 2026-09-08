@@ -20,6 +20,8 @@ TAG_EDAN_LOCALIDADES = "EDAN_LOCALIDADES"
 ROLES_EDAN_CREA = (1, 2, 3, 4, 5, 9)
 ROLES_ESTADO_EDAN = (1, 2, 3, 4, 5, 9)
 ROLES_LOCALES = (6, 7)
+ROLES_ASIGNA_ALCALDE = (6, 7)
+PU_ALCALDE_ONLY_FIELDS = {"id_usuario_alcalde"}
 
 
 def _filtros_dep_factory(forzar_scope: bool = True):
@@ -252,14 +254,33 @@ def obtener_edan(id: int, modo: str = Query("detallado"), db: Session = Depends(
     return SuccessResponse(message="EDAN obtenido correctamente", data=result)
 
 
-@router.put("/{id}", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
+@router.put("/{id}", tags=[TAG_EDAN],
             summary="Actualizar un EDAN",
             description="Actualiza las columnas reales de `edan.edan`. PUT parcial: basta enviar\n"
                         "solo los campos a cambiar. `id_usuario_alcalde` (int) asigna el alcalde;\n"
-                        "los datos de contacto del responsable se leen por JOIN con `usuarios.usuario`.")
+                        "los datos de contacto del responsable se leen por JOIN con `usuarios.usuario`.\n\n"
+                        "**Roles 6 y 7 (UGR Municipio / Responsable Local):** solo pueden enviar\n"
+                        "`id_usuario_alcalde`; cualquier otro campo devuelve 403. Roles 1-5 y 9\n"
+                        "pueden editar todas las columnas.")
 def actualizar_edan(id: int, data: EdanUpdateV2, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    rol = _user.get("id_rol")
+    if rol not in ROLES_EDAN_CREA and rol not in ROLES_ASIGNA_ALCALDE:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Rol {rol} no autorizado para actualizar EDAN. Roles permitidos: "
+                   f"{ROLES_EDAN_CREA} o {ROLES_ASIGNA_ALCALDE} (solo id_usuario_alcalde)",
+        )
+    payload = data.model_dump(exclude_unset=True)
+    if rol not in ROLES_EDAN_CREA:
+        no_permitidos = set(payload) - PU_ALCALDE_ONLY_FIELDS
+        if no_permitidos:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Rol {rol} solo puede modificar id_usuario_alcalde. "
+                       f"Campos no permitidos: {', '.join(sorted(no_permitidos))}",
+            )
     try:
-        result = service.update_edan(db, id, data.model_dump(exclude_unset=True))
+        result = service.update_edan(db, id, payload)
     except HTTPException:
         raise
     except Exception as e:

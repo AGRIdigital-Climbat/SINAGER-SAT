@@ -2095,9 +2095,22 @@ def create_edan(db: Session, data: dict) -> int:
     return id_edan
 
 
+def _validar_usuario_alcalde(db: Session, id_usuario_alcalde: int) -> None:
+    """`id_usuario_alcalde` debe referenciar un usuario existente con rol 8 (Alcalde)."""
+    row = _row(db, "SELECT id_usuario, id_rol FROM usuarios.usuario WHERE id_usuario = :id",
+               {"id": id_usuario_alcalde})
+    if not row:
+        raise HTTPException(status_code=404, detail="Usuario alcalde no encontrado")
+    if row["id_rol"] != 8:
+        raise HTTPException(status_code=400,
+                            detail="id_usuario_alcalde debe ser un usuario con rol Alcalde (8)")
+
+
 def update_edan(db: Session, id: int, data: dict) -> dict | None:
     if not get_edan(db, id):
         return None
+    if data.get("id_usuario_alcalde") is not None:
+        _validar_usuario_alcalde(db, data["id_usuario_alcalde"])
     fields = {
         "id_local": data.get("id_local"),
         "codigo_edan": data.get("codigo_edan"),

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..response import SuccessResponse
 
@@ -748,7 +748,11 @@ class EdanUpdateV2(BaseModel):
     - No incluye `estado` (string), `responsable` ni `fecha_modificacion`:
       no son columnas de la tabla; `fecha_modificacion` la genera el servicio
       con `NOW()` en cada UPDATE.
+    - `extra="forbid"`: campos desconocidos (p.ej. `nombre_alcalde`,
+      `fono_alcalde`, `responsable`) devuelven 422 en vez de ignorarse.
     """
+    model_config = ConfigDict(extra="forbid")
+
     id_local: str | None = None
     codigo_edan: str | None = None
     id_usuario_ugr: int | None = None
