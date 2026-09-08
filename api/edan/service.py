@@ -638,6 +638,215 @@ def _get_sumatorias(db: Session, id_edan: int) -> dict:
     }
 
 
+def _get_resumen_secciones(db: Session, id_edan: int) -> dict:
+    """Resumen agregado de las 14 secciones para el EDAN (grupo consolidado).
+    Agrega por grupo donde aplica (grupo etario, tipo, cultivo, especie, grupo
+    vulnerable) y expone totales por sección. Los totales son por id_edan_localidad
+    (fila base en tablas de localidad) o sumatorias en tablas 1:N."""
+    locs = _rows(db, """
+        SELECT id_edan_localidad FROM edan.edan_localidades
+        WHERE id_edan = :id ORDER BY id_edan_localidad
+    """, {"id": id_edan})
+    ids = [r["id_edan_localidad"] for r in locs]
+    if not ids:
+        return {}
+
+    ph = ", ".join(f":_{i}" for i in range(len(ids)))
+    prm = lambda i: f"_{i}"
+    params = {prm(i): v for i, v in enumerate(ids)}
+
+    def totals(rows, keys):
+        return {k: sum(int(r.get(k) or 0) for r in rows) for k in keys}
+
+    def _overview(rows_by_localidad):
+        return {"localidades": len(rows_by_localidad)}
+
+    impacto = [dict(r) for r in _rows(db, f"""
+        SELECT ip.id_grupo_etario, COALESCE(ge.nombre, 'Sin grupo') AS grupo_etario,
+               COALESCE(SUM(ip.fallecidos), 0) AS fallecidos,
+               COALESCE(SUM(ip.heridos), 0) AS heridos,
+               COALESCE(SUM(ip.desaparecidos), 0) AS desaparecidos
+        FROM edan.edan_localidades_impacto_poblacion ip
+        LEFT JOIN edan.grupo_etario ge ON ge.id_grupo_etario = ip.id_grupo_etario
+        WHERE ip.id_edan_localidad IN ({ph})
+        GROUP BY ip.id_grupo_etario, ge.nombre ORDER BY fallecidos DESC
+    """, params)]
+
+    primera = _row(db, f"""
+        SELECT COUNT(*) AS localidades,
+               COUNT(*) FILTER (WHERE pr.busqueda) AS busqueda,
+               COUNT(*) FILTER (WHERE pr.salvamento) AS salvamento,
+               COUNT(*) FILTER (WHERE pr.evacuacion) AS evacuacion
+        FROM edan.edan_localidades_primera_respuesta pr
+        WHERE pr.id_edan_localidad IN ({ph})
+    """, params)
+
+    salud_est = dict(_row(db, f"""
+        SELECT COUNT(*) AS total_establecimientos,
+               COALESCE(SUM((se.dano_parcial)::int), 0) AS dano_parcial,
+               COALESCE(SUM((se.dano_total)::int), 0) AS dano_total,
+               COALESCE(SUM(se.medicos_afectados), 0) AS medicos_afectados,
+               COALESCE(SUM(se.enfermeras_afectadas), 0) AS enfermeras_afectadas,
+               COALESCE(SUM(se.otros_afectados), 0) AS otros_afectados,
+               COUNT(DISTINCT se.id_edan_localidad) AS localidades
+        FROM edan.edan_localidades_salud_establecimientos se
+        WHERE se.id_edan_localidad IN ({ph})
+    """, params) or {})
+
+    nec_salud = dict(_row(db, f"""
+        SELECT COUNT(*) AS localidades,
+               COALESCE(SUM(sn.numero_personas), 0) AS numero_personas
+        FROM edan.edan_localidades_salud_necesidades sn
+        WHERE sn.id_edan_localidad IN ({ph})
+    """, params) or {})
+
+    viales = dict(_row(db, f"""
+        SELECT COUNT(*) AS total_registros,
+               COUNT(*) FILTER (WHERE dv.via) AS via,
+               COUNT(*) FILTER (WHERE dv.puente) AS puente,
+               COALESCE(SUM((dv.dano_parcial)::int), 0) AS dano_parcial,
+               COALESCE(SUM((dv.dano_total)::int), 0) AS dano_total,
+               COALESCE(SUM(dv.km_danio), 0) AS km_danio,
+               COUNT(DISTINCT dv.id_edan_localidad) AS localidades
+        FROM edan.edan_localidades_danos_viales dv
+        WHERE dv.id_edan_localidad IN ({ph})
+    """, params) or {})
+
+    infra_publica = [dict(r) for r in _rows(db, f"""
+        SELECT COALESCE(di.tipo_estructura, 'Sin especificar') AS tipo_estructura,
+               COALESCE(SUM((di.dano_parcial)::int), 0) AS dano_parcial,
+               COALESCE(SUM((di.dano_total)::int), 0) AS dano_total
+        FROM edan.edan_localidades_danos_infra_publica di
+        WHERE di.id_edan_localidad IN ({ph})
+        GROUP BY di.tipo_estructura ORDER BY dano_total DESC
+    """, params)]
+    infra_publica_tot = {**totals(infra_publica, ["dano_parcial", "dano_total"]),
+                         "total_registros": len(infra_publica)}
+
+    servicios_base = [dict(r) for r in _rows(db, f"""
+        SELECT COALESCE(sb.tipo, 'Sin especificar') AS tipo,
+               COALESCE(SUM((sb.dano_parcial)::int), 0) AS dano_parcial,
+               COALESCE(SUM((sb.dano_total)::int), 0) AS dano_total
+        FROM edan.edan_localidades_servicios_basicos sb
+        WHERE sb.id_edan_localidad IN ({ph})
+        GROUP BY sb.tipo ORDER BY dano_total DESC
+    """, params)]
+
+    educativas = dict(_row(db, f"""
+        SELECT COUNT(*) AS total_establecimientos,
+               COALESCE(SUM((ue.dano_parcial)::int), 0) AS dano_parcial,
+               COALESCE(SUM((ue.dano_total)::int), 0) AS dano_total,
+               COUNT(*) FILTER (WHERE ue.suspension_clases) AS suspension_clases,
+               COUNT(*) FILTER (WHERE ue.perdida_material) AS perdida_material,
+               COUNT(*) FILTER (WHERE ue.funciona_albergue) AS funciona_albergue,
+               COALESCE(SUM(ue.estudiantes), 0) AS estudiantes,
+               COALESCE(SUM(ue.profesores), 0) AS profesores,
+               COALESCE(SUM(ue.administrativos), 0) AS administrativos,
+               COUNT(DISTINCT ue.id_edan_localidad) AS localidades
+        FROM edan.edan_localidades_unidades_educativas ue
+        WHERE ue.id_edan_localidad IN ({ph})
+    """, params) or {})
+
+    vivienda = dict(_row(db, f"""
+        SELECT COUNT(*) AS total_registros,
+               COALESCE(SUM(dv.dano_parcial), 0) AS dano_parcial,
+               COALESCE(SUM(dv.dano_total), 0) AS dano_total,
+               COUNT(DISTINCT dv.id_edan_localidad) AS localidades
+        FROM edan.edan_localidades_danos_vivienda dv
+        WHERE dv.id_edan_localidad IN ({ph})
+    """, params) or {})
+
+    agricultura = [dict(r) for r in _rows(db, f"""
+        SELECT a.id_cultivo, COALESCE(c.nombre, 'Sin especificar') AS cultivo,
+               COALESCE(a.tipo_cultivo, 'Sin especificar') AS tipo_cultivo,
+               COALESCE(SUM(a.hectareas_afectadas), 0) AS hectareas_afectadas,
+               COALESCE(SUM(a.hectareas_perdidas), 0) AS hectareas_perdidas
+        FROM edan.edan_localidades_danos_agricultura a
+        LEFT JOIN shared.cultivo c ON c.id = a.id_cultivo
+        WHERE a.id_edan_localidad IN ({ph})
+        GROUP BY a.id_cultivo, c.nombre, a.tipo_cultivo
+        ORDER BY hectareas_afectadas DESC
+    """, params)]
+    agricultura_tot = {**totals(agricultura, ["hectareas_afectadas", "hectareas_perdidas"]),
+                       "total_registros": len(agricultura)}
+
+    pecuario = [dict(r) for r in _rows(db, f"""
+        SELECT dp.id_especie, COALESCE(p.nombre, dp.especie, 'Sin especificar') AS especie,
+               COALESCE(SUM(dp.animales_afectados), 0) AS animales_afectados,
+               COALESCE(SUM(dp.animales_muertos), 0) AS animales_muertos
+        FROM edan.edan_localidades_danos_pecuario dp
+        LEFT JOIN shared.pecuario p ON p.id = dp.id_especie
+        WHERE dp.id_edan_localidad IN ({ph})
+        GROUP BY dp.id_especie, p.nombre, dp.especie
+        ORDER BY animales_afectados DESC
+    """, params)]
+    pecuario_tot = {**totals(pecuario, ["animales_afectados", "animales_muertos"]),
+                    "total_registros": len(pecuario)}
+
+    infra_productiva = [dict(r) for r in _rows(db, f"""
+        SELECT COALESCE(ip.tipo, 'Sin especificar') AS tipo,
+               COALESCE(SUM(ip.dano_parcial), 0) AS dano_parcial,
+               COALESCE(SUM(ip.dano_total), 0) AS dano_total
+        FROM edan.edan_localidades_infra_productiva ip
+        WHERE ip.id_edan_localidad IN ({ph})
+        GROUP BY ip.tipo ORDER BY dano_total DESC
+    """, params)]
+
+    proteccion = [dict(r) for r in _rows(db, f"""
+        SELECT COALESCE(pr.grupo, 'Sin especificar') AS grupo,
+               COALESCE(SUM(pr.mujeres), 0) AS mujeres,
+               COALESCE(SUM(pr.hombres), 0) AS hombres,
+               COALESCE(SUM(pr.total), 0) AS total,
+               COUNT(*) FILTER (WHERE pr.apoyo_psicologico) AS apoyo_psicologico,
+               COUNT(*) FILTER (WHERE pr.reposicion_documentos) AS reposicion_documentos
+        FROM edan.edan_localidades_proteccion pr
+        WHERE pr.id_edan_localidad IN ({ph})
+        GROUP BY pr.grupo ORDER BY total DESC
+    """, params)]
+    proteccion_tot = {**totals(proteccion, ["mujeres", "hombres", "total"]),
+                      "total_registros": len(proteccion)}
+
+    nec_humanitaria = dict(_row(db, f"""
+        SELECT COUNT(*) AS localidades,
+               COUNT(*) FILTER (WHERE nh.alimentos) AS alimentos,
+               COUNT(*) FILTER (WHERE nh.refugio_vivienda) AS refugio_vivienda,
+               COUNT(*) FILTER (WHERE nh.ropa_cama) AS ropa_cama,
+               COUNT(*) FILTER (WHERE nh.articulos_higiene) AS articulos_higiene,
+               COUNT(*) FILTER (WHERE nh.articulos_cocina) AS articulos_cocina,
+               COUNT(*) FILTER (WHERE nh.prendas_vestir) AS prendas_vestir,
+               COUNT(*) FILTER (WHERE nh.herramientas) AS herramientas,
+               COUNT(*) FILTER (WHERE nh.almacenamiento_agua) AS almacenamiento_agua,
+               COUNT(*) FILTER (WHERE nh.banos) AS banos
+        FROM edan.edan_localidades_necesidades_humanitarias nh
+        WHERE nh.id_edan_localidad IN ({ph})
+    """, params) or {})
+
+    return {
+        "impacto_poblacion": {
+            "por_grupo_etario": impacto,
+            "totales": {**totals(impacto, ["fallecidos", "heridos", "desaparecidos"]),
+                        "localidades": _overview(impacto)["localidades"]},
+        },
+        "primera_respuesta": dict(primera) if primera else {},
+        "salud_establecimientos": salud_est,
+        "necesidad_salud": nec_salud,
+        "danos_viales": viales,
+        "danos_infra_publica": {"por_tipo": infra_publica, **infra_publica_tot},
+        "servicios_basicos": {"por_tipo": servicios_base,
+                              **totals(servicios_base, ["dano_parcial", "dano_total"]),
+                              "total_registros": len(servicios_base)},
+        "unidades_educativas": educativas,
+        "danos_vivienda": vivienda,
+        "danos_agricultura": {"por_cultivo": agricultura, **agricultura_tot},
+        "danos_pecuarios": {"por_especie": pecuario, **pecuario_tot},
+        "infra_productiva": {"por_tipo": infra_productiva,
+                             **totals(infra_productiva, ["dano_parcial", "dano_total"]),
+                             "total_registros": len(infra_productiva)},
+        "proteccion": {"por_grupo": proteccion, **proteccion_tot},
+        "necesidad_humanitaria": nec_humanitaria,
+    }
+
+
 def get_edan_completo(db: Session, id: int, modo: str = "detallado"):
     """Devuelve EDAN completo. modos: 'detallado' (con localidades completas) o
     'compacto' (resumen de localidades + sumatorias)."""
@@ -649,6 +858,7 @@ def get_edan_completo(db: Session, id: int, modo: str = "detallado"):
         edan["sumatorias"] = _get_sumatorias(db, id)
     else:
         edan["localidades"] = _get_localidades(db, id)
+    edan["resumen_secciones"] = _get_resumen_secciones(db, id)
     edan["reportes_rea"] = [dict(r) for r in _rows(db, """
         SELECT id_reporte, comunidad, fecha_evento, hora_evento,
                id_municipio, id_tipo_evento, descripcion
@@ -2809,10 +3019,6 @@ def get_edans(db: Session, f: dict | None = None, skip: int = 0, limit: int = 50
 #  MIS REPORTES (por usuario, patrón REA)
 # ============================================================================
 
-def get_mis_resumen_edan(db: Session, id_usuario: int):
-    return reporte_resumen(db, {"id_usuario_ugr": id_usuario})
-
-
 def get_mis_edans(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
     total = db.execute(
         text("SELECT COUNT(*) FROM edan.edan WHERE id_usuario_ugr = :uid"),
@@ -2904,8 +3110,36 @@ def list_mis_localidades_estados(db: Session, id_usuario: int, skip: int = 0, li
 
 
 def get_mis_resumen_edan(db: Session, id_usuario: int):
-    """Resumen EDAN del usuario (cabecera), incluye `por_estado` de estado_edan."""
-    return reporte_resumen(db, {"id_usuario_ugr": id_usuario})
+    """Resumen de los EDAN (grupos consolidados) del UGR: totales de cabecera,
+    `por_estado` de estado_edan y `por_tipo_evento`. Scoped a id_usuario_ugr."""
+    row = _row(db, """
+        SELECT COUNT(*) AS total_edans,
+               COUNT(*) FILTER (WHERE id_estado = 1) AS total_borrador,
+               COUNT(*) FILTER (WHERE id_estado = 3) AS total_enviado,
+               COUNT(*) FILTER (WHERE id_estado = 4) AS total_aprobado,
+               COALESCE(SUM(total_poblacion_afectada), 0) AS total_poblacion_afectada,
+               COALESCE(SUM(total_familias_afectadas), 0) AS total_familias_afectadas,
+               COALESCE(SUM(total_familias_damnificadas), 0) AS total_familias_damnificadas,
+               COALESCE(SUM((SELECT COUNT(*) FROM edan.edan_localidades l
+                             WHERE l.id_edan = e.id_edan)), 0) AS total_localidades
+        FROM edan.edan e WHERE e.id_usuario_ugr = :uid
+    """, {"uid": id_usuario})
+    totales = dict(row) if row else {}
+    por_estado = [dict(r) for r in _rows(db, """
+        SELECT e.id_estado, es.nombre AS estado, COUNT(*) AS cantidad
+        FROM edan.edan e
+        LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado
+        WHERE e.id_usuario_ugr = :uid
+        GROUP BY e.id_estado, es.nombre ORDER BY cantidad DESC
+    """, {"uid": id_usuario})]
+    por_tipo_evento = [dict(r) for r in _rows(db, """
+        SELECT e.id_tipo_evento, COALESCE(te.nombre, 'Sin tipo') AS tipo_evento, COUNT(*) AS cantidad
+        FROM edan.edan e
+        LEFT JOIN edan.tipo_evento te ON te.id_tipo_evento = e.id_tipo_evento
+        WHERE e.id_usuario_ugr = :uid
+        GROUP BY e.id_tipo_evento, te.nombre ORDER BY cantidad DESC
+    """, {"uid": id_usuario})]
+    return {**totales, "por_estado": por_estado, "por_tipo_evento": por_tipo_evento}
 
 
 def list_mis_edans_estados(db: Session, id_usuario: int, skip: int = 0, limit: int = 50):
@@ -3268,6 +3502,88 @@ def delete_document(db: Session, id_localidad: str) -> None:
 #  REPORTES AGREGADOS
 # ============================================================================
 
+def _filters_localidades(f: dict, alias: str = "l") -> tuple[list[str], dict]:
+    """Condiciones SQL sobre edan.edan_localidades (TODAS las localidades:
+    huérfanas + consolidadas). Filtros opcionales y combinables (AND).
+
+    Mapeo desde el filtro v2 de EDAN:
+      - id_estado/estado  -> id_edan_localidad_estado
+      - fecha_creacion_*  -> fecha_llenado
+      - id_usuario        -> id_usuario (autor de la localidad)
+      - id_usuario_ugr    -> se IGNORA (reportes abiertos, sin scope por rol)
+    """
+    conds: list[str] = []
+    params: dict = {}
+    a = alias
+
+    if f.get("q"):
+        conds.append(f"""{a}.localidad ILIKE :q""")
+        params["q"] = f"%{f['q']}%"
+
+    for col in ("id_departamento", "id_provincia", "id_municipio",
+                "id_tipo_evento", "id_tipo_localidad"):
+        if f.get(col) is not None:
+            conds.append(f"{a}.{col} = :{col}")
+            params[col] = f[col]
+
+    if f.get("id_estado") is not None:
+        conds.append(f"{a}.id_edan_localidad_estado = :id_estado")
+        params["id_estado"] = f["id_estado"]
+    if f.get("estado"):
+        conds.append(f"""{a}.id_edan_localidad_estado IN (
+            SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado
+            WHERE LOWER(nombre) = LOWER(:estado)
+        )""")
+        params["estado"] = f["estado"]
+    if f.get("id_usuario") is not None:
+        conds.append(f"{a}.id_usuario = :id_usuario")
+        params["id_usuario"] = f["id_usuario"]
+
+    for fecha_from, fecha_to, col in (
+        ("fecha_llenado_desde", "fecha_llenado_hasta", "fecha_llenado"),
+        ("fecha_creacion_desde", "fecha_creacion_hasta", "fecha_llenado"),
+        ("fecha_evento_desde", "fecha_evento_hasta", "fecha_evento"),
+    ):
+        if f.get(fecha_from):
+            conds.append(f"{a}.{col} >= :{fecha_from}")
+            params[fecha_from] = f[fecha_from]
+        if f.get(fecha_to):
+            conds.append(f"{a}.{col} <= :{fecha_to}")
+            params[fecha_to] = f[fecha_to]
+
+    if f.get("solo_huerfanas") is True:
+        conds.append(f"{a}.id_edan IS NULL")
+    elif f.get("solo_huerfanas") is False:
+        conds.append(f"{a}.id_edan IS NOT NULL")
+
+    for flag in ("pendiente_eliminacion", "pendiente_actualizacion"):
+        if f.get(flag) is not None:
+            conds.append(f"{a}.{flag} = :{flag}")
+            params[flag] = f[flag]
+
+    for flag in IMP_FLAGS:
+        if f.get(flag):
+            conds.append(f"{a}.{flag} = TRUE")
+
+    if f.get("tiene_agricultura"):
+        conds.append(f"""EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_agricultura ag
+            WHERE ag.id_edan_localidad = {a}.id_edan_localidad
+        )""")
+    if f.get("tiene_pecuario"):
+        conds.append(f"""EXISTS (
+            SELECT 1 FROM edan.edan_localidades_danos_pecuario dp
+            WHERE dp.id_edan_localidad = {a}.id_edan_localidad
+        )""")
+
+    return conds, params
+
+
+def _where_localidades(f: dict) -> tuple[str, dict]:
+    conds, params = _filters_localidades(f or {})
+    return (" WHERE " + " AND ".join(conds) if conds else ""), params
+
+
 def _reporte_where(f: dict) -> tuple[str, dict]:
     conds, params = _filters(f, alias="e")
     return (" WHERE " + " AND ".join(conds) if conds else ""), params
@@ -3278,8 +3594,7 @@ def reporte_resumen(db: Session, f: dict | None = None):
     Filtros aplicados sobre la tabla edan.edan_localidades.
     """
     f = f or {}
-    # Usar filtros sobre localidades en lugar de EDAN
-    where, params = _where_localidades(f) if "id_departamento" in (f or {}) or "id_estado" in (f or {}) else _reporte_where(f)
+    where, params = _where_localidades(f)
     
     # Contar localidades totales y desglose
     total = db.execute(text(f"""
@@ -3322,20 +3637,23 @@ def reporte_resumen(db: Session, f: dict | None = None):
 
 
 def reporte_geografico(db: Session, f: dict | None = None):
+    """Distribución geográfica sobre TODAS las localidades (huérfanas + consolidadas)."""
     f = f or {}
-    where, params = _reporte_where(f)
+    where, params = _where_localidades(f)
     rows = _rows(db, f"""
         SELECT d.id AS id_departamento, d.nombre AS departamento,
                p.id AS id_provincia, p.nombre AS provincia,
                m.id AS id_municipio, m.nombre AS municipio,
-               COUNT(*) AS total_edans,
-               COALESCE(SUM(e.total_poblacion_afectada), 0) AS poblacion_afectada,
-               COALESCE(SUM(e.total_familias_afectadas), 0) AS familias_afectadas,
-               COALESCE(SUM(e.total_familias_damnificadas), 0) AS familias_damnificadas
-        FROM edan.edan e
-        LEFT JOIN shared.departamento d ON e.id_departamento = d.id
-        LEFT JOIN shared.provincia p ON e.id_provincia = p.id
-        LEFT JOIN shared.municipio m ON e.id_municipio = m.id
+               COUNT(*) AS total_localidades,
+               COUNT(*) FILTER (WHERE l.id_edan IS NULL) AS total_huerfanas,
+               COUNT(*) FILTER (WHERE l.id_edan IS NOT NULL) AS total_consolidadas,
+               COALESCE(SUM(l.total_poblacion_afectada), 0) AS poblacion_afectada,
+               COALESCE(SUM(l.total_familias_afectadas), 0) AS familias_afectadas,
+               COALESCE(SUM(l.total_familias_damnificadas), 0) AS familias_damnificadas
+        FROM edan.edan_localidades l
+        LEFT JOIN shared.departamento d ON l.id_departamento = d.id
+        LEFT JOIN shared.provincia p ON l.id_provincia = p.id
+        LEFT JOIN shared.municipio m ON l.id_municipio = m.id
         {where}
         GROUP BY d.id, d.nombre, p.id, p.nombre, m.id, m.nombre
         ORDER BY d.nombre, p.nombre, m.nombre
@@ -3346,7 +3664,7 @@ def reporte_geografico(db: Session, f: dict | None = None):
 def reporte_agricultura(db: Session, f: dict | None = None):
     """Agricultura sobre TODAS las localidades (no solo consolidadas en EDAN)."""
     f = f or {}
-    where, params = _reporte_where(f)
+    where, params = _where_localidades(f)
     rows = _rows(db, f"""
         SELECT a.tipo_cultivo,
                a.id_cultivo,
@@ -3368,7 +3686,7 @@ def reporte_agricultura(db: Session, f: dict | None = None):
 def reporte_pecuario(db: Session, f: dict | None = None):
     """Pecuario sobre TODAS las localidades (no solo consolidadas en EDAN)."""
     f = f or {}
-    where, params = _reporte_where(f)
+    where, params = _where_localidades(f)
     rows = _rows(db, f"""
         SELECT a.especie,
                a.id_especie,
@@ -3385,37 +3703,6 @@ def reporte_pecuario(db: Session, f: dict | None = None):
         ORDER BY animales_afectados DESC
     """, params)
     return [dict(r) for r in rows]
-
-
-def reporte_localidades(db: Session, f: dict | None = None, skip: int = 0, limit: int = 200):
-    f = f or {}
-    conds, params = _filters(f, alias="e")
-    where = " WHERE " + " AND ".join(conds) if conds else ""
-    total = db.execute(text(f"""
-        SELECT COUNT(*) FROM edan.edan_localidades l
-        JOIN edan.edan e ON e.id_edan = l.id_edan{where}
-    """), params).scalar()
-    rows = _rows(db, f"""
-        SELECT e.id_edan, e.codigo_edan, ee.nombre AS estado,
-               d.nombre AS departamento, p.nombre AS provincia, m.nombre AS municipio,
-               l.id_edan_localidad, t.nombre AS tipo_localidad,
-               es.nombre AS estado_localidad, l.localidad AS localidad,
-               l.imp_poblacion, l.imp_salud, l.imp_infraestructura, l.imp_servicios,
-               l.imp_educacion, l.imp_vivienda, l.imp_agropecuario, l.imp_proteccion, l.imp_necesidades
-        FROM edan.edan_localidades l
-        JOIN edan.edan e ON e.id_edan = l.id_edan
-        LEFT JOIN edan.estado_edan ee ON ee.id_estado = e.id_estado
-        LEFT JOIN edan.tipo_localidad t ON t.id_tipo_localidad = l.id_tipo_localidad
-        LEFT JOIN edan.edan_localidades_estado es
-               ON es.id_edan_localidad_estado = l.id_edan_localidad_estado
-        LEFT JOIN shared.departamento d ON e.id_departamento = d.id
-        LEFT JOIN shared.provincia p ON e.id_provincia = p.id
-        LEFT JOIN shared.municipio m ON e.id_municipio = m.id
-        {where}
-        ORDER BY e.id_edan DESC, l.id_edan_localidad
-        LIMIT :limit OFFSET :skip
-    """, {**params, "limit": limit, "skip": skip})
-    return [dict(r) for r in rows], total
 
 
 # ============================================================================

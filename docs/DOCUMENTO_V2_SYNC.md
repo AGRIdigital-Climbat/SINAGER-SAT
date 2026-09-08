@@ -10,6 +10,9 @@
 > muestra **solo las secciones con `imp_*=true` o con datos** (las `false`/vacías
 > se omiten); la **entrada** (`POST`/`PUT`) **recibe** las secciones `true` y las
 > que no se envían (false) no se recrean ni se tocan.
+>
+> El módulo de **consolidación / grupo EDAN** (`/api/v2/edan` cabecera) tiene su
+> propia documentación en `EDAN_V2.md`.
 
 ## 1. Endpoints (grupo Swagger *EDAN_LOCALIDADES > edan_local_completo*)
 

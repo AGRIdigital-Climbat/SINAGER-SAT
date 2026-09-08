@@ -4,7 +4,11 @@ from ..dependencies import get_current_user
 from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
-from .schemas import EdanCreate, EdanUpdate, ConsolidarIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate
+from .schemas import (
+    EdanUpdate, ConsolidarIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate,
+    ResumenReporteResponse, ReporteGeografiaResponse, ReporteAgriculturaResponse,
+    ReportePecuarioResponse, MisResumenResponse,
+)
 from .utils import require_rol, db_error
 from ..auth.permisos import module_permiso
 
@@ -18,75 +22,72 @@ ROLES_ESTADO_EDAN = (1, 2, 3, 4, 5, 9)
 ROLES_LOCALES = (6, 7)
 
 
-def _filtros_dep(
-    q: str | None = Query(None),
-    id_departamento: int | None = Query(None),
-    id_provincia: int | None = Query(None),
-    id_municipio: int | None = Query(None),
-    id_tipo_evento: int | None = Query(None),
-    id_estado: int | None = Query(None),
-    estado: str | None = Query(None),
-    id_usuario_ugr: int | None = Query(None),
-    fecha_evento_desde: str | None = Query(None),
-    fecha_evento_hasta: str | None = Query(None),
-    fecha_creacion_desde: str | None = Query(None),
-    fecha_creacion_hasta: str | None = Query(None),
-    pendiente_eliminacion: bool | None = Query(None),
-    pendiente_actualizacion: bool | None = Query(None),
-    con_foto: bool | None = Query(None),
-    sin_foto: bool | None = Query(None),
-    imp_poblacion: bool | None = Query(None),
-    imp_salud: bool | None = Query(None),
-    imp_infraestructura: bool | None = Query(None),
-    imp_servicios: bool | None = Query(None),
-    imp_educacion: bool | None = Query(None),
-    imp_vivienda: bool | None = Query(None),
-    imp_agropecuario: bool | None = Query(None),
-    imp_proteccion: bool | None = Query(None),
-    imp_necesidades: bool | None = Query(None),
-    tiene_agricultura: bool | None = Query(None),
-    tiene_pecuario: bool | None = Query(None),
-    user=Depends(get_current_user),
-):
-    f = service._filters_from_query(
-        q=q, id_departamento=id_departamento, id_provincia=id_provincia,
-        id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
-        id_estado=id_estado, estado=estado, id_usuario_ugr=id_usuario_ugr,
-        fecha_evento_desde=fecha_evento_desde, fecha_evento_hasta=fecha_evento_hasta,
-        fecha_creacion_desde=fecha_creacion_desde, fecha_creacion_hasta=fecha_creacion_hasta,
-        pendiente_eliminacion=pendiente_eliminacion, pendiente_actualizacion=pendiente_actualizacion,
-        con_foto=con_foto, sin_foto=sin_foto,
-        imp_poblacion=imp_poblacion, imp_salud=imp_salud,
-        imp_infraestructura=imp_infraestructura, imp_servicios=imp_servicios,
-        imp_educacion=imp_educacion, imp_vivienda=imp_vivienda,
-        imp_agropecuario=imp_agropecuario, imp_proteccion=imp_proteccion,
-        imp_necesidades=imp_necesidades,
-        tiene_agricultura=tiene_agricultura, tiene_pecuario=tiene_pecuario,
-    )
-    if user["id_rol"] not in (1, 9) and f.get("id_usuario_ugr") is None:
-        f["id_usuario_ugr"] = user["id_usuario"]
-    return f
+def _filtros_dep_factory(forzar_scope: bool = True):
+    """Dependencia de filtros de EDAN. Con `forzar_scope=True` los roles
+    6/7 ven SOLO sus EDAN (id_usuario_ugr propio); con `False` los reportes
+    agregados quedan ABIERTOS (todas las localidades de todos)."""
+    def _filtros_dep(
+        q: str | None = Query(None),
+        id_departamento: int | None = Query(None),
+        id_provincia: int | None = Query(None),
+        id_municipio: int | None = Query(None),
+        id_tipo_evento: int | None = Query(None),
+        id_estado: int | None = Query(None),
+        estado: str | None = Query(None),
+        id_usuario_ugr: int | None = Query(None),
+        fecha_evento_desde: str | None = Query(None),
+        fecha_evento_hasta: str | None = Query(None),
+        fecha_creacion_desde: str | None = Query(None),
+        fecha_creacion_hasta: str | None = Query(None),
+        pendiente_eliminacion: bool | None = Query(None),
+        pendiente_actualizacion: bool | None = Query(None),
+        con_foto: bool | None = Query(None),
+        sin_foto: bool | None = Query(None),
+        imp_poblacion: bool | None = Query(None),
+        imp_salud: bool | None = Query(None),
+        imp_infraestructura: bool | None = Query(None),
+        imp_servicios: bool | None = Query(None),
+        imp_educacion: bool | None = Query(None),
+        imp_vivienda: bool | None = Query(None),
+        imp_agropecuario: bool | None = Query(None),
+        imp_proteccion: bool | None = Query(None),
+        imp_necesidades: bool | None = Query(None),
+        tiene_agricultura: bool | None = Query(None),
+        tiene_pecuario: bool | None = Query(None),
+        user=Depends(get_current_user),
+    ):
+        f = service._filters_from_query(
+            q=q, id_departamento=id_departamento, id_provincia=id_provincia,
+            id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
+            id_estado=id_estado, estado=estado, id_usuario_ugr=id_usuario_ugr,
+            fecha_evento_desde=fecha_evento_desde, fecha_evento_hasta=fecha_evento_hasta,
+            fecha_creacion_desde=fecha_creacion_desde, fecha_creacion_hasta=fecha_creacion_hasta,
+            pendiente_eliminacion=pendiente_eliminacion, pendiente_actualizacion=pendiente_actualizacion,
+            con_foto=con_foto, sin_foto=sin_foto,
+            imp_poblacion=imp_poblacion, imp_salud=imp_salud,
+            imp_infraestructura=imp_infraestructura, imp_servicios=imp_servicios,
+            imp_educacion=imp_educacion, imp_vivienda=imp_vivienda,
+            imp_agropecuario=imp_agropecuario, imp_proteccion=imp_proteccion,
+            imp_necesidades=imp_necesidades,
+            tiene_agricultura=tiene_agricultura, tiene_pecuario=tiene_pecuario,
+        )
+        if forzar_scope and user["id_rol"] not in (1, 9) and f.get("id_usuario_ugr") is None:
+            f["id_usuario_ugr"] = user["id_usuario"]
+        return f
+
+    return _filtros_dep
+
+
+_filtros_dep = _filtros_dep_factory(forzar_scope=True)
+_filtros_dep_abierto = _filtros_dep_factory(forzar_scope=False)
 
 
 # ----------------------------------------------------------------------------
 #  REPORTES (solo totales/agregados) — antes de /{id} para no capturar rutas
-#  Mismos filtros que v1. Scope: rol 1/9 ve todo (filtro libre); otros roles
-#  ven solo sus EDAN (id_usuario_ugr = propio) salvo filtro explícito.
+#  Filtros ABIERTOS: reportes sobre TODAS las localidades (huérfanas +
+#  consolidadas), sin scope por rol. Filtrar por geografía con ?id_departamento=,
+#  ?id_provincia=, ?id_municipio=.
 # ----------------------------------------------------------------------------
-
-@router.get("/reportes/mis-resumen", tags=[TAG_EDAN],
-            summary="Resumen de mis EDAN (totales + por estado_edan)",
-            description="Totales agregados de EDAN del usuario: `totales`, `por_estado[]` "
-                        "y `por_tipo_evento[]`. Scope: rol 6/7 ve lo propio; otro rol usa `?id_usuario=`.")
-def reportes_mis_resumen_edan(
-    id_usuario: int | None = Query(None),
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
-    uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
-    data = service.get_mis_resumen_edan(db, uid)
-    return SuccessResponse(message="Resumen de mis EDAN generado correctamente", data=data or {})
-
 
 @router.get("/reportes/mis-reportes", tags=[TAG_EDAN],
             summary="Listar mis EDAN (cabecera + localidades)",
@@ -105,67 +106,59 @@ def reportes_mis_reportes_edan(
 
 
 @router.get("/reportes/resumen", tags=[TAG_EDAN],
-            summary="Reporte resumen de EDAN (totales agregados con filtros)",
-            description="Totales agregados de EDAN con filtros (geografía, tipo_evento, estado, fechas, flags): "
-                        "`totales`, `por_estado[]`, `por_tipo_evento[]`.")
+            response_model=ResumenReporteResponse,
+            summary="Reporte resumen de localidades (totales agregados con filtros)",
+            description="Totales agregados sobre TODAS las localidades (huérfanas + consolidadas) con "
+                        "filtros (geografía, tipo_evento, estado de localidad, fechas, flags): "
+                        "`totales`, `por_estado[]`, `por_tipo_evento[]`. Reportes abiertos: sin scope por rol.")
 def reportes_resumen_edan(
-    f: dict = Depends(_filtros_dep),
+    f: dict = Depends(_filtros_dep_abierto),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
 ):
     data = service.reporte_resumen(db, f) or {}
-    return SuccessResponse(message="Resumen EDAN generado correctamente", data=data)
+    return ResumenReporteResponse(message="Resumen de localidades generado correctamente", data=data)
 
 
 @router.get("/reportes/geografico", tags=[TAG_EDAN],
-            summary="Reporte geográfico de EDAN (agrupado por d/p/m)",
-            description="EDANs agrupados por departamento/provincia/municipio con totales acumulados.")
+            response_model=ReporteGeografiaResponse,
+            summary="Reporte geográfico de localidades (agrupado por d/p/m)",
+            description="Localidades agrupadas por departamento/provincia/municipio con totales "
+                        "acumulados, desglose de huérfanas/consolidadas. Reportes abiertos.")
 def reportes_geografico_edan(
-    f: dict = Depends(_filtros_dep),
+    f: dict = Depends(_filtros_dep_abierto),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
 ):
     data = service.reporte_geografico(db, f) or []
-    return SuccessResponse(message="Reporte geográfico generado correctamente", data=data, total=len(data))
+    return ReporteGeografiaResponse(message="Reporte geográfico generado correctamente",
+                                    data=data, total=len(data))
 
 
 @router.get("/reportes/agricultura", tags=[TAG_EDAN],
+            response_model=ReporteAgriculturaResponse,
             summary="Reporte de daños a agricultura (agregado)",
-            description="Hectáreas afectadas/perdidas por cultivo, con filtros de EDAN.")
+            description="Hectáreas afectadas/perdidas por cultivo, sobre TODAS las localidades. "
+                        "Reportes abiertos.")
 def reportes_agricultura_edan(
-    f: dict = Depends(_filtros_dep),
+    f: dict = Depends(_filtros_dep_abierto),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
 ):
     data = service.reporte_agricultura(db, f) or []
-    return SuccessResponse(message="Reporte de agricultura generado correctamente", data=data, total=len(data))
+    return ReporteAgriculturaResponse(message="Reporte de agricultura generado correctamente",
+                                      data=data, total=len(data))
 
 
 @router.get("/reportes/pecuario", tags=[TAG_EDAN],
+            response_model=ReportePecuarioResponse,
             summary="Reporte de daños pecuarios (agregado)",
-            description="Animales afectados/muertos por especie, con filtros de EDAN.")
+            description="Animales afectados/muertos por especie, sobre TODAS las localidades. "
+                        "Reportes abiertos.")
 def reportes_pecuario_edan(
-    f: dict = Depends(_filtros_dep),
+    f: dict = Depends(_filtros_dep_abierto),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
 ):
     data = service.reporte_pecuario(db, f) or []
-    return SuccessResponse(message="Reporte de pecuario generado correctamente", data=data, total=len(data))
-
-
-@router.get("/reportes/localidades", tags=[TAG_EDAN],
-            summary="Reporte de localidades consolidadas (paginado)",
-            description="Listado de localidades consolidadas en EDAN con sus banderas de impacto, "
-                        "con filtros de EDAN. Paginado con `skip`/`limit`.")
-def reportes_localidades_edan(
-    f: dict = Depends(_filtros_dep),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(200, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
-    data, total = service.reporte_localidades(db, f, skip=skip, limit=limit)
-    return SuccessResponse(message="Reporte de localidades generado correctamente", data=data, total=total)
+    return ReportePecuarioResponse(message="Reporte de pecuario generado correctamente",
+                                   data=data, total=len(data))
 
 
 @router.get("/", tags=[TAG_EDAN], summary="Listar EDANs con filtros")
@@ -175,10 +168,11 @@ def listar_edans(f: dict = Depends(_filtros_dep), skip: int = Query(0, ge=0), li
     return SuccessResponse(message="EDANs listados correctamente", data=data, total=total)
 
 
-@router.get("/mis-resumen", tags=[TAG_EDAN],
+@router.get("/mis-resumen", tags=[TAG_EDAN], response_model=MisResumenResponse,
             summary="Resumen de mis EDAN (totales + por estado_edan)",
-            description="Totales agregados de EDAN del usuario y desglose `por_estado[]` "
-                        "con `id_estado` + `nombre` + `cantidad` para refrescar badges.")
+            description="Totales agregados de los EDAN del usuario (grupos consolidados) y desglose "
+                        "`por_estado[]` con `id_estado` + `nombre` + `cantidad` para refrescar badges, "
+                        "según `estado_edan`. Scope: rol 6/7 ve lo propio; otro rol usa `?id_usuario=`.")
 def mis_resumen_edan(
     id_usuario: int | None = Query(None),
     db: Session = Depends(get_db),
@@ -186,7 +180,7 @@ def mis_resumen_edan(
 ):
     uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
     data = service.get_mis_resumen_edan(db, uid)
-    return SuccessResponse(message="Resumen de mis EDAN generado correctamente", data=data or {})
+    return MisResumenResponse(message="Resumen de mis EDAN generado correctamente", data=data or {})
 
 
 @router.get("/mis-estados", tags=[TAG_EDAN],
@@ -239,22 +233,6 @@ def obtener_edan(id: int, modo: str = Query("detallado"), db: Session = Depends(
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     return SuccessResponse(message="EDAN obtenido correctamente", data=result)
-
-
-@router.post("/", status_code=201, tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
-             summary="Crear un EDAN")
-def crear_edan(data: EdanCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    try:
-        payload = data.model_dump(exclude_none=False)
-        if payload.get("id_usuario") is None:
-            payload["id_usuario"] = user["id_usuario"]
-        id = service.create_edan(db, payload)
-        result = service.get_edan_completo(db, id)
-        return SuccessResponse(message="EDAN creado correctamente", data=result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise db_error(e)
 
 
 @router.put("/{id}", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],

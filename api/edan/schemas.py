@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from ..response import SuccessResponse
+
 
 # ============================================================================
 #  MODELOS ANIDADOS DEL FORMULARIO EDAN
@@ -928,4 +930,113 @@ class CambiarEstadoEdanIn(BaseModel):
 
 class LocalidadSyncIn(BaseModel):
     localidades: list[LocalidadCreate] = []
+
+
+# ============================================================================
+#  MODELOS DE RESPUESTA — REPORTES AGREGADOS v2 (swagger completo)
+#  Reportes sobre TODAS las localidades (huérfanas + consolidadas).
+# ============================================================================
+
+class PorEstadoLocalidadItem(BaseModel):
+    id_edan_localidad_estado: int | None = None
+    estado: str | None = None
+    cantidad: int = 0
+
+
+class PorTipoEventoItem(BaseModel):
+    id_tipo_evento: int | None = None
+    tipo_evento: str = ''
+    cantidad: int = 0
+
+
+class TotalesResumen(BaseModel):
+    total_localidades: int = 0
+    total_huerfanas: int = 0
+    total_consolidadas: int = 0
+    total_poblacion_afectada: float = 0
+    total_familias_afectadas: float = 0
+    total_familias_damnificadas: float = 0
+
+
+class ResumenReporteData(BaseModel):
+    totales: TotalesResumen
+    por_estado: list[PorEstadoLocalidadItem] = []
+    por_tipo_evento: list[PorTipoEventoItem] = []
+
+
+class ReporteGeografiaItem(BaseModel):
+    id_departamento: int | None = None
+    departamento: str | None = None
+    id_provincia: int | None = None
+    provincia: str | None = None
+    id_municipio: int | None = None
+    municipio: str | None = None
+    total_localidades: int = 0
+    total_huerfanas: int = 0
+    total_consolidadas: int = 0
+    poblacion_afectada: float = 0
+    familias_afectadas: float = 0
+    familias_damnificadas: float = 0
+
+
+class ReporteAgriculturaItem(BaseModel):
+    tipo_cultivo: str | None = None
+    id_cultivo: int | None = None
+    cultivo_nombre: str | None = None
+    cultivo_grupo: str | None = None
+    total_registros: int = 0
+    hectareas_afectadas: float = 0
+    hectareas_perdidas: float = 0
+
+
+class ReportePecuarioItem(BaseModel):
+    especie: str | None = None
+    id_especie: int | None = None
+    especie_catalogo: str | None = None
+    especie_grupo: str | None = None
+    total_registros: int = 0
+    animales_afectados: float = 0
+    animales_muertos: float = 0
+
+
+class PorEstadoEdanItem(BaseModel):
+    id_estado: int | None = None
+    estado: str | None = None
+    cantidad: int = 0
+
+
+class MisResumenData(BaseModel):
+    total_edans: int = 0
+    total_borrador: int = 0
+    total_enviado: int = 0
+    total_aprobado: int = 0
+    total_poblacion_afectada: float = 0
+    total_familias_afectadas: float = 0
+    total_familias_damnificadas: float = 0
+    total_localidades: int = 0
+    por_estado: list[PorEstadoEdanItem] = []
+    por_tipo_evento: list[PorTipoEventoItem] = []
+
+
+class ResumenReporteResponse(SuccessResponse):
+    data: ResumenReporteData
+
+
+class ReporteGeografiaResponse(SuccessResponse):
+    data: list[ReporteGeografiaItem]
+    total: int | None = None
+
+
+class ReporteAgriculturaResponse(SuccessResponse):
+    data: list[ReporteAgriculturaItem]
+    total: int | None = None
+
+
+class ReportePecuarioResponse(SuccessResponse):
+    data: list[ReportePecuarioItem]
+    total: int | None = None
+
+
+class MisResumenResponse(SuccessResponse):
+    data: MisResumenData
 
