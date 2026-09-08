@@ -5,7 +5,7 @@ from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
 from .schemas import (
-    EdanUpdate, ConsolidarIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate,
+    EdanUpdateV2, ConsolidarIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate,
     ResumenReporteResponse, ReporteGeografiaResponse, ReporteAgriculturaResponse,
     ReportePecuarioResponse, MisResumenResponse,
 )
@@ -253,8 +253,11 @@ def obtener_edan(id: int, modo: str = Query("detallado"), db: Session = Depends(
 
 
 @router.put("/{id}", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
-            summary="Actualizar un EDAN")
-def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+            summary="Actualizar un EDAN",
+            description="Actualiza las columnas reales de `edan.edan`. PUT parcial: basta enviar\n"
+                        "solo los campos a cambiar. `id_usuario_alcalde` (int) asigna el alcalde;\n"
+                        "los datos de contacto del responsable se leen por JOIN con `usuarios.usuario`.")
+def actualizar_edan(id: int, data: EdanUpdateV2, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
         result = service.update_edan(db, id, data.model_dump(exclude_unset=True))
     except HTTPException:

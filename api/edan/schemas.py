@@ -739,6 +739,35 @@ class EdanUpdate(BaseModel):
     responsable: Responsable | None = None
 
 
+class EdanUpdateV2(BaseModel):
+    """Actualización de un EDAN consolidado (v2) — SOLO columnas reales de
+    `edan.edan` (las mismas 17 que escribe `service.update_edan`).
+
+    PUT parcial: todos los campos son opcionales (`exclude_unset`).
+    - `id_usuario_alcalde`: int (FK a `usuarios.usuario`) asigna el alcalde.
+    - No incluye `estado` (string), `responsable` ni `fecha_modificacion`:
+      no son columnas de la tabla; `fecha_modificacion` la genera el servicio
+      con `NOW()` en cada UPDATE.
+    """
+    id_local: str | None = None
+    codigo_edan: str | None = None
+    id_usuario_ugr: int | None = None
+    id_usuario_alcalde: int | None = None
+    id_departamento: int | None = None
+    id_provincia: int | None = None
+    id_municipio: int | None = None
+    id_tipo_evento: int | None = None
+    fecha_llenado: str | None = None
+    fecha_evento: str | None = None
+    hora_evento: str | None = None
+    total_poblacion_afectada: int | None = None
+    total_familias_afectadas: int | None = None
+    total_familias_damnificadas: int | None = None
+    id_estado: int | None = None
+    pendiente_eliminacion: bool | None = None
+    pendiente_actualizacion: bool | None = None
+
+
 class LocalidadUpdate(BaseModel):
     id_tipo_localidad: int | None = None
     id_edan_localidad_estado: int | None = None

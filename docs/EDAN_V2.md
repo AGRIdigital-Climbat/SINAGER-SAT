@@ -28,7 +28,7 @@ Reversa de la consolidación:
 |---|---|---|
 | GET | `/api/v2/edan/` | Lista de EDAN (con filtros) |
 | GET | `/api/v2/edan/{id}` | EDAN completo (cabecera + secciones + `resumen_secciones`) |
-| PUT | `/api/v2/edan/{id}` | Actualizar **responsable/alcalde** de la cabecera |
+| PUT | `/api/v2/edan/{id}` | Actualizar cabecera (solo columnas reales de `edan.edan`) |
 | PUT | `/api/v2/edan/{id}/estado` | Cambiar estado del EDAN (`estado_edan`) |
 | DELETE | `/api/v2/edan/{id}?permanente=false` | Baja lógica (sync) |
 | GET | `/api/v2/edan/mis-resumen` | Totales de mis EDAN + `por_estado` |
@@ -61,6 +61,82 @@ grupo EDAN (`/mis-resumen`, `/mis-estados`, `/mis-reportes`, `/reportes/*`,
 `/reportes/mis-reportes` y `/mis-reportes` son equivalentes (misma lógica:
 `service.get_mis_edans`); la variante raíz existe para no ser atrapada por
 `GET /{id}`.
+
+## Actualizar cabecera EDAN — `PUT /api/v2/edan/{id}`
+
+El body acepta **solo las 17 columnas reales de `edan.edan`** que escribe
+`service.update_edan`. PUT parcial: basta enviar los campos a cambiar
+(`model_dump(exclude_unset=True)`); un body vacío `{}` retorna el EDAN sin
+escribir nada.
+
+NO acepta estos campos (no son columnas de la tabla, se eliminaron del
+schema `EdanUpdateV2` en 2026-09-08):
+
+- `estado` (string) → el estado va por `icon`/`id_estado` (cambiar con
+  `PUT /api/v2/edan/{id}/estado`, body `{"id_estado": N}`).
+- `responsable` {nombre, cargo, fono, correo} → el contacto del alcalde se
+  **lee** por JOIN con `usuarios.usuario`; no se escribe.
+- `fecha_modificacion` → la genera el servicio con `NOW()` en cada UPDATE.
+
+### Campos aceptados (17)
+
+`id_local`, `codigo_edan`, `id_usuario_ugr`, `id_usuario_alcalde`,
+`id_departamento`, `id_provincia`, `id_municipio`, `id_tipo_evento`,
+`fecha_llenado` (date), `fecha_evento` (date), `hora_evento` (time),
+`total_poblacion_afectada`, `total_familias_afectadas`,
+`total_familias_damnificadas` (int), `id_estado`,
+`pendiente_eliminacion`, `pendiente_actualizacion` (bool).
+
+### Ejemplos reales
+
+Asignar alcalde (EDAN 76, UGR = usuario 28, alcalde = usuario con
+`id_usuario_alcalde`):
+
+```json
+{
+  "id_usuario_alcalde": 28
+}
+```
+
+`id_usuario_alcalde` se guarda tal cual en `edan.edan`; el desglose
+`responsable_*` (nombre, cargo, fono, correo) sale del JOIN
+`usuarios.usuario` en la respuesta `GET /api/v2/edan/76`.
+
+Ajustar localización y un total (si se manda `id_municipio` y faltan depto/
+provincia, el servicio los deduce de `shared.municipio`):
+
+```json
+{
+  "id_municipio": 70101,
+  "total_poblacion_afectada": 1200
+}
+```
+
+Respuesta real de `PUT {}` (no-op → `GET /api/v2/edan/76`), tras actualizar:
+
+```json
+{
+  "success": true,
+  "message": "EDAN actualizado correctamente",
+  "data": {
+    "id_edan": 76,
+    "codigo_edan": "070101/2026/002",
+    "id_departamento": 7,
+    "id_provincia": 701,
+    "id_municipio": 70101,
+    "fecha_llenado": "2026-08-27",
+    "fecha_evento": "2026-08-27",
+    "hora_evento": "07:00:00",
+    "total_poblacion_afectada": 100,
+    "total_familias_afectadas": 5,
+    "total_familias_damnificadas": 2
+  }
+}
+```
+
+> En `openapi.json`: el PUT v2 usa el componente `EdanUpdateV2`; el PUT v1
+> (`/api/v1/edan/{id}`) sigue usando `EdanUpdate` (con `estado`/`responsable`)
+> y NO se modifica en esta documentación.
 
 ## Reportes agregados (ABIERTOS)
 
