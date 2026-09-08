@@ -199,6 +199,23 @@ def mis_estados_edan(
     return SuccessResponse(message="Estados de mis EDAN listados correctamente", data=data, total=total)
 
 
+@router.get("/mis-reportes", tags=[TAG_EDAN],
+            summary="Listar mis EDAN (cabecera + localidades)",
+            description="Lista los EDAN del usuario con su estructura completa (cabecera + localidades). "
+                        "Ruta a nivel raíz para no ser capturada por `GET /{id}`. "
+                        "Scope: rol 6/7 ve lo propio; otro rol usa `?id_usuario=`.")
+def mis_reportes_edan(
+    id_usuario: int | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
+    data, total = service.get_mis_edans(db, uid, skip=skip, limit=limit)
+    return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
+
+
 # ============================================================================
 #  SYNC EDAN + CONSOLIDAR PENDIENTES
 # ============================================================================

@@ -32,8 +32,8 @@ Reversa de la consolidación:
 | PUT | `/api/v2/edan/{id}/estado` | Cambiar estado del EDAN (`estado_edan`) |
 | DELETE | `/api/v2/edan/{id}?permanente=false` | Baja lógica (sync) |
 | GET | `/api/v2/edan/mis-resumen` | Totales de mis EDAN + `por_estado` |
-| GET | `/api/v2/edan/mis-reportes` | Mis EDAN con localidades |
 | GET | `/api/v2/edan/mis-estados` | Lista ligera (solo estado) para badges |
+| GET | `/api/v2/edan/mis-reportes` | Mis EDAN con localidades (raíz) |
 | GET | `/api/v2/edan/reportes/resumen` | Totales agregados de localidades |
 | GET | `/api/v2/edan/reportes/geografico` | Agrupado por depto/prov/municipio |
 | GET | `/api/v2/edan/reportes/agricultura` | Daños por cultivo |
@@ -50,6 +50,17 @@ Retirados (mayo–sep 2026): `POST /api/v2/edan/` (crear EDAN manual),
 
 > `GET /filtrar` y todo `/api/v2/edan/localidades/*` son módulo aparte
 > (`router_v2.py`) y no se describen aquí.
+
+### Orden de rutas (importante)
+
+FastAPI resuelve las rutas en el orden en que se declaran. `GET /{id}`
+(`id: int`) captura cualquier segmento y, si no es entero, devuelve
+`422 Input should be a valid integer`. Por eso TODAS las rutas estáticas del
+grupo EDAN (`/mis-resumen`, `/mis-estados`, `/mis-reportes`, `/reportes/*`,
+`/consolidar/pendientes`) se declaran **antes** de `GET /{id}`.
+`/reportes/mis-reportes` y `/mis-reportes` son equivalentes (misma lógica:
+`service.get_mis_edans`); la variante raíz existe para no ser atrapada por
+`GET /{id}`.
 
 ## Reportes agregados (ABIERTOS)
 
