@@ -18,7 +18,11 @@ SQL_EDAN = """
            es.id_estado as es_id, es.nombre as es_nombre,
            es.descripcion as es_descripcion, es.orden as es_orden,
            ugr.id_usuario as ugr_id, ugr.usuario as ugr_usuario, ugr.nombre as ugr_nombre,
+           ugr.carnet as ugr_carnet, ugr.celular as ugr_celular, ugr.correo as ugr_correo,
+           ugr.cargo as ugr_cargo, ugr.id_rol as ugr_id_rol, ugr.activo as ugr_activo,
            alc.id_usuario as alc_id, alc.usuario as alc_usuario, alc.nombre as alc_nombre,
+           alc.carnet as alc_carnet, alc.celular as alc_celular, alc.correo as alc_correo,
+           alc.cargo as alc_cargo, alc.id_rol as alc_id_rol, alc.activo as alc_activo,
            (SELECT COUNT(*) FROM edan.edan_localidades lc
              WHERE lc.id_edan = e.id_edan) AS num_localidades
     FROM edan.edan e
@@ -67,11 +71,23 @@ def _build_edan(row):
         "id_usuario": data.pop("ugr_id"),
         "usuario": data.pop("ugr_usuario"),
         "nombre": data.pop("ugr_nombre"),
+        "carnet": data.pop("ugr_carnet"),
+        "celular": data.pop("ugr_celular"),
+        "correo": data.pop("ugr_correo"),
+        "cargo": data.pop("ugr_cargo"),
+        "id_rol": data.pop("ugr_id_rol"),
+        "activo": data.pop("ugr_activo"),
     } if data.get("ugr_id") else None
     data["usuario_alcalde"] = {
         "id_usuario": data.pop("alc_id"),
         "usuario": data.pop("alc_usuario"),
         "nombre": data.pop("alc_nombre"),
+        "carnet": data.pop("alc_carnet"),
+        "celular": data.pop("alc_celular"),
+        "correo": data.pop("alc_correo"),
+        "cargo": data.pop("alc_cargo"),
+        "id_rol": data.pop("alc_id_rol"),
+        "activo": data.pop("alc_activo"),
     } if data.get("alc_id") else None
     for k in ("responsable_nombre", "responsable_cargo", "responsable_fono",
               "responsable_correo", "id_reporte_rea", "fotografia", "nombre_alcalde",

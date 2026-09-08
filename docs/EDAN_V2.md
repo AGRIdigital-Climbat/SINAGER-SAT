@@ -165,6 +165,46 @@ Respuesta real de `PUT {}` (no-op → `GET /api/v2/edan/76`), tras actualizar:
 > (`/api/v1/edan/{id}`) sigue usando `EdanUpdate` (con `estado`/`responsable`)
 > y NO se modifica en esta documentación.
 
+### Usuarios en la respuesta de todos los GET de EDAN (2026-09-08)
+
+Todo GET de EDAN devuelve los ids planos **y** el usuario anidado **completo**
+(9 campos), tanto para el UGR (`usuario_ugr`) como para el alcalde
+(`usuario_alcalde`). Ejemplo real del EDAN 76:
+
+```json
+{
+  "id_usuario_ugr": 28,
+  "usuario_ugr": {
+    "id_usuario": 28,
+    "usuario": "UGRSCZ",
+    "nombre": "Andres Calamardo",
+    "carnet": "12345678",
+    "celular": "67023648",
+    "correo": null,
+    "cargo": "UGR",
+    "id_rol": 6,
+    "activo": true
+  },
+  "id_usuario_alcalde": 26,
+  "usuario_alcalde": {
+    "id_usuario": 26,
+    "usuario": "AlcaldeSCZ",
+    "nombre": "Mamen Saavedra",
+    "carnet": "7894561",
+    "celular": "78851166",
+    "correo": null,
+    "cargo": null,
+    "id_rol": 8,
+    "activo": true
+  }
+}
+```
+
+Si no hay alcalde asignado (`id_usuario_alcalde` null), `usuario_alcalde` es
+`null`. Este formato aplica a `GET /`, `GET /{id}`, `/mis-reportes`,
+`/reportes/mis-reportes` y a las respuestas que reusan el builder en v1. El
+resto de campos de la cabecera no cambia.
+
 ## Reportes agregados (ABIERTOS)
 
 Los 4 reportes agregan sobre **todas las localidades** (huérfanas +
