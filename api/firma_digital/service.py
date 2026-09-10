@@ -39,15 +39,31 @@ def _validar_base64(value: str) -> bytes:
 def _transformar(data: dict) -> dict:
     """Convierte la respuesta nativa de AGETIC al formato de SuccessResponse.data v2.
 
-    AGETIC: {finalizado, mensaje, datos: {firmas: [...]}} | datos = None
-    Output: {finalizado, tipoRespuesta, mensaje, firmas, cantidad_firmas}
+    AGETIC (actual):
+      {tipoRespuesta: "Exito"|"Error", exito: bool, mensaje, objeto: {codigoHash, firmas: [...]}}
+    Formato anterior/Jacobitus:
+      {finalizado: bool, mensaje, datos: {firmas: [...]}}
+
+    Output: {finalizado, tipoRespuesta, mensaje, codigoHash, firmas, cantidad_firmas}
     """
-    finalizado = bool(data.get("finalizado"))
-    firmas = (data.get("datos") or {}).get("firmas") or []
+    objeto = data.get("objeto")
+    if not isinstance(objeto, dict):
+        objeto = data.get("datos")
+    if not isinstance(objeto, dict):
+        objeto = {}
+
+    exito = data.get("exito")
+    if exito is None:
+        exito = bool(data.get("finalizado", data.get("tipoRespuesta") == "Exito"))
+    finalizado = bool(exito)
+    tipo_respuesta = data.get("tipoRespuesta") or ("Exito" if finalizado else "Error")
+
+    firmas = objeto.get("firmas") or []
     return {
         "finalizado": finalizado,
-        "tipoRespuesta": "Exito" if finalizado else "Error",
+        "tipoRespuesta": tipo_respuesta,
         "mensaje": data.get("mensaje", ""),
+        "codigoHash": objeto.get("codigoHash"),
         "firmas": firmas,
         "cantidad_firmas": len(firmas),
     }

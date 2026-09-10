@@ -83,32 +83,59 @@ El campo de datos debe contener **solo el base64 puro**, sin prefijo `data:...`:
 
 **IMPORTANTE:** Si el PDF está protegido con contraseña, enviar el campo `contrasenia`. Si no, omitirlo o enviarlo vacío.
 
-### Respuesta de AGETIC (formato nativo)
+### Respuesta de AGETIC (formato nativo actual)
+
+> Verificado en producción (sept 2026). AGETIC responde `{tipoRespuesta, exito, mensaje,
+> objeto: {codigoHash, firmas: [...]}}`. Un formato anterior usaba `finalizado`/`datos`;
+> el proxy soporta ambos.
 
 ```json
 {
-  "finalizado": true,
-  "mensaje": "Se validó las firmas correctamente!",
-  "datos": {
+  "tipoRespuesta": "Exito",
+  "exito": true,
+  "mensaje": "1 firma(s) digital(es) identificada(s).",
+  "objeto": {
+    "codigoHash": "0b41a3ae797067a962f5acdec6b88bbbd453e022",
     "firmas": [
       {
         "noModificado": true,
         "cadenaConfianza": true,
         "firmadoDuranteVigencia": true,
         "firmadoAntesRevocacion": true,
+        "versionado": false,
         "timeStamp": false,
-        "fechaFirma": "2018-05-25T23:46:42.000Z",
+        "fechaFirma": "2026-07-21T13:15:18.000-04:00",
         "certificado": {
-          "ci": "1234567",
-          "nombreSignatario": "Juan Perez",
-          "cargoSignatario": "Director Ejecutivo",
-          "organizacionSignatario": "Perez S.A.",
-          "emailSignatario": "jperez@mail.com",
-          "nombreECA": "ADSIB",
-          "descripcionECA": "Entidad Certificadora Publica ADSIB",
-          "inicioValidez": "2017-08-04T22:46:42.000Z",
-          "finValidez": "2018-08-04T22:46:42.000Z",
-          "revocado": "2018-06-01T12:30:02.000Z"
+          "numeroSerie": "2D258484D893ABA9",
+          "ciSignatario": "3394847",
+          "nombreSignatario": "ELEODORO BALDIVIEZO ESTRADA",
+          "organizacionSignatario": "",
+          "unidadSignatario": "",
+          "cargoSignatario": "",
+          "correoElectronicoSignatario": "prosuco.elio@gmail.com",
+          "nitSignatario": "",
+          "paisECA": "BO",
+          "nombreECA": "Entidad Certificadora Publica ADSIB",
+          "organizacionECA": "ADSIB",
+          "inicioValidez": "2026-07-01T16:54:00.000+00:00",
+          "finValidez": "2027-06-29T20:27:00.000+00:00",
+          "revocado": "Certificado no revocado",
+          "tipoCertificado": "Certificado de Persona Natural",
+          "nivelSeguridad": "Nivel de Seguridad Normal (Emitido por Software)",
+          "tipoUso": "Firma Simple"
+        },
+        "detalleValidacion": {
+          "certificadoValidacion": "EXITO",
+          "certificadoTitular": "ELEODORO BALDIVIEZO ESTRADA",
+          "documentoValidacion": "EXITO",
+          "documentoEstado": "Documento auténtico",
+          "documentoDescripcion": "El documento no ha sido modificado después de la firma.",
+          "cadenaConfianzaValidacion": "EXITO",
+          "cadenaConfianzaEstado": "Cadena de confianza",
+          "periodoValidezValidacion": "EXITO",
+          "periodoValidezEstado": "Firmado en el periodo de vigencia",
+          "revocacionValidacion": "EXITO",
+          "revocacionEstado": "Firmado con certificado no revocado"
         }
       }
     ]
@@ -116,13 +143,17 @@ El campo de datos debe contener **solo el base64 puro**, sin prefijo `data:...`:
 }
 ```
 
-### Respuesta de Error
+### Respuesta de Error (PDF sin firmas)
 
 ```json
 {
-  "finalizado": false,
-  "mensaje": "El documento no contiene firmas digitales.",
-  "datos": null
+  "tipoRespuesta": "Error",
+  "exito": false,
+  "mensaje": "0 firma(s) digital(es) identificada(s).",
+  "objeto": {
+    "codigoHash": "0b41a3ae797067a962f5acdec6b88bbbd453e022",
+    "firmas": []
+  }
 }
 ```
 
@@ -130,23 +161,24 @@ El campo de datos debe contener **solo el base64 puro**, sin prefijo `data:...`:
 
 ## 4. Transformación Requerida en el Proxy
 
-El frontend Angular espera un formato **diferente** al nativo de AGETIC. El proxy debe transformar:
+El proxy normaliza el nativo de AGETIC al formato `SuccessResponse.data` v2:
 
-| Campo AGETIC | Campo Frontend | Transformación |
-|-------------|----------------|----------------|
-| `finalizado` | `tipoRespuesta` | `true` → `"Exito"`, `false` → `"Error"` |
-| `datos` | `objeto` | Renombrar campo |
+| Campo AGETIC | Campo Frontend (data) | Transformación |
+|-------------|----------------------|----------------|
+| `tipoRespuesta` / `exito` | `finalizado` + `tipoRespuesta` | `exito` → `finalizado` (bool); `tipoRespuesta` se mantiene (`"Exito"`/`"Error"`) |
+| `objeto` (o `datos` en formato anterior) | `firmas`, `cantidad_firmas`, `codigoHash` | Extraer `objeto.firmas` → `firmas`; `len(firmas)` → `cantidad_firmas`; `objeto.codigoHash` → `codigoHash` |
 | `mensaje` | `mensaje` | Mantener igual |
 
 ### Respuesta Transformada (lo que recibe el frontend)
 
 ```json
 {
+  "finalizado": true,
   "tipoRespuesta": "Exito",
-  "mensaje": "Se validó las firmas correctamente!",
-  "objeto": {
-    "firmas": [...]
-  }
+  "mensaje": "1 firma(s) digital(es) identificada(s).",
+  "codigoHash": "0b41a3ae797067a962f5acdec6b88bbbd453e022",
+  "firmas": [...],
+  "cantidad_firmas": 1
 }
 ```
 
@@ -154,9 +186,12 @@ El frontend Angular espera un formato **diferente** al nativo de AGETIC. El prox
 
 ```json
 {
+  "finalizado": false,
   "tipoRespuesta": "Error",
-  "mensaje": "El documento no contiene firmas digitales.",
-  "objeto": null
+  "mensaje": "0 firma(s) digital(es) identificada(s).",
+  "codigoHash": "0b41a3ae797067a962f5acdec6b88bbbd453e022",
+  "firmas": [],
+  "cantidad_firmas": 0
 }
 ```
 

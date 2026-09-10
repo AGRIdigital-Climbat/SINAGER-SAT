@@ -60,32 +60,59 @@ Campo `resultado_firma` (JSONB) de cada documento:
 {
   "finalizado": true,
   "tipoRespuesta": "Exito",
-  "mensaje": "Se validó las firmas correctamente!",
+  "mensaje": "1 firma(s) digital(es) identificada(s).",
+  "codigoHash": "0b41a3ae797067a962f5acdec6b88bbbd453e022",
   "firmas": [
     {
       "noModificado": true,
       "cadenaConfianza": true,
       "firmadoDuranteVigencia": true,
       "firmadoAntesRevocacion": true,
+      "versionado": false,
       "timeStamp": false,
-      "fechaFirma": "2018-05-25T23:46:42.000Z",
+      "fechaFirma": "2026-07-21T13:15:18.000-04:00",
       "certificado": {
-        "ci": "1234567",
-        "nombreSignatario": "Juan Perez",
-        "cargoSignatario": "Director Ejecutivo",
-        "organizacionSignatario": "Perez S.A.",
-        "emailSignatario": "jperez@mail.com",
-        "nombreECA": "ADSIB",
-        "descripcionECA": "Entidad Certificadora Publica ADSIB",
-        "inicioValidez": "2017-08-04T22:46:42.000Z",
-        "finValidez": "2018-08-04T22:46:42.000Z",
-        "revocado": "2018-06-01T12:30:02.000Z"
+        "numeroSerie": "2D258484D893ABA9",
+        "ciSignatario": "3394847",
+        "nombreSignatario": "ELEODORO BALDIVIEZO ESTRADA",
+        "organizacionSignatario": "",
+        "unidadSignatario": "",
+        "cargoSignatario": "",
+        "correoElectronicoSignatario": "prosuco.elio@gmail.com",
+        "nitSignatario": "",
+        "paisECA": "BO",
+        "nombreECA": "Entidad Certificadora Publica ADSIB",
+        "organizacionECA": "ADSIB",
+        "inicioValidez": "2026-07-01T16:54:00.000+00:00",
+        "finValidez": "2027-06-29T20:27:00.000+00:00",
+        "revocado": "Certificado no revocado",
+        "tipoCertificado": "Certificado de Persona Natural",
+        "nivelSeguridad": "Nivel de Seguridad Normal (Emitido por Software)",
+        "tipoUso": "Firma Simple"
+      },
+      "detalleValidacion": {
+        "certificadoValidacion": "EXITO",
+        "certificadoTitular": "ELEODORO BALDIVIEZO ESTRADA",
+        "documentoValidacion": "EXITO",
+        "documentoEstado": "Documento auténtico",
+        "documentoDescripcion": "El documento no ha sido modificado después de la firma.",
+        "cadenaConfianzaValidacion": "EXITO",
+        "cadenaConfianzaEstado": "Cadena de confianza",
+        "cadenaConfianzaDescripcion": "La cadena de confianza está bajo la ICP de Bolivia, y tiene valor legal.",
+        "periodoValidezValidacion": "EXITO",
+        "periodoValidezEstado": "Firmado en el periodo de vigencia",
+        "revocacionValidacion": "EXITO",
+        "revocacionEstado": "Firmado con certificado no revocado"
       }
     }
   ],
   "cantidad_firmas": 1
 }
 ```
+
+> Estructura devuelta por AGETIC: AGETIC responde `{tipoRespuesta, exito, mensaje,
+> objeto: {codigoHash, firmas: [...]}}`; el proxy la normaliza a los campos de arriba.
+> `tipoRespuesta = "Exito"` → al menos 1 firma válida; `"Error"` → 0 firmas o PDF no firmado.
 
 A nivel de BD (listados):
 - `tiene_firma_digital` → `true` si el documento tiene al menos 1 firma válida.
@@ -134,24 +161,26 @@ POST /api/v2/firma-digital/documento/42/validar
 
 ### Respuesta común de AGETIC (transformada)
 
-Formato `SuccessResponse` v2:
+Formato `SuccessResponse` v2 (los 3 endpoints devuelven esta estructura en `data`):
 
 ```json
 {
   "success": true,
-  "message": "Se validó las firmas correctamente!",
+  "message": "1 firma(s) digital(es) identificada(s).",
   "data": {
     "finalizado": true,
     "tipoRespuesta": "Exito",
-    "mensaje": "Se validó las firmas correctamente!",
+    "mensaje": "1 firma(s) digital(es) identificada(s).",
+    "codigoHash": "0b41a3ae797067a962f5acdec6b88bbbd453e022",
     "firmas": [ ... ],
     "cantidad_firmas": 1
   }
 }
 ```
 
-- `tipoRespuesta` = `"Exito"` | `"Error"`.
-- Si el PDF no tiene firmas → `tipoRespuesta: "Error"`, `cantidad_firmas: 0`.
+- `tipoRespuesta` = `"Exito"` (firma válida) | `"Error"` (0 firmas / sin firmar).
+- En `documento/{id}/validar` `data` además trae `id_documento`, `tiene_firma_digital`
+  y `guardado_en_bd: false`.
 
 ---
 
