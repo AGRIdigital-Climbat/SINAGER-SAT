@@ -864,13 +864,13 @@ def _get_resumen_secciones(db: Session, id_edan: int) -> dict:
 
 
 def get_edan_completo(db: Session, id: int, modo: str = "detallado"):
-    """Devuelve EDAN completo. modos: 'detallado' (con localidades completas) o
-    'compacto' (resumen de localidades + sumatorias)."""
+    """Devuelve EDAN completo. modos: 'detallado' (localidades completas) o
+    'compacto' (localidades comprimidas —solo secciones con datos— + sumatorias)."""
     edan = get_edan(db, id)
     if not edan:
         return None
     if modo == "compacto":
-        edan["resumen_localidades"] = _get_resumen_localidades(db, id)
+        edan["localidades"] = _get_localidades(db, id, solo_con_datos=True)
         edan["sumatorias"] = _get_sumatorias(db, id)
     else:
         edan["localidades"] = _get_localidades(db, id)
@@ -891,12 +891,12 @@ def get_edan_por_reporte(db: Session, id_reporte: int):
     return get_edan_completo(db, row["id_edan"])
 
 
-def _get_localidades(db: Session, id_edan: int) -> list:
+def _get_localidades(db: Session, id_edan: int, solo_con_datos: bool = False) -> list:
     rows = _rows(db, """
         SELECT id_edan_localidad FROM edan.edan_localidades
         WHERE id_edan = :id ORDER BY id_edan_localidad
     """, {"id": id_edan})
-    return [_build_localidad(db, r["id_edan_localidad"]) for r in rows]
+    return [_build_localidad(db, r["id_edan_localidad"], solo_con_datos=solo_con_datos) for r in rows]
 
 
 # ============================================================================

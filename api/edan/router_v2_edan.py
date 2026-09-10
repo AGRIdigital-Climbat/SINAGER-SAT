@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..dependencies import get_current_user
@@ -246,8 +248,18 @@ def consolidar_pendientes(
 
 
 
-@router.get("/{id}", tags=[TAG_EDAN], summary="Obtener EDAN completo")
-def obtener_edan(id: int, modo: str = Query("detallado"), db: Session = Depends(get_db), _user=Depends(get_current_user)):
+@router.get("/{id}", tags=[TAG_EDAN],
+            summary="Obtener EDAN completo (detallado o compacto)",
+            description="Devuelve la cabecera del EDAN + localidades + resumen por secciones.\n\n"
+                        "**`modo=detallado`** (default): cabecera + `localidades[]` completas (las 14\n"
+                        "secciones, tengan datos o no) + `resumen_secciones` + `reportes_rea`.\n"
+                        "**`modo=compacto`**: cabecera + `localidades[]` en formato **comprimido**\n"
+                        "(los 22 flags `imp_*` + SOLO las secciones con datos, igual que localidad v2)\n"
+                        "+ `sumatorias` (totales por sección del EDAN) + `resumen_secciones` + `reportes_rea`.")
+def obtener_edan(id: int, modo: Literal["detallado", "compacto"] = Query(
+        "detallado", description="detallado=localidades con las 14 secciones; "
+                                 "compacto=localidades solo con secciones con datos + sumatorias"),
+        db: Session = Depends(get_db), _user=Depends(get_current_user)):
     result = service.get_edan_completo(db, id, modo=modo)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")

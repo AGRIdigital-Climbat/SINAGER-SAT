@@ -1,4 +1,7 @@
 from datetime import date as date_type
+from datetime import datetime as datetime_type
+import json
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -103,6 +106,9 @@ def upload_documento(
     nombre_documento: str,
     observaciones: str | None = None,
     hash_sha256: str | None = None,
+    tiene_firma_digital: bool = False,
+    resultado_firma: dict | None = None,
+    fecha_validacion_firma: datetime_type | None = None,
 ) -> int:
     """Inserta un nuevo documento PDF (sin versionado)."""
     result = db.execute(text("""
@@ -111,13 +117,15 @@ def upload_documento(
              tamano_bytes, hash_sha256, id_usuario_subio,
              id_municipio, id_departamento, id_provincia,
              fecha_documento, nombre_documento,
-             observaciones)
+             observaciones, tiene_firma_digital, resultado_firma,
+             fecha_validacion_firma)
         VALUES
             (:id_edan, :id_tipo_documento, :nombre_original, :path_archivo,
              :tamano_bytes, :hash_sha256, :id_usuario_subio,
              :id_municipio, :id_departamento, :id_provincia,
              :fecha_documento, :nombre_documento,
-             :observaciones)
+             :observaciones, :tiene_firma_digital,
+             CAST(:resultado_firma AS jsonb), :fecha_validacion_firma)
         RETURNING id_documento
     """), {
         "id_edan": id_edan,
@@ -133,6 +141,9 @@ def upload_documento(
         "fecha_documento": fecha_documento,
         "nombre_documento": nombre_documento,
         "observaciones": observaciones,
+        "tiene_firma_digital": tiene_firma_digital,
+        "resultado_firma": json.dumps(resultado_firma) if resultado_firma else None,
+        "fecha_validacion_firma": fecha_validacion_firma,
     }).scalar()
     db.commit()
     return result
@@ -216,9 +227,7 @@ def buscar_documentos(
         params["m"] = id_municipio
 
     return _rows(db, f"""
-        SELECT d.id_documento, d.id_edan, d.nombre_original, d.path_archivo,
-               d.nombre_documento, d.fecha_documento, d.fecha_subida,
-               d.id_departamento, d.id_provincia, d.id_municipio,
+        SELECT d.*,
                t.codigo AS tipo_codigo, t.nombre AS tipo_nombre
         FROM repositorio.documentos d
         JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento

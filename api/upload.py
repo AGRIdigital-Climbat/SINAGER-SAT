@@ -142,8 +142,8 @@ async def save_documento_pdf(
     db: Session,
     id_edan: int,
     id_usuario: int,
-) -> tuple[str, int, str]:
-    """Guarda un PDF en /uploads/edan/documentos/{id_edan}/ y devuelve (path, size, hash_sha256).
+) -> tuple[str, int, str, bytes]:
+    """Guarda un PDF en /uploads/edan/documentos/{id_edan}/ y devuelve (path, size, hash_sha256, contents).
 
     Validaciones:
       - MIME type debe ser application/pdf
@@ -191,7 +191,7 @@ async def save_documento_pdf(
     with open(filepath, "wb") as f:
         f.write(contents)
 
-    return f"/uploads/{subfolder}/{filename}", len(contents), hash_sha256
+    return f"/uploads/{subfolder}/{filename}", len(contents), hash_sha256, contents
 
 
 def delete_file_from_server(path_archivo: str) -> bool:

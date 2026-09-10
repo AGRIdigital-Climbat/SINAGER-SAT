@@ -316,9 +316,13 @@ filtro `id_usuario_ugr` se ignora. Filtros soportados (query params):
 ## `GET /api/v2/edan/{id}` — EDAN completo
 
 - `modo=detallado` (default): cabecera + `localidades[]` (cada una con sus 14
-  secciones) + `resumen_secciones`.
-- `modo=compacto`: cabecera + `resumen_localidades[]` + `sumatorias` +
-  `resumen_secciones`.
+  secciones) + `resumen_secciones` + `reportes_rea`.
+- `modo=compacto`: cabecera + `localidades[]` en formato **comprimido** (los 22
+  flags `imp_*` + SOLO las secciones con datos, igual que localidad v2) +
+  `sumatorias` + `resumen_secciones` + `reportes_rea`.
+
+> En Swagger (`/docs`) el parámetro `modo` es un **selector** con las dos
+> opciones (`detallado`/`compacto`).
 
 ### `resumen_secciones` (nuevo)
 

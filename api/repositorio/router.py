@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
+import base64
+from datetime import datetime
 
 from ..database import get_db
 from ..dependencies import get_current_user
@@ -9,6 +11,7 @@ from ..auth.permisos import module_permiso
 from ..config import settings
 from ..response import SuccessResponse, MessageResponse
 from ..upload import save_documento_pdf, delete_file_from_server
+from ..firma_digital import service as firma_service
 from . import service
 from .schemas import (
     TipoDocumentoCreate, TipoDocumentoUpdate,
@@ -112,7 +115,11 @@ def eliminar_tipo_documento(
 
 @router.post("/edan/{id_edan}/documentos", status_code=201, tags=[TAG_DOCS],
              summary="Subir PDF al repositorio de un EDAN",
-             description="Sube un archivo PDF y crea una fila en `repositorio.documentos`.\n\n"
+             description="Sube un archivo PDF, crea una fila en `repositorio.documentos` y **valida la "
+                         "firma digital automáticamente** (si el PDF ≤ 20 MB), guardando los metadatos "
+                         "de validación (`tiene_firma_digital`, `resultado_firma`, `fecha_validacion_firma`).\n\n"
+                         "Si AGETIC no está disponible o el PDF supera 20 MB la validación se omite, el "
+                         "documento se guarda igual y `resultado_firma` registra el motivo.\n\n"
                          "**Multipart**: `file` (PDF, max 50MB) + form fields.\n\n"
                          "Validaciones:\n"
                          "- MIME debe ser `application/pdf`\n"
@@ -133,14 +140,46 @@ async def subir_documento(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Sube un nuevo PDF al repositorio del EDAN."""
+    """Sube un nuevo PDF al repositorio del EDAN y valida su firma al vuelo."""
     tipo = service.get_tipo_documento(db, id_tipo_documento)
     if not tipo or not tipo["activo"]:
         raise HTTPException(status_code=400, detail="Tipo de documento no válido o inactivo")
 
-    file_path, size, hash_sha256 = await save_documento_pdf(
+    file_path, size, hash_sha256, contents = await save_documento_pdf(
         file, db, id_edan, _user["id_usuario"]
     )
+
+    tiene_firma = False
+    resultado_firma: dict | None = None
+    fecha_validacion_firma: datetime | None = None
+
+    max_bytes = settings.AGETIC_MAX_SIZE_MB * 1024 * 1024
+    if len(contents) <= max_bytes:
+        try:
+            pdf_b64 = base64.b64encode(contents).decode("ascii")
+            resultado = await firma_service.validar_pdf(pdf_b64)
+            tiene_firma = bool(resultado.get("cantidad_firmas", 0) > 0)
+            resultado_firma = resultado
+            fecha_validacion_firma = datetime.now()
+        except HTTPException as exc:
+            resultado_firma = {
+                "finalizado": False,
+                "tipoRespuesta": "Error",
+                "mensaje": f"No se pudo validar la firma: {exc.detail}",
+                "firmas": [],
+                "cantidad_firmas": 0,
+                "error": exc.detail,
+            }
+    else:
+        resultado_firma = {
+            "finalizado": False,
+            "tipoRespuesta": "Error",
+            "mensaje": (f"Documento excede el límite de "
+                        f"{settings.AGETIC_MAX_SIZE_MB} MB para validar firma digital."),
+            "firmas": [],
+            "cantidad_firmas": 0,
+            "error": "archivo_excede_limite_agetica",
+        }
 
     id_doc = service.upload_documento(
         db=db,
@@ -157,6 +196,9 @@ async def subir_documento(
         nombre_documento=nombre_documento,
         observaciones=observaciones,
         hash_sha256=hash_sha256,
+        tiene_firma_digital=tiene_firma,
+        resultado_firma=resultado_firma,
+        fecha_validacion_firma=fecha_validacion_firma,
     )
 
     doc = service.get_documento(db, id_doc)

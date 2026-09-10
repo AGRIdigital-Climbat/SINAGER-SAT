@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
 
+    AGETIC_BASE_URL: str = os.getenv(
+        "AGETIC_BASE_URL",
+        "https://validar.firmadigital.bo/backend",
+    )
+    AGETIC_TIMEOUT: int = int(os.getenv("AGETIC_TIMEOUT", "60"))
+    AGETIC_MAX_SIZE_MB: int = int(os.getenv("AGETIC_MAX_SIZE_MB", "20"))
+
     class Config:
         env_file = ".env"
 

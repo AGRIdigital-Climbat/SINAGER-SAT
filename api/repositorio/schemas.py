@@ -82,6 +82,9 @@ class DocumentoResponse(BaseModel):
     fecha_subida: datetime
     activo: bool
     observaciones: Optional[str] = None
+    tiene_firma_digital: Optional[bool] = False
+    resultado_firma: Optional[dict] = None
+    fecha_validacion_firma: Optional[datetime] = None
 
     class Config:
         from_attributes = True

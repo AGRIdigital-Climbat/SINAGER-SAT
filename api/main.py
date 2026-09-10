@@ -16,6 +16,7 @@ from .rea.router import router as rea_router
 from .usuarios.router import router as usuarios_router
 from .upload import router as upload_router
 from .repositorio.router import router as repositorio_router
+from .firma_digital.router import router as firma_digital_router
 from .audit import AuditMiddleware
 
 TAGS_METADATA_V1 = [
@@ -65,6 +66,7 @@ V2_ROUTERS = [
     ("edan_catalogos", edan_router_v2_catalogos),
     ("edan_cabecera", edan_router_v2_edan),
     ("edan_localidades", edan_router_v2_localidades),
+    ("firma_digital", firma_digital_router),
 ]
 
 app = FastAPI(
