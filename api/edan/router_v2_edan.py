@@ -26,10 +26,11 @@ ROLES_ASIGNA_ALCALDE = (6, 7)
 PU_ALCALDE_ONLY_FIELDS = {"id_usuario_alcalde"}
 
 
-def _filtros_dep_factory(forzar_scope: bool = True):
+def _filtros_dep_factory(forzar_scope: bool = True, geo_scope: bool = False):
     """Dependencia de filtros de EDAN. Con `forzar_scope=True` los roles
-    6/7 ven SOLO sus EDAN (id_usuario_ugr propio); con `False` los reportes
-    agregados quedan ABIERTOS (todas las localidades de todos)."""
+    6/7 ven SOLO sus EDAN (id_usuario_ugr propio); con `False` no aplican
+    filtro de usuario. Con `geo_scope=True` se fuerza la geografía del rol
+    (5/9 → departamento; 8 → municipio) sin tocar el filtro de usuario 6/7."""
     def _filtros_dep(
         q: str | None = Query(None),
         id_departamento: int | None = Query(None),
@@ -75,8 +76,12 @@ def _filtros_dep_factory(forzar_scope: bool = True):
             imp_necesidades=imp_necesidades,
             tiene_agricultura=tiene_agricultura, tiene_pecuario=tiene_pecuario,
         )
-        if forzar_scope and user["id_rol"] not in (1, 9) and f.get("id_usuario_ugr") is None:
-            f["id_usuario_ugr"] = user["id_usuario"]
+        if forzar_scope:
+            f.update(service.scope_geografico(user))
+            if user["id_rol"] in (6, 7) and f.get("id_usuario_ugr") is None:
+                f["id_usuario_ugr"] = user["id_usuario"]
+        elif geo_scope:
+            f.update(service.scope_geografico(user))
         return f
 
     return _filtros_dep
@@ -84,12 +89,13 @@ def _filtros_dep_factory(forzar_scope: bool = True):
 
 _filtros_dep = _filtros_dep_factory(forzar_scope=True)
 _filtros_dep_abierto = _filtros_dep_factory(forzar_scope=False)
+_filtros_dep_reporte = _filtros_dep_factory(forzar_scope=False, geo_scope=True)
 
 
 # ----------------------------------------------------------------------------
 #  REPORTES (solo totales/agregados) — antes de /{id} para no capturar rutas
-#  Filtros ABIERTOS: reportes sobre TODAS las localidades (huérfanas +
-#  consolidadas), sin scope por rol. Filtrar por geografía con ?id_departamento=,
+#  Filtros con geo-scope: 5/9 → departamento, 8 → municipio; 1-4 y 6/7 sin
+#  restricción. Filtrar ademas por geografía con ?id_departamento=,
 #  ?id_provincia=, ?id_municipio=.
 # ----------------------------------------------------------------------------
 
@@ -104,8 +110,9 @@ def reportes_mis_reportes_edan(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_edans(db, uid, skip=skip, limit=limit)
+    sc = service.scope_mis_edan_v2(_user, id_usuario)
+    data, total = service.get_mis_edans(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
     return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
 
 
@@ -114,9 +121,9 @@ def reportes_mis_reportes_edan(
             summary="Reporte resumen de localidades (totales agregados con filtros)",
             description="Totales agregados sobre TODAS las localidades (huérfanas + consolidadas) con "
                         "filtros (geografía, tipo_evento, estado de localidad, fechas, flags): "
-                        "`totales`, `por_estado[]`, `por_tipo_evento[]`. Reportes abiertos: sin scope por rol.")
+                        "`totales`, `por_estado[]`, `por_tipo_evento[]`. Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_resumen_edan(
-    f: dict = Depends(_filtros_dep_abierto),
+    f: dict = Depends(_filtros_dep_reporte),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_resumen(db, f) or {}
@@ -127,9 +134,9 @@ def reportes_resumen_edan(
             response_model=ReporteGeografiaResponse,
             summary="Reporte geográfico de localidades (agrupado por d/p/m)",
             description="Localidades agrupadas por departamento/provincia/municipio con totales "
-                        "acumulados, desglose de huérfanas/consolidadas. Reportes abiertos.")
+                        "acumulados, desglose de huérfanas/consolidadas. Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_geografico_edan(
-    f: dict = Depends(_filtros_dep_abierto),
+    f: dict = Depends(_filtros_dep_reporte),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_geografico(db, f) or []
@@ -141,9 +148,9 @@ def reportes_geografico_edan(
             response_model=ReporteAgriculturaResponse,
             summary="Reporte de daños a agricultura (agregado)",
             description="Hectáreas afectadas/perdidas por cultivo, sobre TODAS las localidades. "
-                        "Reportes abiertos.")
+                        "Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_agricultura_edan(
-    f: dict = Depends(_filtros_dep_abierto),
+    f: dict = Depends(_filtros_dep_reporte),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_agricultura(db, f) or []
@@ -155,9 +162,9 @@ def reportes_agricultura_edan(
             response_model=ReportePecuarioResponse,
             summary="Reporte de daños pecuarios (agregado)",
             description="Animales afectados/muertos por especie, sobre TODAS las localidades. "
-                        "Reportes abiertos.")
+                        "Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_pecuario_edan(
-    f: dict = Depends(_filtros_dep_abierto),
+    f: dict = Depends(_filtros_dep_reporte),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_pecuario(db, f) or []
@@ -182,8 +189,9 @@ def mis_resumen_edan(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
-    data = service.get_mis_resumen_edan(db, uid)
+    sc = service.scope_mis_edan_v2(_user, id_usuario)
+    data = service.get_mis_resumen_edan(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                        id_municipio=sc["id_municipio"])
     return MisResumenResponse(message="Resumen de mis EDAN generado correctamente", data=data or {})
 
 
@@ -198,8 +206,11 @@ def mis_estados_edan(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
-    data, total = service.list_mis_edans_estados(db, uid, skip=skip, limit=limit)
+    sc = service.scope_mis_edan_v2(_user, id_usuario)
+    data, total = service.list_mis_edans_estados(db, uid=sc["id_usuario"],
+                                                 id_departamento=sc["id_departamento"],
+                                                 id_municipio=sc["id_municipio"],
+                                                 skip=skip, limit=limit)
     return SuccessResponse(message="Estados de mis EDAN listados correctamente", data=data, total=total)
 
 
@@ -215,8 +226,9 @@ def mis_reportes_edan(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] not in (1, 9) else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_edans(db, uid, skip=skip, limit=limit)
+    sc = service.scope_mis_edan_v2(_user, id_usuario)
+    data, total = service.get_mis_edans(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
     return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
 
 
@@ -240,8 +252,17 @@ def consolidar_pendientes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    scope = service.scope_geografico(_user)
+    if "id_municipio" in scope:
+        id_municipio = scope["id_municipio"]
+    if "id_departamento" in scope:
+        id_municipio = None
     data = service.listar_consolidables(db, id_municipio=id_municipio,
                                          estado_nombre=estado, id_estado=id_estado)
+    if "id_departamento" in scope:
+        data = [g for g in data if g.get("id_departamento") == scope["id_departamento"]]
+    if "id_municipio" in scope:
+        data = [g for g in data if g.get("id_municipio") == scope["id_municipio"]]
     return SuccessResponse(message="EDAN localidades consolidadas listadas correctamente",
                            data=data, total=len(data))
 
@@ -260,6 +281,7 @@ def obtener_edan(id: int, modo: Literal["detallado", "compacto"] = Query(
         "detallado", description="detallado=localidades con las 14 secciones; "
                                  "compacto=localidades solo con secciones con datos + sumatorias"),
         db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    service.validar_scope_edan(db, _user, id)
     result = service.get_edan_completo(db, id, modo=modo)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")

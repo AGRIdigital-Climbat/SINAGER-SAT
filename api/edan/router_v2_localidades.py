@@ -541,6 +541,7 @@ def listar_localidades_municipio(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    service.validar_scope_municipio(db, _user, id_municipio)
     data, total = service.listar_localidades_municipio(
         db, id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
         id_estado=id_estado, estado_nombre=estado, solo_huerfanas=solo_huerfanas,
@@ -560,6 +561,7 @@ def resumen_localidades_municipio(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    service.validar_scope_municipio(db, _user, id_municipio)
     data = service.resumen_localidades_municipio(db, id_municipio)
     return SuccessResponse(message="Resumen de localidades del municipio generado correctamente",
                            data=data)

@@ -6,16 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from .auth.router import router as auth_router
-from .shared.router import router as shared_router
+from .shared.router import router as shared_router, router_v2 as shared_router_v2
 from .edan.router import router as edan_router
 from .edan.router_v2 import router as edan_router_v2
 from .edan.router_v2_edan import router as edan_router_v2_edan
 from .edan.router_v2_localidades import router as edan_router_v2_localidades
 from .edan.router_v2_catalogos import router as edan_router_v2_catalogos
-from .rea.router import router as rea_router
-from .usuarios.router import router as usuarios_router
+from .usuarios.router import router as usuarios_router, router_v2 as usuarios_router_v2
 from .upload import router as upload_router
-from .repositorio.router import router as repositorio_router
+from .repositorio.router import router as repositorio_router, router_v2 as repositorio_router_v2
 from .firma_digital.router import router as firma_digital_router
 from .audit import AuditMiddleware
 
@@ -31,9 +30,6 @@ TAGS_METADATA_V1 = [
     {"name": "Catálogos > Pecuaria",      "description": "Catálogo de especies pecuarias con filtros por grupo y nombre"},
     {"name": "EDAN",                      "description": "Cabecera EDAN: CRUD principal, reportes agregados, catálogos (tipo evento, estado, tipo localidad), sincronización offline-first, consolidar, fotos por municipio, cambio de estado."},
     {"name": "EDAN_LOCALIDADES",          "description": "Localidades del EDAN: CRUD anidado, sync móvil, mis-resumen/mis-reportes de huérfanas, cambio de estado, items de daños/servicios con foto y coordenadas (viales, infra pública, vivienda, agricultura, pecuario, salud, servicios básicos, unidades educativas)."},
-    {"name": "REA > Reportes",            "description": "Crear, consultar y gestionar reportes de eventos"},
-    {"name": "REA > Estados",             "description": "Estados del ciclo de vida del reporte"},
-    {"name": "REA > Categorías",          "description": "Categorías de afectación del REA"},
     {"name": "Usuarios > Cuentas",        "description": "CRUD de cuentas de usuario"},
     {"name": "Usuarios > Roles",          "description": "Roles y asignación usuario-rol"},
     {"name": "Usuarios > Aplicaciones",   "description": "Aplicaciones registradas en el sistema"},
@@ -50,7 +46,6 @@ V1_ROUTERS = [
     ("auth", auth_router),
     ("shared", shared_router),
     ("edan", edan_router),
-    ("rea", rea_router),
     ("usuarios", usuarios_router),
     ("upload", upload_router),
     ("repositorio", repositorio_router),
@@ -58,10 +53,10 @@ V1_ROUTERS = [
 
 V2_ROUTERS = [
     ("auth", auth_router),
-    ("shared", shared_router),
-    ("usuarios", usuarios_router),
+    ("shared", shared_router_v2),
+    ("usuarios", usuarios_router_v2),
     ("upload", upload_router),
-    ("repositorio", repositorio_router),
+    ("repositorio", repositorio_router_v2),
     ("edan_v2", edan_router_v2),
     ("edan_catalogos", edan_router_v2_catalogos),
     ("edan_cabecera", edan_router_v2_edan),

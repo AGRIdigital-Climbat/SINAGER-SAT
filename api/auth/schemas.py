@@ -2,9 +2,6 @@ from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    model_config = {"json_schema_extra": {
-        "examples": [{"usuario": "admin", "contrasena": "pass123"}]
-    }}
     usuario: str
     contrasena: str
 
@@ -57,6 +54,8 @@ class TokenResponse(BaseModel):
     id_rol: int | None = None
     rol: str | None = None
     activo: bool | None = None
+    expires_at: str | None = None
+    expires_in: int | None = None
 
 
 class VerificarIdentidadRequest(BaseModel):

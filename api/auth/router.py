@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     summary="Iniciar sesión",
     description="Autentica un usuario con usuario y contraseña. Retorna un token JWT y los datos del usuario incluyendo permisos.",
     responses={200: {"model": SuccessResponse}})
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest = Body(..., openapi_examples={"default": {"summary": "Ejemplo de inicio de sesión", "value": {"usuario": "admin", "contrasena": "pass123"}}}), db: Session = Depends(get_db)):
     result = authenticate_user(db, data)
     if not result:
         raise HTTPException(

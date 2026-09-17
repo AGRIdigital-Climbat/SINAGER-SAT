@@ -882,6 +882,16 @@ class TipoLocalidadUpdate(BaseModel):
     orden: int | None = None
 
 
+class TipoLocalidadResponse(BaseModel):
+    id_tipo_localidad: int
+    nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+
+    class Config:
+        from_attributes = True
+
+
 class EdanLocalidadEstadoCreate(BaseModel):
     nombre: str
     descripcion: str | None = None
@@ -892,6 +902,16 @@ class EdanLocalidadEstadoUpdate(BaseModel):
     nombre: str | None = None
     descripcion: str | None = None
     orden: int | None = None
+
+
+class EdanLocalidadEstadoResponse(BaseModel):
+    id_edan_localidad_estado: int
+    nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+
+    class Config:
+        from_attributes = True
 
 
 class ProteccionCreate(BaseModel):
@@ -922,6 +942,18 @@ class GrupoVulnerableUpdate(BaseModel):
     activo: bool | None = None
 
 
+class GrupoVulnerableResponse(BaseModel):
+    id_grupo_vulnerable: int
+    codigo: str
+    nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+    activo: bool = True
+
+    class Config:
+        from_attributes = True
+
+
 class GrupoEtarioCreate(BaseModel):
     codigo: str
     nombre: str
@@ -936,6 +968,18 @@ class GrupoEtarioUpdate(BaseModel):
     descripcion: str | None = None
     orden: int | None = None
     activo: bool | None = None
+
+
+class GrupoEtarioResponse(BaseModel):
+    id_grupo_etario: int
+    codigo: str
+    nombre: str
+    descripcion: str | None = None
+    orden: int = 0
+    activo: bool = True
+
+    class Config:
+        from_attributes = True
 
 
 class EdanSyncIn(BaseModel):

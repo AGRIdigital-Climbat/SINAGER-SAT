@@ -95,6 +95,20 @@ def _filtros_dep(
     )
 
 
+def _filtros_dep_scoped(
+    f: dict = Depends(_filtros_dep),
+    user=Depends(get_current_user),
+):
+    """Filtros de EDAN con scope geográfico por rol (v1): lista de EDANs.
+    Nacional (1-4) = sin restricción; 5/9 = departamento; 8 = municipio;
+    6/7 = solo sus EDAN (id_usuario_ugr). Los reportes usan `_filtros_dep` (abiertos)."""
+    f = dict(f)
+    f.update(service.scope_geografico(user))
+    if user["id_rol"] in (6, 7) and f.get("id_usuario_ugr") is None:
+        f["id_usuario_ugr"] = user["id_usuario"]
+    return f
+
+
 # ============================================================================
 #  REPORTES (antes de /{id} para no capturar rutas)
 # ============================================================================
@@ -105,8 +119,9 @@ def mis_resumen(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data = service.get_mis_resumen_edan(db, uid)
+    sc = service.scope_mis_edan(_user, id_usuario)
+    data = service.get_mis_resumen_edan(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                        id_municipio=sc["id_municipio"])
     return SuccessResponse(message="Resumen EDAN del usuario generado correctamente", data=data)
 
 
@@ -118,8 +133,9 @@ def mis_reportes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_edans(db, uid, skip=skip, limit=limit)
+    sc = service.scope_mis_edan(_user, id_usuario)
+    data, total = service.get_mis_edans(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
     return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
 
 
@@ -136,8 +152,9 @@ def mis_localidades_resumen(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data = service.get_mis_localidades_resumen(db, uid)
+    sc = service.scope_mis_localidades(_user, id_usuario)
+    data = service.get_mis_localidades_resumen(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                               id_municipio=sc["id_municipio"])
     return SuccessResponse(message="Resumen de mis EDAN localidades generado correctamente", data=data or {})
 
 
@@ -158,9 +175,10 @@ def mis_localidades_reportes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit,
-                                              solo_huerfanas=solo_huerfanas)
+    sc = service.scope_mis_localidades(_user, id_usuario)
+    data, total = service.get_mis_localidades(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+                                              id_municipio=sc["id_municipio"], skip=skip,
+                                              solo_huerfanas=solo_huerfanas, limit=limit)
     return SuccessResponse(message="Mis EDAN localidades listadas correctamente", data=data, total=total)
 
 
@@ -372,8 +390,17 @@ def consolidar_pendientes(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    scope = service.scope_geografico(_user)
+    if "id_municipio" in scope:
+        id_municipio = scope["id_municipio"]
+    if "id_departamento" in scope:
+        id_municipio = None
     data = service.listar_consolidables(db, id_municipio=id_municipio,
                                          estado_nombre=estado, id_estado=id_estado)
+    if "id_departamento" in scope:
+        data = [g for g in data if g.get("id_departamento") == scope["id_departamento"]]
+    if "id_municipio" in scope:
+        data = [g for g in data if g.get("id_municipio") == scope["id_municipio"]]
     return SuccessResponse(message="EDAN localidades consolidadas listadas correctamente",
                            data=data, total=len(data))
 
@@ -399,6 +426,7 @@ def listar_localidades_municipio(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    service.validar_scope_municipio(db, _user, id_municipio)
     data, total = service.listar_localidades_municipio(
         db, id_municipio=id_municipio, id_tipo_evento=id_tipo_evento,
         id_estado=id_estado, estado_nombre=estado, solo_huerfanas=solo_huerfanas,
@@ -418,6 +446,7 @@ def resumen_localidades_municipio(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    service.validar_scope_municipio(db, _user, id_municipio)
     data = service.resumen_localidades_municipio(db, id_municipio)
     return SuccessResponse(message="Resumen de localidades del municipio generado correctamente",
                            data=data)
@@ -580,7 +609,7 @@ def eliminar_localidad_standalone(id_localidad: int, db: Session = Depends(get_d
 
 @router.get("/", tags=[TAG_EDAN], responses={200: {"model": SuccessResponse}})
 def listar_edans(
-    f: dict = Depends(_filtros_dep),
+    f: dict = Depends(_filtros_dep_scoped),
     order_by: str = Query("id_edan", description="Campo de orden (id_edan, fecha_evento, estado, ...)"),
     order: str = Query("desc", description="Dirección: asc | desc"),
     skip: int = Query(0, ge=0),
@@ -604,6 +633,7 @@ def listar_edans(
 def obtener_edan(id: int,
                  modo: str = Query("detallado", description="detallado | compacto"),
                  db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    service.validar_scope_edan(db, _user, id)
     result = service.get_edan_completo(db, id, modo=modo)
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
@@ -707,6 +737,7 @@ def crear_localidad_independiente(data: LocalidadCreate, db: Session = Depends(g
                                 "danos_viales, servicios_basicos, unidades_educativas, etc.) con sus items completos\n"
                                 "(incluyendo fotografia, coordenada_lat, coordenada_lon).")
 def listar_localidades(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    service.validar_scope_edan(db, _user, id)
     if not service.get_edan(db, id):
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     data = service._get_localidades(db, id)
@@ -1150,6 +1181,7 @@ def listar_danos_viales(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1175,6 +1207,7 @@ def listar_danos_infra_publica(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1200,6 +1233,7 @@ def listar_danos_vivienda(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1225,6 +1259,7 @@ def listar_danos_agricultura(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["a.id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1263,6 +1298,7 @@ def listar_danos_pecuarios(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["a.id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1301,6 +1337,7 @@ def listar_salud_establecimientos(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1326,6 +1363,7 @@ def listar_servicios_basicos(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1351,6 +1389,7 @@ def listar_unidades_educativas(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1376,6 +1415,7 @@ def listar_infra_productiva(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     conds = ["id_edan_localidad = :id"]
     params: dict = {"id": id_localidad}
     if con_foto is True:
@@ -1405,6 +1445,7 @@ def listar_proteccion(
     skip: int = 0, limit: int = 100,
     db: Session = Depends(get_db), _user=Depends(get_current_user),
 ):
+    service.validar_scope_localidad(db, _user, id_localidad)
     rows = service._grupos_vulnerables(db, id_localidad)
     return SuccessResponse(message="Grupos vulnerables listados", data=rows, total=len(rows))
 
@@ -1503,6 +1544,7 @@ def listar_fotos_por_municipio(
     """Devuelve todas las evidencias del municipio, agrupadas por tabla.
     Cada item incluye: id, tipo (nombre lógico), id_localidad, localidad,
     comunidad, fotografia (path), coordenada_lat, coordenada_lon."""
+    service.validar_scope_municipio(db, _user, id_municipio)
     tablas = {tipo: TABLAS_CON_FOTO[tipo]} if tipo and tipo in TABLAS_CON_FOTO else TABLAS_CON_FOTO
     conds = ["l.id_municipio = :m"]
     if con_foto:

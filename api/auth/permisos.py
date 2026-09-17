@@ -14,6 +14,8 @@ def module_permiso(modulo: str):
         accion = method_map.get(request.method, "READ")
         if usuario["id_rol"] == 1:
             return usuario
+        if accion == "READ":
+            return usuario
         result = db.execute(
             text("""
                 SELECT 1 FROM usuarios.permiso p
@@ -38,6 +40,8 @@ def permiso_required(modulo: str, accion: str):
         db: Session = Depends(get_db),
     ):
         if usuario["id_rol"] == 1:
+            return usuario
+        if accion == "READ":
             return usuario
         result = db.execute(
             text("""

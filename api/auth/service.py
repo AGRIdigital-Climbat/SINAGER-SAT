@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -13,7 +13,8 @@ TOKEN_LARGO = datetime(2099, 12, 31, 23, 59, 59)
 def _calcular_expiracion(id_rol: int) -> tuple[datetime, timedelta | None]:
     if id_rol in (6, 7):
         return TOKEN_LARGO, None
-    return datetime.now() + timedelta(hours=72), timedelta(hours=72)
+    utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return utc_now + timedelta(hours=72), timedelta(hours=72)
 
 
 PERMISOS_POR_ROL = """
@@ -72,7 +73,7 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
 
     # Buscar sesión activa existente - reutilizar token (solo si no expiró)
     sesion = db.execute(
-        text("SELECT token FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW()"),
+        text("SELECT token, fecha_expiracion FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW() AT TIME ZONE 'UTC'"),
         {"uid": user["id_usuario"]}
     ).mappings().first()
 
@@ -80,18 +81,19 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
 
     if sesion:
         token = sesion["token"]
+        fecha_exp = sesion["fecha_expiracion"]
     else:
         token = create_access_token(
             {"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]},
             expires_delta=delta,
         )
         db.execute(
-            text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_expiracion) VALUES (:uid, :token, true, :fecha_exp)"),
-            {"uid": user["id_usuario"], "token": token, "fecha_exp": fecha_exp},
+            text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_inicio, fecha_expiracion) VALUES (:uid, :token, true, :inicio, :fecha_exp)"),
+            {"uid": user["id_usuario"], "token": token, "inicio": datetime.now(timezone.utc).replace(tzinfo=None), "fecha_exp": fecha_exp.replace(tzinfo=None) if fecha_exp.tzinfo else fecha_exp},
         )
         db.commit()
 
-    return {
+    result = {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user["id_usuario"],
@@ -122,6 +124,14 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
         "activo": user["activo"],
         "permisos": _get_permisos_response(user["id_rol"], db),
     }
+
+    if user["id_rol"] not in (6, 7):
+        utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
+        remaining = (fecha_exp - utc_now).total_seconds()
+        result["expires_at"] = fecha_exp.isoformat() + "Z"
+        result["expires_in"] = max(int(remaining), 0)
+
+    return result
 
 
 def register_user(db: Session, data: RegisterRequest) -> int:

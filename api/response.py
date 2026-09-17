@@ -1,5 +1,7 @@
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, Generic, TypeVar
+
+T = TypeVar("T")
 
 
 class SuccessResponse(BaseModel):
@@ -41,3 +43,13 @@ class MessageResponse(BaseModel):
     }}
     message: str
     id: int | None = None
+
+
+class DataListResponse(SuccessResponse, Generic[T]):
+    """Respuesta exitosa con `data` como lista tipada."""
+    data: list[T] = []
+
+
+class DataItemResponse(SuccessResponse, Generic[T]):
+    """Respuesta exitosa con `data` como un item tipado."""
+    data: T | None = None

@@ -96,6 +96,16 @@ class RolUpdate(BaseModel):
     descripcion: str | None = None
 
 
+class RolResponse(BaseModel):
+    id_rol: int
+    nombre: str
+    descripcion: str | None = None
+    permisos: dict | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class AplicacionCreate(BaseModel):
     codigo: str
     nombre: str

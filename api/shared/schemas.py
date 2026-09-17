@@ -71,6 +71,16 @@ class MunicipioResponse(BaseModel):
         from_attributes = True
 
 
+class CultivoCreate(BaseModel):
+    nombre: str
+    grupo: str
+
+
+class CultivoUpdate(BaseModel):
+    nombre: str | None = None
+    grupo: str | None = None
+
+
 class CultivoResponse(BaseModel):
     id: int
     nombre: str
@@ -78,6 +88,16 @@ class CultivoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PecuarioCreate(BaseModel):
+    nombre: str
+    grupo: str
+
+
+class PecuarioUpdate(BaseModel):
+    nombre: str | None = None
+    grupo: str | None = None
 
 
 class PecuarioResponse(BaseModel):

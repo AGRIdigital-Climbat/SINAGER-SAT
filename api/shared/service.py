@@ -22,9 +22,10 @@ def get_departamento(db: Session, id: int):
 
 
 def create_departamento(db: Session, data: DepartamentoCreate):
+    next_id = db.execute(text("SELECT COALESCE(MAX(id), 0) + 1 FROM shared.departamento")).scalar()
     result = db.execute(
-        text("INSERT INTO shared.departamento (codigo_ine, nombre) VALUES (:codigo, :nombre) RETURNING id"),
-        {"codigo": data.codigo_ine, "nombre": data.nombre},
+        text("INSERT INTO shared.departamento (id, codigo_ine, nombre) VALUES (:id, :codigo, :nombre) RETURNING id"),
+        {"id": next_id, "codigo": data.codigo_ine, "nombre": data.nombre},
     )
     db.commit()
     return result.scalar()
@@ -90,9 +91,12 @@ def get_provincia(db: Session, id: int):
 
 
 def create_provincia(db: Session, data: ProvinciaCreate):
+    next_id = db.execute(text(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM shared.provincia"
+    )).scalar()
     result = db.execute(
-        text("INSERT INTO shared.provincia (codigo_ine, id_departamento, nombre) VALUES (:codigo, :dpto, :nombre) RETURNING id"),
-        {"codigo": data.codigo_ine, "dpto": data.id_departamento, "nombre": data.nombre},
+        text("INSERT INTO shared.provincia (id, codigo_ine, id_departamento, nombre) VALUES (:id, :codigo, :dpto, :nombre) RETURNING id"),
+        {"id": next_id, "codigo": data.codigo_ine, "dpto": data.id_departamento, "nombre": data.nombre},
     )
     db.commit()
     return result.scalar()
@@ -144,6 +148,7 @@ def _build_municipio(row):
         "id": data.pop("p_id"),
         "codigo_ine": data.pop("p_codigo_ine"),
         "nombre": data.pop("p_nombre"),
+        "id_departamento": data.get("id_departamento"),
     } if data.get("p_id") else None
     return data
 
@@ -172,9 +177,12 @@ def get_municipio(db: Session, id: int):
 
 
 def create_municipio(db: Session, data: MunicipioCreate):
+    next_id = db.execute(text(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM shared.municipio"
+    )).scalar()
     result = db.execute(
-        text("INSERT INTO shared.municipio (codigo_ine, id_departamento, id_provincia, nombre) VALUES (:codigo, :dpto, :prov, :nombre) RETURNING id"),
-        {"codigo": data.codigo_ine, "dpto": data.id_departamento, "prov": data.id_provincia, "nombre": data.nombre},
+        text("INSERT INTO shared.municipio (id, codigo_ine, id_departamento, id_provincia, nombre) VALUES (:id, :codigo, :dpto, :prov, :nombre) RETURNING id"),
+        {"id": next_id, "codigo": data.codigo_ine, "dpto": data.id_departamento, "prov": data.id_provincia, "nombre": data.nombre},
     )
     db.commit()
     return result.scalar()
@@ -443,6 +451,40 @@ def get_grupos_cultivo(db: Session):
     return [dict(r) for r in rows]
 
 
+def create_cultivo(db: Session, data):
+    next_id = db.execute(text(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM shared.cultivo"
+    )).scalar()
+    result = db.execute(
+        text("INSERT INTO shared.cultivo (id, nombre, grupo) VALUES (:id, :nombre, :grupo) RETURNING id"),
+        {"id": next_id, "nombre": data.nombre, "grupo": data.grupo},
+    )
+    db.commit()
+    return get_cultivo(db, result.scalar())
+
+
+def update_cultivo(db: Session, id: int, data):
+    current = get_cultivo(db, id)
+    if not current:
+        return None
+    fields = {"id": id, "nombre": data.nombre if data.nombre is not None else current["nombre"],
+              "grupo": data.grupo if data.grupo is not None else current["grupo"]}
+    db.execute(
+        text("UPDATE shared.cultivo SET nombre = :nombre, grupo = :grupo WHERE id = :id"),
+        fields,
+    )
+    db.commit()
+    return get_cultivo(db, id)
+
+
+def delete_cultivo(db: Session, id: int):
+    result = db.execute(
+        text("DELETE FROM shared.cultivo WHERE id = :id RETURNING id"), {"id": id}
+    ).scalar()
+    db.commit()
+    return result
+
+
 # ── PECUARIO (especies animales) ──
 
 def get_pecuario(db: Session, grupo: str | None = None, q: str | None = None):
@@ -474,3 +516,37 @@ def get_grupos_pecuario(db: Session):
         text("SELECT grupo FROM shared.pecuario GROUP BY grupo ORDER BY grupo")
     ).mappings().all()
     return [dict(r) for r in rows]
+
+
+def create_pecuario(db: Session, data):
+    next_id = db.execute(text(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM shared.pecuario"
+    )).scalar()
+    result = db.execute(
+        text("INSERT INTO shared.pecuario (id, nombre, grupo) VALUES (:id, :nombre, :grupo) RETURNING id"),
+        {"id": next_id, "nombre": data.nombre, "grupo": data.grupo},
+    )
+    db.commit()
+    return get_pecuario_by_id(db, result.scalar())
+
+
+def update_pecuario(db: Session, id: int, data):
+    current = get_pecuario_by_id(db, id)
+    if not current:
+        return None
+    fields = {"id": id, "nombre": data.nombre if data.nombre is not None else current["nombre"],
+              "grupo": data.grupo if data.grupo is not None else current["grupo"]}
+    db.execute(
+        text("UPDATE shared.pecuario SET nombre = :nombre, grupo = :grupo WHERE id = :id"),
+        fields,
+    )
+    db.commit()
+    return get_pecuario_by_id(db, id)
+
+
+def delete_pecuario(db: Session, id: int):
+    result = db.execute(
+        text("DELETE FROM shared.pecuario WHERE id = :id RETURNING id"), {"id": id}
+    ).scalar()
+    db.commit()
+    return result

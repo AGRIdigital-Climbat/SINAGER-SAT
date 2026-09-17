@@ -93,12 +93,12 @@ def mis_reportes_localidades(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.get_mis_localidades(db, uid, skip=skip, limit=limit,
+    sc = service.scope_mis_localidades_v2(_user, id_usuario, geo=(id_departamento, id_municipio))
+    data, total = service.get_mis_localidades(db, uid=sc["id_usuario"], skip=skip, limit=limit,
                                               solo_huerfanas=solo_huerfanas,
                                               solo_con_datos=(modo == "comprimido"),
-                                              id_departamento=id_departamento,
-                                              id_municipio=id_municipio)
+                                              id_departamento=sc["id_departamento"],
+                                              id_municipio=sc["id_municipio"])
     return SuccessResponse(message="Mis localidades listadas correctamente", data=data, total=total)
 
 
@@ -130,6 +130,11 @@ def filtrar_localidades(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
+    scope = service.scope_geografico(_user)
+    if "id_departamento" in scope:
+        id_departamento = scope["id_departamento"]
+    if "id_municipio" in scope:
+        id_municipio = scope["id_municipio"]
     data, total = service.filtrar_localidades_documento(
         db, skip=skip, limit=limit,
         fecha_llenado_desde=fecha_llenado_desde,
@@ -155,9 +160,11 @@ def mis_resumen_localidades(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
+    sc = service.scope_mis_localidades_v2(_user, id_usuario)
     return SuccessResponse(message="Resumen de mis localidades generado correctamente",
-                           data=service.get_mis_localidades_resumen(db, uid) or {})
+                           data=service.get_mis_localidades_resumen(
+                               db, uid=sc["id_usuario"],
+                               id_departamento=sc["id_departamento"], id_municipio=sc["id_municipio"]) or {})
 
 
 @router.get("/localidades/mis-estados", tags=[TAG_EDAN_LOCALIDADES, TAG_CABECERA],
@@ -171,8 +178,10 @@ def mis_estados_localidades(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    uid = _user["id_usuario"] if _user["id_rol"] in ROLES_LOCALES else (id_usuario or _user["id_usuario"])
-    data, total = service.list_mis_localidades_estados(db, uid, skip=skip, limit=limit)
+    sc = service.scope_mis_localidades_v2(_user, id_usuario)
+    data, total = service.list_mis_localidades_estados(
+        db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
+        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
     return SuccessResponse(message="Estados de mis localidades listados correctamente", data=data, total=total)
 
 
@@ -189,6 +198,7 @@ def obtener_localidad_completa(id_localidad: str,
                                db: Session = Depends(get_db),
                                _user=Depends(get_current_user)):
     id_edan = service._resolve_localidad_id(db, id_localidad)
+    service.validar_scope_localidad(db, _user, id_edan)
     result = service._build_localidad(db, id_edan, solo_con_datos=(modo == "comprimido"))
     if not result:
         raise HTTPException(status_code=404, detail=f"Localidad {id_localidad} no encontrada")
@@ -219,6 +229,7 @@ def obtener_localidad_completa(id_localidad: str,
                         "o `id_edan_localidad` (int).")
 def obtener_documento(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     id_edan = service._resolve_localidad_id(db, id_localidad)
+    service.validar_scope_localidad(db, _user, id_edan)
     result = service.serialize_document(db, id_edan)
     if not result:
         raise HTTPException(status_code=404, detail=f"Localidad {id_localidad} no encontrada")
@@ -335,6 +346,7 @@ def mapear_por_id_local(id_local: str, db: Session = Depends(get_db), _user=Depe
     result = service._map_localidad_by_id_local(db, id_local)
     if not result:
         raise HTTPException(status_code=404, detail=f"No existe localidad con id_local={id_local}")
+    service.validar_scope_localidad(db, _user, result["id_edan_localidad"])
     return SuccessResponse(message="Localidad mapeada correctamente", data=result)
 
 
@@ -514,6 +526,7 @@ def _registrar_seccion_1n(path, tag, label, tabla, create_fn, pk_col):
     def _list(id_localidad: str, skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000),
               db: Session = Depends(get_db), _user=Depends(get_current_user)):
         id_edan = service._resolve_localidad_id(db, id_localidad)
+        service.validar_scope_localidad(db, _user, id_edan)
         params = {"id": id_edan, "limit": limit, "skip": skip}
         rows = service._rows(db, f"""
             SELECT * FROM edan.{tabla} WHERE id_edan_localidad = :id
@@ -591,6 +604,7 @@ def _registrar_seccion_1to1(path, tag, label, tabla, create_fn):
                 summary=f"Obtener {label} (sección 1:1)")
     def _get(id_localidad: str, db: Session = Depends(get_db), _user=Depends(get_current_user)):
         id_edan = service._resolve_localidad_id(db, id_localidad)
+        service.validar_scope_localidad(db, _user, id_edan)
         row = service._row(db, f"SELECT * FROM edan.{tabla} WHERE id_edan_localidad = :id",
                            {"id": id_edan})
         if not row:
