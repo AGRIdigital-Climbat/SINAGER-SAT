@@ -154,9 +154,9 @@ PGPASSWORD=12345678 psql -U sinagersat -d db_sinagersat -h 127.0.0.1
 ### Documentación SINB
 | Archivo | Contenido |
 |---------|-----------|
-| `docs/SINB_BD.md` | Base de datos SINB: catálogos, observaciones, predicciones |
-| `docs/NDVI.md` | **NDVI Satelital**: Sentinel-2, EarthSearch, series temporales, alertas |
-| `docs/CRON_NDVI.md` | Configuración de tarea CRON para ingesta diaria de NDVI |
+| `propuesta/08-SINB-BASE-DE-DATOS.md` | Base de datos SINB: catálogos, observaciones, predicciones |
+| `propuesta/09-SINB-NDVI-SATELITAL.md` | **NDVI Satelital**: Sentinel-2, EarthSearch, series temporales, alertas |
+| `propuesta/10-SINB-NDVI-CRON.md` | Configuración de tarea CRON para ingesta diaria de NDVI |
 | `propuesta/07-FLUJOS-BIOCULTURALES.md` | Flujos bioculturales del SINB |
 
 ### Documentación de Infraestructura
