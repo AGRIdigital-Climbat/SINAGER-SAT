@@ -1,48 +1,40 @@
-# Archivos de sistema
-.DS_Store
-Thumbs.db
+# Archivos de datos grandes (>50MB)
+*.parquet
+*.gpkg
 
-# Archivos de backup
-*.bak
-*.backup
-*.dump
-*.sql.gz
-
-# Scripts que generan backups localmente
-uploads/
+# Backups de base de datos
+database/backup*.sql
 
 # Archivos temporales
-/tmp/
 *.tmp
-
-# Archivos de logs
 *.log
-logs/
+*~
 
-# Archivos de configuración local
-.env
-.env.local
-
-# Dependencias
-node_modules/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
-.venv/
-*.egg-info/
+.env
 
-# Archivos de IDE
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Backups de BD local
-database/backup_*.sql
-database/edan_db_backup*.sql
-database/backup_pre_*.sql
-database/backup_v*.sql
-database/servers.json
-database/dbeaver-data-sources.xml
-database/iniciar_edan.sh
-database/restaurar_geom.sh
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Log files
+logs/
+*.log
+
+# Uploads (pueden tener archivos grandes)
+uploads/
+
+# Archivos Excel grandes
+*.xlsx
