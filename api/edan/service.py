@@ -129,7 +129,9 @@ def _build_header_payload(db: Session, data: dict) -> dict:
             "total_poblacion_afectada": data.get("total_poblacion_afectada") or 0,
             "total_familias_afectadas": data.get("total_familias_afectadas") or 0,
             "total_familias_damnificadas": data.get("total_familias_damnificadas") or 0,
-        "id_estado": data.get("id_estado", 1),
+        # Un EDAN nuevo SIEMPRE arranca en "Pendiente aprobaciones": el estado
+        # lo maneja el motor de aprobaciones (aprobar/devolver), no el cliente.
+        "id_estado": ESTADO_EDAN_PENDIENTE,
         "pendiente_eliminacion": data.get("pendiente_eliminacion", False),
         "pendiente_actualizacion": data.get("pendiente_actualizacion", False),
     }
@@ -279,6 +281,9 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
         "imp_primera_respuesta": False,
         "imp_necesidad_salud": False,
         "imp_necesidad_humanitaria": False,
+        "procedencia": "sistema",
+        "origen_id": None,
+        "id_importacion": None,
     }
     row = _row(db, "SELECT * FROM edan.edan_localidades WHERE id_edan_localidad = :id",
                {"id": id_localidad})
@@ -340,7 +345,8 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
             SELECT e.id_edan, e.codigo_edan, e.id_estado,
                    es.nombre AS estado_nombre, es.orden AS estado_orden,
                    e.fecha_evento, e.hora_evento, e.fecha_llenado,
-                   e.fecha_modificacion, e.id_usuario_ugr, e.id_usuario_alcalde
+                   e.fecha_modificacion, e.id_usuario_ugr, e.id_usuario_alcalde,
+                   e.procedencia, e.origen_id, e.id_importacion
             FROM edan.edan e
             LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado
             WHERE e.id_edan = :id
@@ -375,6 +381,9 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
                 "usuario_ugr": u_ugr,
                 "id_usuario_alcalde": edan["id_usuario_alcalde"],
                 "usuario_alcalde": u_alc,
+                "procedencia": edan["procedencia"],
+                "origen_id": edan["origen_id"],
+                "id_importacion": edan["id_importacion"],
             }
         else:
             loc["edan"] = None
@@ -881,6 +890,266 @@ def get_edan_completo(db: Session, id: int, modo: str = "detallado"):
         FROM rea.reporte_evento WHERE id_edan = :id_edan ORDER BY id_reporte
     """, {"id_edan": id})]
     return edan
+
+
+NIVELES_APROBACION = ["ugr", "alcalde", "dgr", "videcid"]
+
+# Rol al que corresponde cada nivel de la cadena. Es INFORMATIVO: la API lo
+# publica para que el frontend sepa a quién le toca, pero NO restringe — sigue
+# permitiendo aprobar cualquier nivel, igual que desde v2.17.3. No se presupone
+# ningún "dueño" del nivel porque en una comunidad el UGR o el alcalde pueden
+# cambiar; por eso no se lee edan.edan.id_usuario_ugr / id_usuario_alcalde.
+ROL_APROBADOR = {"ugr": 6, "alcalde": 8, "dgr": 5, "videcid": 9}
+
+# El motor de aprobaciones es el UNICO que escribe edan.edan.id_estado. Estos
+# son los ids de edan.estado_edan que puede producir; el 2 "Rechazado" no
+# aparece porque el motor no puede generarlo (devolver exige un nivel anterior
+# aprobado, y el primero de la cadena es 'ugr', que no tiene anterior).
+ESTADO_EDAN_PENDIENTE = 1
+ESTADO_EDAN_APROBADO = 3
+ESTADO_EDAN_OBSERVADO = 4
+
+
+def _get_roles_aprobador(db: Session) -> dict:
+    """usuarios.rol de los 4 roles de la cadena (1 sola consulta por lectura)."""
+    rows = _rows(db, """
+        SELECT id_rol, nombre, descripcion
+        FROM usuarios.rol
+        WHERE id_rol = ANY(:ids)
+    """, {"ids": list(set(ROL_APROBADOR.values()))})
+    return {r["id_rol"]: {"id_rol": r["id_rol"], "nombre": r["nombre"],
+                          "descripcion": r["descripcion"]} for r in rows}
+
+
+def _build_nivel_aprobacion(row, roles: dict) -> dict:
+    """Arma un nivel de la cadena con el usuario de aprobacion y de devolucion
+    anidados (mismo idioma que _build_edan: alias con prefijo + data.pop())."""
+    d = dict(row)
+    nivel = d.pop("nivel")
+    ap = d.pop("ap_id")
+    dv = d.pop("dv_id")
+    return {
+        "nivel": nivel,
+        "estado": d["estado"],
+        "observacion": d["observacion"],
+        "rol_aprobador": roles.get(ROL_APROBADOR.get(nivel)),
+        "id_usuario_aprobacion": ap,
+        "usuario_aprobacion": {
+            "id_usuario": ap,
+            "usuario": d.pop("ap_u_usuario"),
+            "nombre": d.pop("ap_u_nombre"),
+            "carnet": d.pop("ap_u_carnet"),
+            "celular": d.pop("ap_u_celular"),
+            "correo": d.pop("ap_u_correo"),
+            "cargo": d.pop("ap_u_cargo"),
+            "id_rol": d.pop("ap_u_id_rol"),
+            "activo": d.pop("ap_u_activo"),
+        } if ap else None,
+        "fecha_aprobacion": d["fecha_aprobacion"].isoformat() if d["fecha_aprobacion"] else None,
+        "id_usuario_devolucion": dv,
+        "usuario_devolucion": {
+            "id_usuario": dv,
+            "usuario": d.pop("dv_u_usuario"),
+            "nombre": d.pop("dv_u_nombre"),
+            "carnet": d.pop("dv_u_carnet"),
+            "celular": d.pop("dv_u_celular"),
+            "correo": d.pop("dv_u_correo"),
+            "cargo": d.pop("dv_u_cargo"),
+            "id_rol": d.pop("dv_u_id_rol"),
+            "activo": d.pop("dv_u_activo"),
+        } if dv else None,
+        "fecha_devolucion": d["fecha_devolucion"].isoformat() if d["fecha_devolucion"] else None,
+    }
+
+
+def _get_niveles_aprobacion(db: Session, id_edan: int) -> dict:
+    rows = _rows(db, """
+        SELECT a.nivel, a.estado, a.observacion,
+               a.id_usuario_aprobacion, a.fecha_aprobacion,
+               a.id_usuario_devolucion, a.fecha_devolucion,
+               ap.id_usuario as ap_id, ap.usuario as ap_u_usuario,
+               ap.nombre as ap_u_nombre, ap.carnet as ap_u_carnet,
+               ap.celular as ap_u_celular, ap.correo as ap_u_correo,
+               ap.cargo as ap_u_cargo, ap.id_rol as ap_u_id_rol,
+               ap.activo as ap_u_activo,
+               dv.id_usuario as dv_id, dv.usuario as dv_u_usuario,
+               dv.nombre as dv_u_nombre, dv.carnet as dv_u_carnet,
+               dv.celular as dv_u_celular, dv.correo as dv_u_correo,
+               dv.cargo as dv_u_cargo, dv.id_rol as dv_u_id_rol,
+               dv.activo as dv_u_activo
+        FROM edan.aprobaciones_edan a
+        LEFT JOIN usuarios.usuario ap ON ap.id_usuario = a.id_usuario_aprobacion
+        LEFT JOIN usuarios.usuario dv ON dv.id_usuario = a.id_usuario_devolucion
+        WHERE a.id_edan = :id
+        ORDER BY CASE a.nivel WHEN 'ugr' THEN 1 WHEN 'alcalde' THEN 2
+                              WHEN 'dgr' THEN 3 WHEN 'videcid' THEN 4 END
+    """, {"id": id_edan})
+    roles = _get_roles_aprobador(db)
+    return {r["nivel"]: _build_nivel_aprobacion(r, roles) for r in rows}
+
+
+def _asegurar_aprobaciones(db: Session, id_edan: int) -> None:
+    """Crea las filas de aprobaciones que falten para un EDAN.
+
+    El trigger trg_edan_crear_aprobaciones (v2.17.3) ya cubre todo EDAN nuevo, y
+    la migracion tambien relleno los previos. Esta funcion es la red de
+    seguridad para EDANs creados por otras vias (carga manual, restauracion de
+    backup) o si el trigger llegara a estar deshabilitado: rellena las filas
+    faltantes en 'pendiente' sin tocar las que ya existen.
+    """
+    db.execute(text("""
+        INSERT INTO edan.aprobaciones_edan (id_edan, nivel, estado)
+        SELECT :id, v.nivel, 'pendiente'
+        FROM (VALUES ('ugr'), ('alcalde'), ('dgr'), ('videcid')) AS v(nivel)
+        ON CONFLICT (id_edan, nivel) DO NOTHING
+    """), {"id": id_edan})
+
+
+def _estado_nivel(niveles: dict, nivel: str) -> str:
+    """Estado de un nivel; si la fila no existe se trata como 'pendiente'."""
+    return (niveles.get(nivel) or {}).get("estado") or "pendiente"
+
+
+def _estado_global_aprobaciones(niveles: dict) -> str:
+    """Deriva el estado global de aprobaciones (sin tabla) — regla 3."""
+    for nivel in NIVELES_APROBACION:
+        if _estado_nivel(niveles, nivel) == "observado":
+            return f"observado_{nivel}"
+    for nivel in NIVELES_APROBACION:
+        if _estado_nivel(niveles, nivel) != "aprobado":
+            return f"{_estado_nivel(niveles, nivel)}_{nivel}"
+    return "aprobado"
+
+
+def _sincronizar_estado_edan(db: Session, id_edan: int) -> None:
+    """El motor de aprobaciones deja edan.edan.id_estado alineado con la cadena.
+
+    Se llama dentro de la MISMA transaccion que aprobar/devolver, antes del
+    commit, para que el estado y la aprobacion no puedan quedar descuadrados.
+
+    No toca fecha_modificacion a proposito: esa columna maneja el LWW por
+    seccion del formulario (ver update_edan), y que una aprobacion la bumpee
+    haria que la copia cacheada del cliente quedara vieja. La maquina de
+    aprobaciones es independiente del contenido del formulario.
+    """
+    conteo = _row(db, """
+        SELECT COUNT(*) FILTER (WHERE estado = 'observado') AS observados,
+               COUNT(*) FILTER (WHERE estado = 'aprobado')  AS aprobados
+        FROM edan.aprobaciones_edan WHERE id_edan = :id
+    """, {"id": id_edan})
+    if not conteo:
+        return
+    if conteo["observados"]:
+        nuevo = ESTADO_EDAN_OBSERVADO
+    elif conteo["aprobados"] == len(NIVELES_APROBACION):
+        nuevo = ESTADO_EDAN_APROBADO
+    else:
+        nuevo = ESTADO_EDAN_PENDIENTE
+    # IS DISTINCT FROM: si el estado no cambia no se escribe, y en particular no
+    # sebumpea fecha_modificacion ni se dispara ningun trigger.
+    db.execute(text("""
+        UPDATE edan.edan SET id_estado = :nuevo
+        WHERE id_edan = :id AND id_estado IS DISTINCT FROM :nuevo
+    """), {"id": id_edan, "nuevo": nuevo})
+
+
+def get_aprobaciones_edan(db: Session, id_edan: int) -> dict | None:
+    """Devuelve las 4 aprobaciones del EDAN por nivel + estado global derivado."""
+    if not _row(db, "SELECT id_edan FROM edan.edan WHERE id_edan = :id", {"id": id_edan}):
+        return None
+    _asegurar_aprobaciones(db, id_edan)
+    db.commit()
+    niveles = _get_niveles_aprobacion(db, id_edan)
+    return {
+        "id_edan": id_edan,
+        "estado_global": _estado_global_aprobaciones(niveles),
+        "aprobaciones": niveles,
+    }
+
+
+def aprobar_edan(db: Session, id_edan: int, nivel: str, por: int | None = None) -> dict:
+    """Regla 1: aprueba un nivel exige que el anterior esté aprobado.
+    Si el nivel venía 'observado', el que devolvió (nivel superior en espera de
+    corrección) pasa a 'pendiente' para poder decidir de nuevo."""
+    if not _row(db, "SELECT id_edan FROM edan.edan WHERE id_edan = :id", {"id": id_edan}):
+        raise ValueError("EDAN no encontrado")
+    _asegurar_aprobaciones(db, id_edan)
+    db.commit()
+    niveles = _get_niveles_aprobacion(db, id_edan)
+    if nivel not in NIVELES_APROBACION:
+        raise ValueError(f"Nivel de aprobacion desconocido: '{nivel}'")
+    orden = NIVELES_APROBACION.index(nivel)
+    anterior = NIVELES_APROBACION[orden - 1] if orden > 0 else None
+    if anterior and niveles[anterior]["estado"] != "aprobado":
+        raise ValueError(
+            f"No se puede aprobar '{nivel}': el nivel anterior '{anterior}' debe estar aprobado"
+        )
+    venia_observado = niveles[nivel]["estado"] == "observado"
+    db.execute(text("""
+        UPDATE edan.aprobaciones_edan
+        SET estado = 'aprobado', observacion = NULL,
+            id_usuario_aprobacion = :por, fecha_aprobacion = CURRENT_TIMESTAMP,
+            id_usuario_devolucion = NULL, fecha_devolucion = NULL,
+            id_usuario_ultima_accion = :por, fecha_ultima_accion = CURRENT_TIMESTAMP
+        WHERE id_edan = :id AND nivel = :nivel
+    """), {"id": id_edan, "nivel": nivel, "por": por})
+    # Al re-aprobar un nivel devuelto, el ciclo de corrección queda resuelto: el
+    # siguiente baja de 'espera_correccion' a 'pendiente' y se le limpia la
+    # devolución, para que el GET muestre el estado actual y no acumule pasado.
+    if venia_observado and orden < len(NIVELES_APROBACION) - 1:
+        siguiente = NIVELES_APROBACION[orden + 1]
+        db.execute(text("""
+            UPDATE edan.aprobaciones_edan
+            SET estado = 'pendiente', id_usuario_devolucion = NULL, fecha_devolucion = NULL
+            WHERE id_edan = :id AND nivel = :nivel AND estado = 'espera_correccion'
+        """), {"id": id_edan, "nivel": siguiente, "por": por})
+    # El motor deja la cabecera alineada con la cadena, en la misma transaccion
+    # que la aprobacion (antes del commit de abajo).
+    _sincronizar_estado_edan(db, id_edan)
+    db.commit()
+    return get_aprobaciones_edan(db, id_edan)
+
+
+def devolver_edan(db: Session, id_edan: int, nivel: str, observacion: str, por: int | None = None) -> dict:
+    """Regla 2: devuelve el anterior nivel a 'observado' (con observación) y deja
+    el nivel actual en 'espera_correccion' hasta que se corrija."""
+    if not _row(db, "SELECT id_edan FROM edan.edan WHERE id_edan = :id", {"id": id_edan}):
+        raise ValueError("EDAN no encontrado")
+    if nivel not in NIVELES_APROBACION:
+        raise ValueError(f"Nivel de aprobacion desconocido: '{nivel}'")
+    orden = NIVELES_APROBACION.index(nivel)
+    if orden == 0:
+        raise ValueError("No se puede devolver desde 'ugr': no existe un nivel anterior")
+    anterior = NIVELES_APROBACION[orden - 1]
+    _asegurar_aprobaciones(db, id_edan)
+    db.commit()
+    niveles = _get_niveles_aprobacion(db, id_edan)
+    if niveles[anterior]["estado"] != "aprobado":
+        raise ValueError(f"Solo se puede devolver a '{anterior}' si está aprobado")
+    # Nivel devuelto: se registra quién devolvió y cuándo. El aprobador NO se
+    # toca — sigue siendo el del nivel anterior, que es justo el dato que
+    # pedía esta migración.
+    db.execute(text("""
+        UPDATE edan.aprobaciones_edan
+        SET estado = 'observado', observacion = :obs,
+            id_usuario_devolucion = :por, fecha_devolucion = CURRENT_TIMESTAMP,
+            id_usuario_ultima_accion = :por, fecha_ultima_accion = CURRENT_TIMESTAMP
+        WHERE id_edan = :id AND nivel = :anterior
+    """), {"id": id_edan, "anterior": anterior, "obs": observacion, "por": por})
+    # Nivel que devuelve: también queda registrado como devolvedor, para que la
+    # fila diga "yo devolví esto y en este momento".
+    db.execute(text("""
+        UPDATE edan.aprobaciones_edan
+        SET estado = 'espera_correccion',
+            id_usuario_devolucion = :por, fecha_devolucion = CURRENT_TIMESTAMP,
+            id_usuario_ultima_accion = :por, fecha_ultima_accion = CURRENT_TIMESTAMP
+        WHERE id_edan = :id AND nivel = :nivel
+    """), {"id": id_edan, "nivel": nivel, "por": por})
+    # El motor deja la cabecera alineada con la cadena, en la misma transaccion
+    # que la devolucion (antes del commit de abajo).
+    _sincronizar_estado_edan(db, id_edan)
+    db.commit()
+    return get_aprobaciones_edan(db, id_edan)
 
 
 def get_edan_por_reporte(db: Session, id_reporte: int):
@@ -2142,7 +2411,10 @@ def update_edan(db: Session, id: int, data: dict) -> dict | None:
         "total_poblacion_afectada": data.get("total_poblacion_afectada"),
         "total_familias_afectadas": data.get("total_familias_afectadas"),
         "total_familias_damnificadas": data.get("total_familias_damnificadas"),
-        "id_estado": data.get("id_estado"),
+        # id_estado NO es un campo editable: lo escribe el motor de
+        # aprobaciones. Si el cliente lo manda en el body se ignora en silencio
+        # (el filtro de None de mas abajo lo descarta), para no romper al
+        # frontend que todavia lo envia.
         "pendiente_eliminacion": data.get("pendiente_eliminacion"),
         "pendiente_actualizacion": data.get("pendiente_actualizacion"),
     }
@@ -2453,26 +2725,6 @@ def cambiar_estado_localidad_por_id_local(db: Session, id_local: str, id_estado:
         _bump_edan_fecha(db, cur["id_edan"])
     db.commit()
     return _build_localidad(db, cur["id_edan_localidad"])
-
-
-def cambiar_estado_edan(db: Session, id_edan: int, id_estado: int) -> dict | None:
-    """Cambia SOLO el campo id_estado (estado_edan) de un EDAN consolidado.
-    Acceso abierto para roles 1-5, 9 (admin y roles superiores).
-    Roles 6, 7, 8 NO pueden modificar este campo."""
-    st = _row(db, "SELECT id_estado, nombre FROM edan.estado_edan WHERE id_estado = :id",
-              {"id": id_estado})
-    if not st:
-        raise HTTPException(status_code=404, detail="Estado EDAN no encontrado")
-    cur = _row(db, "SELECT id_edan FROM edan.edan WHERE id_edan = :id", {"id": id_edan})
-    if not cur:
-        return None
-    db.execute(text("""
-        UPDATE edan.edan SET id_estado = :id_estado,
-            fecha_modificacion = NOW()
-        WHERE id_edan = :id
-    """), {"id_estado": id_estado, "id": id_edan})
-    db.commit()
-    return get_edan(db, id_edan)
 
 
 def listar_consolidables(db: Session, id_municipio: int | None = None,
@@ -2891,6 +3143,7 @@ def _filters_from_query(
     id_estado: int | None = None,
     estado: str | None = None,
     id_usuario_ugr: int | None = None,
+    procedencia: str | None = None,
     fecha_evento_desde: str | None = None,
     fecha_evento_hasta: str | None = None,
     fecha_creacion_desde: str | None = None,
@@ -2915,6 +3168,7 @@ def _filters_from_query(
         "q": q, "id_departamento": id_departamento, "id_provincia": id_provincia,
         "id_municipio": id_municipio, "id_tipo_evento": id_tipo_evento,
         "id_estado": id_estado, "estado": estado, "id_usuario_ugr": id_usuario_ugr,
+        "procedencia": procedencia,
         "fecha_evento_desde": fecha_evento_desde,
         "fecha_evento_hasta": fecha_evento_hasta,
         "fecha_creacion_desde": fecha_creacion_desde,
@@ -2959,6 +3213,10 @@ def _filters(f: dict, alias: str = "e") -> tuple[list[str], dict]:
     if f.get("id_usuario_ugr") is not None:
         conds.append(f"{a}.id_usuario_ugr = :id_usuario_ugr")
         params["id_usuario_ugr"] = f["id_usuario_ugr"]
+
+    if f.get("procedencia"):
+        conds.append(f"{a}.procedencia = :procedencia")
+        params["procedencia"] = f["procedencia"]
 
     if f.get("fecha_evento_desde"):
         conds.append(f"{a}.fecha_evento >= :fecha_evento_desde")
@@ -3329,17 +3587,30 @@ def get_mis_resumen_edan(db: Session, uid: int | None = None, id_departamento: i
     `por_estado` de estado_edan y `por_tipo_evento`. Scoped a id_usuario_ugr."""
     conds, params = _mis_edan_scope(uid, id_departamento, id_municipio)
     where = f"WHERE {' AND '.join(conds)}" if conds else ""
+    # Los contadores resuelven el estado POR NOMBRE en vez de por id, igual que
+    # hace listar_edan_por_estado: asi no pueden volver a desalinearse cuando el
+    # motor agrega un estado a edan.estado_edan.
+    #
+    # Nota: 'total_borrador' y 'total_enviado' conservan su nombre y su id de
+    # siempre (1 y 3). Yavenian equivocados antes de v2.17.5 y se dejan como
+    # estan para no cambiar el contrato de la respuesta. 'total_aprobado' si se
+    # corrige: apuntaba al id 4, que hasta v2.17.5 no existia (daba 0) y con
+    # 'Observado' habria contado los devueltos como aprobados. La verdad de este
+    # resumen esta en 'por_estado', que se arma desde el catalogo y no se desvia.
     row = _row(db, f"""
         SELECT COUNT(*) AS total_edans,
-               COUNT(*) FILTER (WHERE id_estado = 1) AS total_borrador,
-               COUNT(*) FILTER (WHERE id_estado = 3) AS total_enviado,
-               COUNT(*) FILTER (WHERE id_estado = 4) AS total_aprobado,
-               COALESCE(SUM(total_poblacion_afectada), 0) AS total_poblacion_afectada,
-               COALESCE(SUM(total_familias_afectadas), 0) AS total_familias_afectadas,
-               COALESCE(SUM(total_familias_damnificadas), 0) AS total_familias_damnificadas,
+               COUNT(*) FILTER (WHERE e.id_estado = 1) AS total_borrador,
+               COUNT(*) FILTER (WHERE e.id_estado = 3) AS total_enviado,
+               COUNT(*) FILTER (WHERE es.nombre = 'Aprobado')  AS total_aprobado,
+               COUNT(*) FILTER (WHERE es.nombre = 'Observado') AS total_observado,
+               COALESCE(SUM(e.total_poblacion_afectada), 0) AS total_poblacion_afectada,
+               COALESCE(SUM(e.total_familias_afectadas), 0) AS total_familias_afectadas,
+               COALESCE(SUM(e.total_familias_damnificadas), 0) AS total_familias_damnificadas,
                COALESCE(SUM((SELECT COUNT(*) FROM edan.edan_localidades l
                              WHERE l.id_edan = e.id_edan)), 0) AS total_localidades
-        FROM edan.edan e {where}
+        FROM edan.edan e
+        LEFT JOIN edan.estado_edan es ON es.id_estado = e.id_estado
+        {where}
     """, params)
     totales = dict(row) if row else {}
     por_estado = [dict(r) for r in _rows(db, f"""
@@ -3791,6 +4062,10 @@ def _filters_localidades(f: dict, alias: str = "l") -> tuple[list[str], dict]:
             SELECT 1 FROM edan.edan_localidades_danos_pecuario dp
             WHERE dp.id_edan_localidad = {a}.id_edan_localidad
         )""")
+
+    if f.get("procedencia"):
+        conds.append(f"{a}.procedencia = :procedencia")
+        params["procedencia"] = f["procedencia"]
 
     return conds, params
 

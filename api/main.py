@@ -10,12 +10,18 @@ from .shared.router import router as shared_router, router_v2 as shared_router_v
 from .edan.router import router as edan_router
 from .edan.router_v2 import router as edan_router_v2
 from .edan.router_v2_edan import router as edan_router_v2_edan
+from .edan.router_v2_aprobaciones import router as edan_router_v2_aprobaciones
 from .edan.router_v2_localidades import router as edan_router_v2_localidades
 from .edan.router_v2_catalogos import router as edan_router_v2_catalogos
 from .usuarios.router import router as usuarios_router, router_v2 as usuarios_router_v2
 from .upload import router as upload_router
 from .repositorio.router import router as repositorio_router, router_v2 as repositorio_router_v2
 from .firma_digital.router import router as firma_digital_router
+from .rida.router import router as rida_empadronamiento_router
+from .rida.router_eventos import router as rida_eventos_router
+from .rida.necesidades import necesidades_router
+from .sinb.router_v2 import router as sinb_router
+from .sinb.router_ndvi import router as ndvi_router
 from .audit import AuditMiddleware
 
 TAGS_METADATA_V1 = [
@@ -24,12 +30,29 @@ TAGS_METADATA_V1 = [
     {"name": "Geografía > Provincias",    "description": "CRUD de las 112 provincias"},
     {"name": "Geografía > Municipios",    "description": "CRUD de los 340 municipios"},
     {"name": "Geografía > GeoJSON",       "description": "Municipios en GeoJSON (RFC 7946) para mapas web"},
-    {"name": "Geografía > GEOM/WKT",      "description": "Municipios con geometría en WKT"},
+    {"name": "Geografía > Geo/WKT",      "description": "Municipios con geometría en WKT"},
     {"name": "Geografía > Ubicación",     "description": "Identificar municipio por coordenadas"},
+    {"name": "Censo 2024 > Manzanos",      "description": "Manzanos censales CPV-2024 (INE): CRUD y consultas por municipio/nombre."},
+    {"name": "Censo 2024 > Comunidades",   "description": "Comunidades censales CPV-2024 (INE): CRUD y consultas por municipio/nombre."},
+    {"name": "Censo 2024 > GeoJSON",       "description": "Manzanos y comunidades del Censo 2024 en GeoJSON (RFC 7946) para mapas web, con filtro espacial bbox."},
+    {"name": "Censo 2024 > Población y Viviendas", "description": "Resúmenes de población y vivienda del Censo 2024 (CPV-2024, INE) por municipio, provincia, departamento y total nacional, más la consulta directa de personas/viviendas de un manzano o comunidad."},
     {"name": "Catálogos > Cultivos",      "description": "Catálogo de cultivos agrícolas (SIIP) con filtros por grupo y nombre"},
     {"name": "Catálogos > Pecuaria",      "description": "Catálogo de especies pecuarias con filtros por grupo y nombre"},
-    {"name": "EDAN",                      "description": "Cabecera EDAN: CRUD principal, reportes agregados, catálogos (tipo evento, estado, tipo localidad), sincronización offline-first, consolidar, fotos por municipio, cambio de estado."},
+    {"name": "EDAN",                      "description": "Cabecera EDAN: CRUD principal, reportes agregados, catálogos (tipo evento, estado, tipo localidad), sincronización offline-first, consolidar, fotos por municipio. El estado del EDAN no se cambia por API: lo maneja el motor de aprobaciones (ver EDAN_APROBACIONES)."},
     {"name": "EDAN_LOCALIDADES",          "description": "Localidades del EDAN: CRUD anidado, sync móvil, mis-resumen/mis-reportes de huérfanas, cambio de estado, items de daños/servicios con foto y coordenadas (viales, infra pública, vivienda, agricultura, pecuario, salud, servicios básicos, unidades educativas)."},
+    {"name": "SINB > Catálogos Bioculturales", "description": "Catálogos bioculturales completos (grupo, indicador, característica, comportamiento, significado) sin paginación"},
+    {"name": "SINB > Observaciones", "description": "CRUD observaciones con registros (últimos 15, filtros geográficos, validación)"},
+    {"name": "SINB > Predicciones", "description": "Sistema de predicción biocultural en 3 horizontes: largo plazo (estacional), corto plazo (temporal) y avisos inmediatos (24-48h)"},
+    {"name": "SINB > Predicciones > Largo Plazo (Estacionales)", "description": "Pronósticos estacionales para temporada agrícola completa con escenarios y observadores asignados"},
+    {"name": "SINB > Predicciones > Corto Plazo (Temporales)", "description": "Pronósticos temporales (semanal/quincenal/mensual) con categorías y confianza"},
+    {"name": "SINB > Predicciones > Avisos (Alertas 24-48h)", "description": "Alertas inminentes dictadas por productores (24-48h vigencia) con verificación rápida de cumplimiento"},
+    {"name": "SINB > Validación de Predicciones", "description": "Validación automática (tarea diaria) y manual (experto) de predicciones vencidas"},
+    {"name": "SINB > Recomendaciones", "description": "Recomendaciones locales por dimensión y categoría"},
+    {"name": "SINB > Mapas GeoJSON", "description": "GeoJSON de observaciones, comunidades, municipios y manzanos para mapas web"},
+    {"name": "SINB > Reportes Enriquecidos", "description": "Reportes de observaciones, predicciones y calendario de siembra"},
+    {"name": "SINB > Observadores e Índices", "description": "Índices de acierto de observadores (CORTO y LARGO plazo), asignación a predicciones"},
+    {"name": "SINB > Galería de Evidencias", "description": "Galería colaborativa de fotos y audio de bioindicadores (múltiples usuarios pueden subir evidencias del mismo indicador)"},
+    {"name": "SINB > NDVI Satelital", "description": "Series históricas de NDVI desde Sentinel-2 (EarthSearch). Monitoreo de vegetación, alertas de sequía, evolución temporal por comunidad."},
     {"name": "Usuarios > Cuentas",        "description": "CRUD de cuentas de usuario"},
     {"name": "Usuarios > Roles",          "description": "Roles y asignación usuario-rol"},
     {"name": "Usuarios > Aplicaciones",   "description": "Aplicaciones registradas en el sistema"},
@@ -60,8 +83,14 @@ V2_ROUTERS = [
     ("edan_v2", edan_router_v2),
     ("edan_catalogos", edan_router_v2_catalogos),
     ("edan_cabecera", edan_router_v2_edan),
+    ("edan_aprobaciones", edan_router_v2_aprobaciones),
     ("edan_localidades", edan_router_v2_localidades),
     ("firma_digital", firma_digital_router),
+    ("rida_empadronamiento", rida_empadronamiento_router),
+    ("rida_eventos", rida_eventos_router),
+    ("rida_necesidades", necesidades_router),
+    ("sinb", sinb_router),
+    ("sinb_ndvi", ndvi_router),
 ]
 
 app = FastAPI(
@@ -170,7 +199,7 @@ async def get_openapi_v2():
     v2_paths = {k: v for k, v in full.get("paths", {}).items() if "/api/v2/" in k}
     return {
         "openapi": "3.1.0",
-        "info": {"title": "SINAGERSAT API v2", "version": "1.4.0", "description": "API v2 (EDAN por secciones + EDAN cabecera + auth/shared/upload)"},
+        "info": {"title": "SINAGERSAT API v2", "version": "1.4.0", "description": "API v2 (EDAN por secciones + EDAN cabecera + RIDA empadronamiento + auth/shared/upload)"},
         "paths": v2_paths,
         "tags": _collect_tags(v2_paths),
         "components": full.get("components", {}),
@@ -283,7 +312,7 @@ h1 { color: #333; }
 <p>Selecciona una versión:</p>
 <div class="card">
 <h2>API v2 <span class="version">(recomendada)</span></h2>
-<p>EDAN Localidades por secciones (id_seccion) + EDAN cabecera (consolidar/desconsolidar) + auth/shared/upload/repositorio.</p>
+<p>EDAN Localidades por secciones (id_seccion) + EDAN cabecera (consolidar/desconsolidar) + RIDA Empadronamiento + auth/shared/upload/repositorio.</p>
 <a href="/docs/v2">Ver documentación v2</a>
 </div>
 <div class="card">

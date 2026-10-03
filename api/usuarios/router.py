@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -212,22 +212,43 @@ def create_usuarios_router(open_catalogos: bool = False) -> APIRouter:
         items = service.get_sesiones(db, id_usuario)
         return SuccessResponse(message="Sesiones listadas correctamente", data=items, total=len(items))
 
-    @router.get("/auditoria", tags=[TAG_AUD], response_model=DataListResponse[AuditoriaResponse])
+    @router.get("/auditoria", tags=[TAG_AUD], response_model=DataListResponse[AuditoriaResponse],
+                summary="Auditoría del sistema",
+                description="Consulta el log de auditoría con múltiples filtros:\n"
+                            "- **Filtros básicos**: id_usuario, id_aplicacion, accion, modulo\n"
+                            "- **Fechas**: fecha_desde, fecha_hasta (ISO: YYYY-MM-DD)\n"
+                            "- **Geográficos**: id_departamento, id_provincia, id_municipio (uno a la vez)\n"
+                            "- **Usuario**: id_rol\n"
+                            "- **Búsqueda**: busqueda (JSON parcial en campo detalle)\n"
+                            "- **Paginación**: skip, limit, todos=true (sin paginar)")
     def listar_auditoria(
         id_usuario: int | None = Query(None, description="Filtrar por usuario"),
-        id_aplicacion: int | None = Query(None, description="Filtrar por aplicación (1=EDAN, 4=REA, 9=SISTEMA)"),
-        accion: str | None = Query(None, description="Filtrar por acción (CREATE, UPDATE, DELETE)"),
-        fecha_desde: str | None = Query(None, description="Desde (ISO: YYYY-MM-DD o YYYY-MM-DD HH:MM:SS)"),
-        fecha_hasta: str | None = Query(None, description="Hasta (ISO: YYYY-MM-DD o YYYY-MM-DD HH:MM:SS)"),
+        id_aplicacion: int | None = Query(None, description="1=EDAN, 2=RIDA, 4=REA/Upload, 9=Sistema"),
+        accion: str | None = Query(None, description="CREATE, UPDATE, DELETE"),
+        modulo: str | None = Query(None, description="rida/eventos, rida/empadronamiento, edan/cabecera, etc."),
+        fecha_desde: str | None = Query(None, description="Desde (ISO: YYYY-MM-DD)"),
+        fecha_hasta: str | None = Query(None, description="Hasta (ISO: YYYY-MM-DD)"),
         id_rol: int | None = Query(None, description="Filtrar usuarios por rol"),
-        id_municipio: int | None = Query(None, description="Filtrar usuarios por municipio"),
-        skip: int = 0,
-        limit: int = 100,
+        id_departamento: int | None = Query(None, description="Filtro geográfico: departamento"),
+        id_provincia: int | None = Query(None, description="Filtro geográfico: provincia"),
+        id_municipio: int | None = Query(None, description="Filtro geográfico: municipio"),
+        busqueda: str | None = Query(None, description='Búsqueda JSON en detalle (ej: {"path":"/api/v2/rida"})'),
+        skip: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=500),
+        todos: bool = Query(False, description="Devolver todos sin paginar"),
         db: Session = Depends(get_db), _user=Depends(_catalogo_dep())):
+        # Validar que solo un filtro geográfico a la vez
+        geofiltros = [f for f in (id_departamento, id_provincia, id_municipio) if f is not None]
+        if len(geofiltros) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Solo se permite un filtro geográfico a la vez (departamento, provincia o municipio)",
+            )
         items, total = service.get_auditoria(
             db, id_usuario, id_aplicacion, accion,
             fecha_desde, fecha_hasta, id_rol, id_municipio,
-            skip, limit,
+            id_departamento, id_provincia, modulo, busqueda,
+            skip, limit, todos,
         )
         return SuccessResponse(message="Auditoría listada correctamente", data=items, total=total)
 
@@ -276,6 +297,34 @@ def create_usuarios_router(open_catalogos: bool = False) -> APIRouter:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    @router.post("/importar", status_code=201, tags=[TAG_USR],
+                 summary="Carga masiva de usuarios desde Excel (.xlsx)")
+    async def importar_usuarios(
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db),
+        _ua=Depends(permiso_required("SISTEMA", "CREATE")),
+    ):
+        if not file.filename or not file.filename.lower().endswith(".xlsx"):
+            raise HTTPException(status_code=400, detail="El archivo debe tener extensión .xlsx")
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="El archivo está vacío")
+        if len(contents) > service.MAX_EXCEL_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El archivo excede el límite de {service.MAX_EXCEL_BYTES // (1024 * 1024)} MB",
+            )
+
+        try:
+            resultado = service.importar_usuarios_excel(db, contents, file.filename)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al procesar el archivo: {e}")
+
+        return SuccessResponse(message="Importación de usuarios completada", data=resultado)
 
     @router.put("/{id}", tags=[TAG_USR], response_model=DataItemResponse[UsuarioResponse],
                 summary="Editar perfil (sin contraseña/rol/estado)")

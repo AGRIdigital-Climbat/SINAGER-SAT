@@ -71,21 +71,37 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     if not verify_password(data.contrasena, user["contrasena"]):
         return None
 
-    # Buscar sesión activa existente - reutilizar token (solo si no expiró)
-    sesion = db.execute(
-        text("SELECT token, fecha_expiracion FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW() AT TIME ZONE 'UTC'"),
-        {"uid": user["id_usuario"]}
-    ).mappings().first()
-
     fecha_exp, delta = _calcular_expiracion(user["id_rol"])
 
-    if sesion:
-        token = sesion["token"]
-        fecha_exp = sesion["fecha_expiracion"]
+    if user["id_rol"] in (6, 7):
+        # Roles 6/7: token de larga duración - reutilizar sesión activa si existe
+        sesion = db.execute(
+            text("SELECT token, fecha_expiracion FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW() AT TIME ZONE 'UTC'"),
+            {"uid": user["id_usuario"]}
+        ).mappings().first()
+
+        if sesion:
+            token = sesion["token"]
+            fecha_exp = sesion["fecha_expiracion"]
+        else:
+            token = create_access_token(
+                {"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]},
+                expires_delta=delta,
+            )
+            db.execute(
+                text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_inicio, fecha_expiracion) VALUES (:uid, :token, true, :inicio, :fecha_exp)"),
+                {"uid": user["id_usuario"], "token": token, "inicio": datetime.now(timezone.utc).replace(tzinfo=None), "fecha_exp": fecha_exp.replace(tzinfo=None) if fecha_exp.tzinfo else fecha_exp},
+            )
+            db.commit()
     else:
+        # Resto de roles: cada login emite un token nuevo tras verificar credenciales
         token = create_access_token(
             {"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]},
             expires_delta=delta,
+        )
+        db.execute(
+            text("UPDATE usuarios.sesion SET activo = false WHERE id_usuario = :uid AND activo = true"),
+            {"uid": user["id_usuario"]},
         )
         db.execute(
             text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_inicio, fecha_expiracion) VALUES (:uid, :token, true, :inicio, :fecha_exp)"),

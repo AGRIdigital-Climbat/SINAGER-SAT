@@ -59,6 +59,12 @@ async def validar_pdf_url(
                          "detalle de su firma digital **sin modificar la base de datos**.\n\n"
                          "Sirve para re-validar un documento ya subido y revisar su resultado "
                          "sin sobreescribir los metadatos guardados en la subida.\n\n"
+                         "Además de la validación completa, devuelve los dos campos de resumen al "
+                         "nivel superior:\n"
+                         "- **cantidad_firmas**: cuántas firmas tiene el documento\n"
+                         "- **firma_validada**: `true` si AGETIC respondió, `false` si no se pudo validar\n\n"
+                         "Los mismos dos campos se incluyen en todas las lecturas del repositorio "
+                         "(`/documentos/{id}`, `/documentos/filtrar`, etc.).\n\n"
                          "Rechaza documentos > 20 MB. Requiere permiso REPOSITORIO (CREATE).")
 async def validar_documento_repositorio(
     id_documento: int,
@@ -74,11 +80,18 @@ async def validar_documento_repositorio(
 
     resultado = await service.validar_pdf(pdf_base64)
 
+    # _transformar() siempre devuelve 'cantidad_firmas' (len de firmas) y
+    # 'finalizado' (bool), asi que no hace falta defenderse con .get().
+    cantidad_firmas = int(resultado["cantidad_firmas"])
+    firma_validada = bool(resultado["finalizado"])
+
     return SuccessResponse(
         message=resultado["mensaje"] or "Validación completada.",
         data={
             "id_documento": id_documento,
-            "tiene_firma_digital": bool(resultado["cantidad_firmas"] > 0),
+            "cantidad_firmas": cantidad_firmas,
+            "firma_validada": firma_validada,
+            "tiene_firma_digital": cantidad_firmas > 0,
             "guardado_en_bd": False,
             "validacion": resultado,
         },

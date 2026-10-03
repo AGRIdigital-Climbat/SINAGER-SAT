@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
+from typing import Literal
 
 from ..response import SuccessResponse
 
@@ -735,7 +736,7 @@ class EdanUpdate(BaseModel):
     id_estado: int | None = None
     estado: str | None = None
     pendiente_eliminacion: bool | None = None
-    pendiente_actualizacion: bool | None = None
+    pendiente_actualizacion: bool | None = None,
     responsable: Responsable | None = None
 
 
@@ -769,7 +770,68 @@ class EdanUpdateV2(BaseModel):
     total_familias_damnificadas: int | None = None
     id_estado: int | None = None
     pendiente_eliminacion: bool | None = None
-    pendiente_actualizacion: bool | None = None
+    pendiente_actualizacion: bool | None = None,
+
+
+class AprobacionEdan(BaseModel):
+    """Modelo para las APIs de aprobación independientes (sin restricciones de rol).
+
+    - `aprobado=true`  → aprueba el nivel.
+    - `aprobado=false` → devuelve al nivel anterior (`observacion` obligatoria).
+    """
+    aprobado: bool
+    observacion: str | None = None
+    model_config = ConfigDict()
+
+
+# --- Respuestas de la máquina de aprobaciones (v2.17.4) ----------------------
+# El GET es una vista informativa: por cada nivel dice en qué estado está,
+# quién lo aprobó y cuándo, y quién lo devolvió y cuándo. Los usuarios van
+# embebidos (no solo el id) para que el frontend no haga llamadas extra.
+# Estos modelos existen para documentar la respuesta en Swagger; el service
+# arma el dict con la misma forma a mano.
+
+
+class UsuarioAprobacionResponse(BaseModel):
+    """Usuario de la cadena de aprobaciones, embebido junto al id."""
+    id_usuario: int
+    usuario: str
+    nombre: str
+    carnet: str | None = None
+    celular: str | None = None
+    correo: str | None = None
+    cargo: str | None = None
+    id_rol: int | None = None
+    activo: bool | None = None
+
+
+class RolAprobadorResponse(BaseModel):
+    """Rol que corresponde a un nivel. Informativo: el servidor no restringe."""
+    id_rol: int
+    nombre: str
+    descripcion: str | None = None
+
+
+class NivelAprobacionEdan(BaseModel):
+    nivel: Literal["ugr", "alcalde", "dgr", "videcid"]
+    estado: Literal["pendiente", "aprobado", "observado", "espera_correccion"]
+    observacion: str | None = None
+    rol_aprobador: RolAprobadorResponse | None = None
+    # Quién aprobó y cuándo. Se conserva aunque el nivel luego sea devuelto.
+    id_usuario_aprobacion: int | None = None
+    usuario_aprobacion: UsuarioAprobacionResponse | None = None
+    fecha_aprobacion: str | None = None
+    # Quién devolvió y cuándo. Se limpia al aprobar de nuevo o resolverse.
+    id_usuario_devolucion: int | None = None
+    usuario_devolucion: UsuarioAprobacionResponse | None = None
+    fecha_devolucion: str | None = None
+
+
+class AprobacionesEdanResponse(BaseModel):
+    """`data` del GET /api/v2/edan/{id}/aprobacion y de los PUT."""
+    id_edan: int
+    estado_global: str
+    aprobaciones: dict[str, NivelAprobacionEdan]
 
 
 class LocalidadUpdate(BaseModel):
@@ -832,17 +894,23 @@ class LocalidadUpdate(BaseModel):
 class TipoEventoCreate(BaseModel):
     nombre: str
     descripcion: str | None = None
+    grupo: str | None = None
+    categoria: str | None = None
 
 
 class TipoEventoUpdate(BaseModel):
     nombre: str | None = None
     descripcion: str | None = None
+    grupo: str | None = None
+    categoria: str | None = None
 
 
 class TipoEventoResponse(BaseModel):
     id_tipo_evento: int
     nombre: str
     descripcion: str | None = None
+    grupo: str | None = None
+    categoria: str | None = None
 
     class Config:
         from_attributes = True
@@ -1000,11 +1068,6 @@ class ConsolidarIn(BaseModel):
     localidad_ids: list[int] = []
 
 
-class CambiarEstadoEdanIn(BaseModel):
-    """Schema para cambiar el estado de un EDAN."""
-    id_estado: int = Field(..., description="ID de estado del EDAN (estado_edan)")
-
-
 class LocalidadSyncIn(BaseModel):
     localidades: list[LocalidadCreate] = []
 
@@ -1084,9 +1147,13 @@ class PorEstadoEdanItem(BaseModel):
 
 class MisResumenData(BaseModel):
     total_edans: int = 0
+    # Los nombres de total_borrador / total_enviado son legacy: no coinciden con
+    # los estados que cuentan y se conservan para no romper el contrato. La
+    # verdad del desglose es 'por_estado', que sale del catalogo.
     total_borrador: int = 0
     total_enviado: int = 0
     total_aprobado: int = 0
+    total_observado: int = 0
     total_poblacion_afectada: float = 0
     total_familias_afectadas: float = 0
     total_familias_damnificadas: float = 0

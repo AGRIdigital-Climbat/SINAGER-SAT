@@ -67,7 +67,16 @@ class DocumentoUpdate(BaseModel):
 
 class DocumentoResponse(BaseModel):
     id_documento: int
-    id_edan: int
+    # Ambos pueden venir NULL segun el origen: un documento de EDAN no tiene
+    # formulario RIDA, y uno de RIDA puede no tener EDAN si su formulario aun no
+    # seasocio a uno.
+    id_edan: Optional[int] = None
+    id_formulario_rida: Optional[int] = None
+    # Derivado en SQL: 'edan' si id_formulario_rida es NULL, 'rida' si no.
+    origen: Optional[str] = None
+    # Derivados de resultado_firma: cuantas firmas tiene y si se pudo validar.
+    cantidad_firmas: int = 0
+    firma_validada: bool = False
     id_tipo_documento: int
     nombre_original: str
     path_archivo: str
@@ -85,6 +94,8 @@ class DocumentoResponse(BaseModel):
     tiene_firma_digital: Optional[bool] = False
     resultado_firma: Optional[dict] = None
     fecha_validacion_firma: Optional[datetime] = None
+    tipo_codigo: Optional[str] = None
+    tipo_nombre: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -11,6 +11,9 @@ from .schemas import (
     MunicipioCreate, MunicipioUpdate, MunicipioResponse,
     CultivoCreate, CultivoUpdate, CultivoResponse,
     PecuarioCreate, PecuarioUpdate, PecuarioResponse,
+    ManzanoCreate, ManzanoUpdate, ManzanoResponse,
+    ComunidadCreate, ComunidadUpdate, ComunidadResponse,
+    ResumenPoblacion, ResumenPoblacionUnidad,
 )
 from . import service
 
@@ -336,6 +339,208 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
         if not result:
             raise HTTPException(status_code=404, detail="Especie no encontrada")
         return SuccessResponse(message="Especie eliminada exitosamente")
+
+    # ── CENSO 2024 (shared.manzanos / shared.comunidades) ──
+    # Las rutas estáticas (*/geojson, /{tabla}/geojson) van ANTES de
+    # /{codigo_ine} para evitar conflictos de routing (igual que en municipios).
+
+    def _definir_rutas_censo(tabla: str, nombre_singular: str,
+                             tag_crud: str, tag_geojson: str,
+                             schema_create, schema_update, schema_response):
+        nombre_recurso = f"{nombre_singular} censal (Censo 2024)"
+
+        @router.get(f"/{tabla}", response_model=DataListResponse[schema_response], tags=[tag_crud])
+        def listar_unidades_censo(
+            id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+            codigo_ine: str | None = Query(None, description="Código INE exacto de la unidad"),
+            q: str | None = Query(None, description="Buscar por nombre parcial"),
+            area_oficial: str | None = Query(None, description="Urbana | Rural | Mixto"),
+            limit: int | None = Query(None, ge=1, le=100000, description="Máx. de filas"),
+            offset: int | None = Query(None, ge=0, description="Desplazamiento"),
+            db: Session = Depends(get_db),
+        ):
+            items = service.get_unidades_censo(db, tabla, id_municipio, codigo_ine, q,
+                                               area_oficial, limit, offset)
+            return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+        @router.get(f"/{tabla}/geojson", tags=[tag_geojson],
+                    summary=f"{nombre_recurso}: FeatureCollection GeoJSON",
+                    response_class=JSONResponse)
+        def listar_unidades_censo_geojson(
+            id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+            codigo_ine: str | None = Query(None, description="Código INE exacto de la unidad"),
+            q: str | None = Query(None, description="Buscar por nombre parcial"),
+            area_oficial: str | None = Query(None, description="Urbana | Rural | Mixto"),
+            bbox: str | None = Query(None, description="Filtro espacial: 'minx,miny,maxx,maxy' (usa índice GIST)"),
+            limit: int = Query(5000, ge=1, le=50000, description="Máx. de features"),
+            db: Session = Depends(get_db),
+        ):
+            """
+            Retorna unidades del Censo 2024 en **GeoJSON FeatureCollection** (RFC 7946)
+            para mapas (Leaflet, OpenLayers, Mapbox, QGIS, Google Maps).
+
+            Recomendado para consultas por mapa: usar `bbox` (recorte visible) y/o
+            `id_municipio`; ambos aprovechan el índice espacial GIST.
+            """
+            try:
+                return JSONResponse(content=service.get_unidades_censo_geojson(
+                    db, tabla, id_municipio, codigo_ine, q, area_oficial, bbox, limit))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+        @router.get(f"/{tabla}/{{codigo_ine}}", response_model=DataItemResponse[schema_response], tags=[tag_crud])
+        def obtener_unidad_censo(codigo_ine: str, db: Session = Depends(get_db)):
+            result = service.get_unidad_censo(db, tabla, codigo_ine)
+            if not result:
+                raise HTTPException(status_code=404, detail=f"{nombre_recurso.title()} no encontrada")
+            return SuccessResponse(message="Operación exitosa", data=result)
+
+        @router.get(f"/{tabla}/{{codigo_ine}}/geojson", tags=[tag_geojson],
+                    summary=f"{nombre_recurso}: GeoJSON Feature individual",
+                    response_class=JSONResponse)
+        def obtener_unidad_censo_geojson(codigo_ine: str, db: Session = Depends(get_db)):
+            result = service.get_unidad_censo_geojson(db, tabla, codigo_ine)
+            if not result:
+                raise HTTPException(status_code=404, detail=f"{nombre_recurso.title()} no encontrada")
+            return JSONResponse(content=result)
+
+        @router.get(f"/{tabla}/{{codigo_ine}}/poblacion",
+                    response_model=DataItemResponse[ResumenPoblacionUnidad],
+                    tags=[tag_crud],
+                    summary=f"{nombre_recurso}: personas y viviendas")
+        def poblacion_unidad_censo(codigo_ine: str, db: Session = Depends(get_db)):
+            result = service.get_poblacion_unidad(db, tabla, codigo_ine)
+            if not result:
+                raise HTTPException(status_code=404, detail=f"{nombre_recurso.title()} no encontrada")
+            return SuccessResponse(message="Operación exitosa", data=result)
+
+        @router.post(f"/{tabla}", response_model=DataItemResponse[schema_response],
+                     status_code=201, tags=[tag_crud])
+        def crear_unidad_censo(data: schema_create, db: Session = Depends(get_db),
+                               _ua=Depends(_write_dep("CREATE"))):
+            try:
+                codigo_ine = service.create_unidad_censo(db, tabla, data)
+                return SuccessResponse(message=f"{nombre_recurso.title()} creada exitosamente",
+                                       data=service.get_unidad_censo(db, tabla, codigo_ine))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+        @router.put(f"/{tabla}/{{codigo_ine}}", response_model=DataItemResponse[schema_response], tags=[tag_crud])
+        def actualizar_unidad_censo(codigo_ine: str, data: schema_update,
+                                    db: Session = Depends(get_db),
+                                    _ua=Depends(_write_dep("UPDATE"))):
+            result = service.update_unidad_censo(db, tabla, codigo_ine, data)
+            if not result:
+                raise HTTPException(status_code=404, detail=f"{nombre_recurso.title()} no encontrada")
+            return SuccessResponse(message=f"{nombre_recurso.title()} actualizada exitosamente", data=result)
+
+        @router.delete(f"/{tabla}/{{codigo_ine}}", response_model=SuccessResponse, tags=[tag_crud])
+        def eliminar_unidad_censo(codigo_ine: str, db: Session = Depends(get_db),
+                                  _ua=Depends(_write_dep("DELETE"))):
+            if not service.delete_unidad_censo(db, tabla, codigo_ine):
+                raise HTTPException(status_code=404, detail=f"{nombre_recurso.title()} no encontrada")
+            return SuccessResponse(message=f"{nombre_recurso.title()} eliminada")
+
+    TAG_CENSO_MANZ = "Censo 2024 > Manzanos"
+    TAG_CENSO_COM = "Censo 2024 > Comunidades"
+    TAG_CENSO_GEOJSON = "Censo 2024 > GeoJSON"
+
+    _definir_rutas_censo(
+        tabla="manzanos", nombre_singular="manzano",
+        tag_crud=TAG_CENSO_MANZ, tag_geojson=TAG_CENSO_GEOJSON,
+        schema_create=ManzanoCreate, schema_update=ManzanoUpdate,
+        schema_response=ManzanoResponse,
+    )
+    _definir_rutas_censo(
+        tabla="comunidades", nombre_singular="comunidad",
+        tag_crud=TAG_CENSO_COM, tag_geojson=TAG_CENSO_GEOJSON,
+        schema_create=ComunidadCreate, schema_update=ComunidadUpdate,
+        schema_response=ComunidadResponse,
+    )
+
+    # ── CENSO 2024: Poblacion y viviendas (resumenes agregados) ──
+
+    TAG_CENSO_POB = "Censo 2024 > Población y Viviendas"
+
+    @router.get("/censo/poblacion/nacional",
+                response_model=DataItemResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Totales nacionales de población y viviendas")
+    def resumen_poblacion_nacional(db: Session = Depends(get_db)):
+        return SuccessResponse(message="Operación exitosa",
+                               data=service.resumen_censo_nacional(db))
+
+    @router.get("/censo/poblacion/departamentos",
+                response_model=DataListResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Población y viviendas por departamento")
+    def resumen_poblacion_departamentos(
+        id_departamento: int | None = Query(None, description="Filtrar por departamento"),
+        db: Session = Depends(get_db),
+    ):
+        items = service.resumen_censo_por_nivel(db, "departamento",
+                                                id_departamento=id_departamento)
+        return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+    @router.get("/censo/poblacion/provincias",
+                response_model=DataListResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Población y viviendas por provincia")
+    def resumen_poblacion_provincias(
+        id_departamento: int | None = Query(None, description="Filtrar por departamento"),
+        id_provincia: int | None = Query(None, description="Filtrar por provincia"),
+        db: Session = Depends(get_db),
+    ):
+        items = service.resumen_censo_por_nivel(db, "provincia",
+                                                id_departamento=id_departamento,
+                                                id_provincia=id_provincia)
+        return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+    @router.get("/censo/poblacion/municipios",
+                response_model=DataListResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Población y viviendas por municipio")
+    def resumen_poblacion_municipios(
+        id_departamento: int | None = Query(None, description="Filtrar por departamento"),
+        id_provincia: int | None = Query(None, description="Filtrar por provincia"),
+        id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+        db: Session = Depends(get_db),
+    ):
+        items = service.resumen_censo_por_nivel(db, "municipio",
+                                                id_departamento=id_departamento,
+                                                id_provincia=id_provincia,
+                                                id_municipio=id_municipio)
+        return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
+
+    @router.get("/censo/poblacion/departamento/{id}",
+                response_model=DataItemResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Población y viviendas de un departamento")
+    def resumen_poblacion_departamento(id: int, db: Session = Depends(get_db)):
+        items = service.resumen_censo_por_nivel(db, "departamento", id_departamento=id)
+        if not items:
+            raise HTTPException(status_code=404, detail="Departamento sin datos censales")
+        return SuccessResponse(message="Operación exitosa", data=items[0])
+
+    @router.get("/censo/poblacion/provincia/{id}",
+                response_model=DataItemResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Población y viviendas de una provincia")
+    def resumen_poblacion_provincia(id: int, db: Session = Depends(get_db)):
+        items = service.resumen_censo_por_nivel(db, "provincia", id_provincia=id)
+        if not items:
+            raise HTTPException(status_code=404, detail="Provincia sin datos censales")
+        return SuccessResponse(message="Operación exitosa", data=items[0])
+
+    @router.get("/censo/poblacion/municipio/{id}",
+                response_model=DataItemResponse[ResumenPoblacion],
+                tags=[TAG_CENSO_POB],
+                summary="Población y viviendas de un municipio")
+    def resumen_poblacion_municipio(id: int, db: Session = Depends(get_db)):
+        items = service.resumen_censo_por_nivel(db, "municipio", id_municipio=id)
+        if not items:
+            raise HTTPException(status_code=404, detail="Municipio sin datos censales")
+        return SuccessResponse(message="Operación exitosa", data=items[0])
 
     return router
 

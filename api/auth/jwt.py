@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from jose import jwt, JWTError
 import bcrypt
@@ -15,6 +16,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
+    to_encode["jti"] = uuid4().hex
     if expires_delta is not None:
         expire = datetime.now(timezone.utc) + expires_delta
         to_encode["exp"] = int(expire.timestamp())

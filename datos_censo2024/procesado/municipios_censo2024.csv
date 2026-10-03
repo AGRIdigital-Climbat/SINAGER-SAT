@@ -1,0 +1,344 @@
+codigo_municipio,nombre_dep,nombre_prov,nombre_mun,capital,poblacion_2012,poblacion_2024,superficie_km2
+50405,Potosí,Chayanta,San Pedro de Macha,San Pedro de Macha,19939,21011,1065.04
+31304,Cochabamba,Mizque,TIOC-Raqaypampa,Raqaypampa,7036,8056,564.537
+40505,Oruro,Litoral,Esmeralda,Esmeralda,2702,3882,582.68
+40202,Oruro,Abaroa,Santuario de Quillacas,Santuario de Quillacas,4051,5161,927.547
+40802,Oruro,Ladislao Cabrera,Pampa Aullagas,Pampa Aullagas,2973,3197,1011.607
+50203,Potosí,Rafael Bustillo,Llallagua,Llallagua,41104,41686,524.383
+50702,Potosí,Alonso de Ibáñez,Caripuyo,Caripuyo,8704,8458,518.123
+30201,Cochabamba,Campero,Aiquile,Aiquile,23267,23123,2662.314
+50701,Potosí,Alonso de Ibáñez,Sacaca,Villa de Sacaca,19611,17205,909.077
+51302,Potosí,General Bernardino Bilbao,Acasio,Acasio,6161,4471,372.925
+40701,Oruro,Pantaleón Dalence,Huanuni,Villa de Huanuni,24677,20118,563.608
+40501,Oruro,Litoral,Huachacalla,Huachacalla,1003,4011,20.712
+41401,Oruro,Sebastián Pagador,Santiago de Huari,Santiago de Huari,13283,13502,2389.998
+40602,Oruro,Poopó,Pazña,Pazña,5955,4251,740.453
+31402,Cochabamba,Punata,Villa Rivero,Villa Rivero,8135,8599,98.941
+41201,Oruro,Sur Carangas,Andamarca,Santiago de Andamarca,5216,6311,2314.68
+21803,La Paz,Gualberto Villarroel,Chacarilla,Chacarilla,2004,2052,360.694
+30403,Cochabamba,Esteban Arze,Arbieto,Arbieto,17445,29375,146.736
+21802,La Paz,Gualberto Villarroel,Papel Pampa,Papel Pampa,7003,6649,854.41
+21302,La Paz,Aroma,Umala,Umala,8903,9102,864.409
+40101,Oruro,Cercado,Oruro,Oruro,264943,298350,257.305
+41601,Oruro,Nor Carangas,Santiago de Huayllamarca,Santiago de Huayllamarca,5502,5996,897.655
+21801,La Paz,Gualberto Villarroel,San Pedro de Curahuara,San Pedro de Curahuara,8858,9217,784.816
+30703,Cochabamba,Capinota,Sicaya,Sicaya,3740,3980,114.552
+71402,Santa Cruz,Germán Busch,Puerto Quijarro,Puerto Quijarro,16659,17974,1429.552
+30701,Cochabamba,Capinota,Capinota,Capinota,19477,19427,564.66
+30601,Cochabamba,Arque,Arque,Villa de Arque,10597,10632,515.46
+20301,La Paz,Pacajes,Corocoro,Corocoro,10647,13551,1093.78
+31403,Cochabamba,Punata,San Benito,Villa José Quintín Mendoza,13562,13054,140.24
+20902,La Paz,Loayza,Sapahaqui,Sapahaqui,12484,16497,809.679
+20905,La Paz,Loayza,Cairoma,Cairoma,11355,13598,680.396
+21004,La Paz,Inquisivi,Colquiri,Colquiri,19620,23505,1004.068
+21005,La Paz,Inquisivi,Ichoca,Ichoca,7913,9552,833.629
+70104,Santa Cruz,Andrés Ibáñez,La Guardia,La Guardia,89284,147726,971.229
+70803,Santa Cruz,Valle Grande,Moromoro,Moromoro,2767,2793,676.03
+70105,Santa Cruz,Andrés Ibáñez,El Torno,El Torno,49652,55697,963.51
+70901,Santa Cruz,Florida,Samaipata,Samaipata,10472,11843,1913.32
+10702,Chuquisaca,Nor Cinti,San Lucas,San Lucas,32520,26715,3877.202
+10902,Chuquisaca,Sud Cinti,Culpina,Culpina,17731,14848,3888.719
+10703,Chuquisaca,Nor Cinti,Incahuasi,Incahuasi,13056,16484,1040.604
+70404,Santa Cruz,Ichilo,San Juan,San Juan,9191,10200,1574.624
+50102,Potosí,Tomás Frías,Tinguipaya,Tinguipaya,27200,28942,1421.591
+50501,Potosí,Charcas,San Pedro,San Pedro,30012,28416,2198.688
+20202,La Paz,Omasuyos,Villa Ancoraimes,Villa Ancoraimes,13136,16953,332.116
+50901,Potosí,Nor Lipez,"Colcha ""K""",Villa Martín,12997,12740,18188.611
+20403,La Paz,Camacho,Puerto Mayor de Carabuco,Carabuco,14589,17336,382.526
+40901,Oruro,Sabaya,Sabaya,Sabaya,8018,15504,3588.859
+80601,Beni,Marbán,Loreto,Loreto,3828,4269,6777.967
+51202,Potosí,Antonio Quijarro,Tomave,Tomave,8854,7845,6087.627
+51203,Potosí,Antonio Quijarro,Porco,Porco,10866,14654,1002.805
+60303,Tarija,Gran Chaco,Villa Montes,Villa Montes,39867,46071,10837.044
+50103,Potosí,Tomás Frías,Yocalla,Villa de Yocalla,8979,12253,897.075
+50104,Potosí,Tomás Frías,Urmiri,Belén de Urmiri,2759,3121,1240.07
+20402,La Paz,Camacho,Mocomoco,Mocomoco,15665,17811,648.476
+71302,Santa Cruz,Manuel María Caballero,Saipina,Saipina,7390,6048,446.88
+30203,Cochabamba,Campero,Omereque,Omereque,5643,6700,761.891
+70103,Santa Cruz,Andrés Ibáñez,Porongo,Porongo (Ayacucho),15317,23126,933.38
+70101,Santa Cruz,Andrés Ibáñez,Santa Cruz de la Sierra,Santa Cruz de la Sierra,1444425,1610982,1290.597
+80501,Beni,Moxos,San Ignacio,San Ignacio,19252,21584,21045.724
+80102,Beni,Cercado,San Javier,San Javier,5277,7913,8735.957
+71005,Santa Cruz,Obispo Santisteban,San Pedro,San Pedro,19103,15246,3053.026
+21003,La Paz,Inquisivi,Cajuata,Cajuata,10458,15565,706.657
+21001,La Paz,Inquisivi,Inquisivi,Inquisivi,14717,18679,3264.342
+21102,La Paz,Sur Yungas,Irupana,Villa de Lanza,17276,23279,1348.681
+21101,La Paz,Sur Yungas,Chulumani,Villa de la Libertad,17823,18303,299.619
+40601,Oruro,Poopó,Poopó,Villa de Poopó,7587,9189,685.68
+41301,Oruro,San Pedro de Totora,Totora,Totora,5531,6637,1370.203
+50301,Potosí,Cornelio Saavedra,Betanzos,Villa de Betanzos,33922,31904,1866.392
+40402,Oruro,Sajama,Turco,Turco,5207,5803,4691.757
+41502,Oruro,Mejillones,Todos Santos,Todos Santos,727,1140,217.479
+71101,Santa Cruz,Ñuflo de Chávez,Concepción,Concepción,18800,30118,28943.023
+70602,Santa Cruz,Sara,Santa Rosa del Sara,Santa Rosa,19217,17999,4062.707
+80803,Beni,Iténez,Huacaraje,Huacaraje,4111,4630,5484.288
+51003,Potosí,Sur Lipez,San Antonio de Esmoruco,San Antonio de Esmoruco,2284,1936,2528.46
+41501,Oruro,Mejillones,La Rivera,La Rivera,509,1262,217.371
+60601,Tarija,O'connor,Entre Ríos,Entre Ríos,21991,20864,5943.545
+80701,Beni,Mamoré,San Joaquín,San Joaquín,6917,6808,8646.327
+80702,Beni,Mamoré,San Ramón,San Ramón,4955,5489,7952.898
+20803,La Paz,Ingavi,Tiahuanacu,Tiahuanacu,12189,13648,349.918
+50401,Potosí,Chayanta,Colquechaca,Colquechaca,15260,16363,669.287
+50403,Potosí,Chayanta,Pocoata,Pocoata,26330,32641,1182.908
+51401,Potosí,Daniel Campos,Llica,Llica,4150,4187,5679.932
+30901,Cochabamba,Quillacollo,Quillacollo,Quillacollo,137182,166741,563.13
+31001,Cochabamba,Chapare,Sacaba,Sacaba,172466,219092,745.227
+30903,Cochabamba,Quillacollo,Tiquipaya,Tiquipaya,53904,61840,314.547
+30905,Cochabamba,Quillacollo,Colcapirhua,Colcapirhua,51990,66505,28.982
+30902,Cochabamba,Quillacollo,Sipesipe,Sipesipe,41571,55908,501.294
+30904,Cochabamba,Quillacollo,Vinto,Vinto,51968,56064,213.408
+30401,Cochabamba,Esteban Arze,Tarata,Tarata,8242,11273,336.316
+31201,Cochabamba,Carrasco,Totora,Totora,14665,14821,2120.389
+70401,Santa Cruz,Ichilo,Buena Vista,Buena Vista,12879,13651,2711.52
+70402,Santa Cruz,Ichilo,San Carlos,San Carlos,20093,18942,1208.301
+80801,Beni,Iténez,Magdalena,Magdalena,11377,12785,14048.806
+70601,Santa Cruz,Sara,Portachuelo,Portachuelo,17885,20743,1101.904
+60401,Tarija,Avilez,Uriondo,Concepción,14781,15923,826.308
+51002,Potosí,Sur Lipez,Mojinete,Mojinete,1180,1025,400.149
+60301,Tarija,Gran Chaco,Yacuiba,Yacuiba,92245,97634,3928.809
+60402,Tarija,Avilez,Yunchará,Yunchará,5490,4754,1848.312
+60302,Tarija,Gran Chaco,Caraparí,Caraparí,15366,15559,2932.457
+60501,Tarija,Méndez,San Lorenzo,Villa San Lorenzo,23863,30346,1976.874
+60502,Tarija,Méndez,El Puente,El Puente,11354,9523,2062.691
+50502,Potosí,Charcas,Toro Toro,Toro Toro,10870,10714,1173.659
+51601,Potosí,Enrique Baldivieso,San Agustín,San Agustín,1684,2126,2345.068
+60101,Tarija,Cercado,Tarija,Tarija,205375,238749,2064.61
+51402,Potosí,Daniel Campos,Tahua,Tahua,1700,1546,1300.482
+51001,Potosí,Sur Lipez,San Pablo,San Pablo de Lípez,3371,3150,13291.509
+10903,Chuquisaca,Sud Cinti,Las Carreras,Las Carreras,4088,5016,905.391
+10901,Chuquisaca,Sud Cinti,Villa Abecia,Villa Abecia,3514,5375,659.774
+30302,Cochabamba,Ayopaya,Morochata,Morochata,12797,14720,732.18
+41503,Oruro,Mejillones,Carangas,Carangas,840,1129,226.355
+40504,Oruro,Litoral,Yunguyo del Litoral,Yunguyo del Litoral,514,875,179.088
+21703,La Paz,Manco Kapac,Tito Yupanqui,Tito Yupanqui,6261,7525,12.822
+21201,La Paz,Los Andes,Pucarani,Pucarani,30124,49850,1247.658
+40503,Oruro,Litoral,Cruz de Machacamarca,Cruz de Machacamarca,1967,1517,526.553
+20605,La Paz,Larecaja,Combaya,Combaya,3731,3529,89.9
+21401,La Paz,Nor Yungas,Coroico,Coroico,19397,27711,1083.614
+21402,La Paz,Nor Yungas,Coripata,Coripata,16930,23530,687.489
+40603,Oruro,Poopó,Antequera,Antequera,3264,3666,277.84
+20307,La Paz,Pacajes,Nazacara de Pacajes,Nazacara de Pacajes,619,4022,18.295
+20302,La Paz,Pacajes,Caquiaviri,Caquiaviri,14687,15570,1537.303
+41202,Oruro,Sur Carangas,Belén de Andamarca,Belén de Andamarca,2016,3061,1063.036
+40301,Oruro,Carangas,Corque,Corque,9221,16101,3246.109
+50602,Potosí,Nor Chichas,Vitiche,Vitiche,10646,10184,1612.588
+20901,La Paz,Loayza,Luribay,Luribay,11139,10703,447.591
+10201,Chuquisaca,Azurduy,Azurduy,Villa Azurduy,10652,7903,1723.223
+40702,Oruro,Pantaleón Dalence,Machacamarca,Machacamarca,4820,6120,323.797
+51301,Potosí,General Bernardino Bilbao,Arampampa,Arampampa,4170,3666,383.794
+30404,Cochabamba,Esteban Arze,Sacabamba,Sacabamba,4366,4987,194.88
+30402,Cochabamba,Esteban Arze,Anzaldo,Villa de Anzaldo,7192,7335,664.988
+30802,Cochabamba,Germán Jordán,Toco,Toco,7057,7382,61.457
+10601,Chuquisaca,Yamparáez,Tarabuco,Tarabuco,16944,13323,1076.62
+10301,Chuquisaca,Zudáñez,Zudáñez,Villa Zudáñez,11362,13694,653.981
+31405,Cochabamba,Punata,Villa Gualberto Villarroel,Villa Gualberto Villarroel,2768,3822,72.135
+31404,Cochabamba,Punata,Tacachi,Tacachi,1303,1287,19.835
+30801,Cochabamba,Germán Jordán,Cliza,Cliza,21899,21155,55.314
+30602,Cochabamba,Arque,Tacopaya,Tacopaya,10253,10750,583.249
+40103,Oruro,Cercado,El Choro,El Choro,8725,9997,1037.616
+41001,Oruro,Saucari,Toledo,Toledo,10149,12202,3035.12
+31501,Cochabamba,Bolívar,Bolívar,Bolivar,7279,8282,679.842
+30702,Cochabamba,Capinota,Santivañez,Villa Santivañez,6527,7940,297.563
+70703,Santa Cruz,Cordillera,Cabezas,Cabezas,26434,32961,4987.492
+40104,Oruro,Cercado,Paria,Soracachi,12846,15764,1451.599
+21307,La Paz,Aroma,Collana,Collana,5042,5526,105.541
+80802,Beni,Iténez,Baures,Baures,5965,7488,17596.662
+30803,Cochabamba,Germán Jordán,Tolata,Tolata,5542,8687,70.836
+90101,Pando,Nicolás Suárez,Cobija,Cobija,46267,55114,450.037
+41101,Oruro,Tomás Barrón,Eucaliptus,Eucaliptus,5267,5335,364.259
+20308,La Paz,Pacajes,Santiago de Callapa,Santiago de Callapa,7289,8037,1183.436
+30101,Cochabamba,Cercado,Cochabamba,Cochabamba,632013,665505,285.441
+40102,Oruro,Cercado,Caracollo,Caracollo,23115,22850,2357.25
+21902,La Paz,General José Manuel,Catacora,Catacora,2881,5351,520.382
+20903,La Paz,Loayza,Yaco,Yaco,7315,12296,591.148
+20303,La Paz,Pacajes,Calacoto,Calacoto,9879,12219,3876.59
+30501,Cochabamba,Arani,Arani,Arani,9504,11183,204.488
+31401,Cochabamba,Punata,Punata,Villa Punata,28887,35248,85.286
+21301,La Paz,Aroma,Sicasica,Villa Aroma,31312,33885,1725.582
+21305,La Paz,Aroma,Patacamaya,Patacamaya,22858,25148,552.704
+21306,La Paz,Aroma,Colquencha,Colquencha,9879,12490,338.739
+21901,La Paz,General José Manuel,Santiago de Machaca,Santiago de Machaca,4593,6805,1293.394
+90303,Pando,Madre de Dios,Sena,Sena,8258,10522,7540.341
+90302,Pando,Madre de Dios,San Lorenzo,San Lorenzo,7652,9832,3160.741
+80303,Beni,General José Ballivián,Santa Rosa,Santa Rosa,9478,11122,9456.626
+20904,La Paz,Loayza,Malla,Malla,5180,5297,347.961
+20304,La Paz,Pacajes,Comanche,Comanche,3880,5238,446.797
+21304,La Paz,Aroma,Calamarca,Calamarca,12413,15327,476.955
+20801,La Paz,Ingavi,Viacha,Viacha,80724,113554,842.551
+21006,La Paz,Inquisivi,Villa Libertad Licoma,Villa Libertad Licoma,5488,7877,195.467
+21002,La Paz,Inquisivi,Quime,Quime,8266,10887,989.655
+20206,La Paz,Omasuyos,Huatajata,Huatajata,3927,5118,19.396
+21202,La Paz,Los Andes,Laja,Laja,24531,38652,685.362
+20103,La Paz,Murillo,Mecapaca,Mecapaca,15834,20446,519.759
+20102,La Paz,Murillo,Palca,Palca,16622,21729,730.646
+20104,La Paz,Murillo,Achocalla,Achocalla,22431,46188,176.904
+20105,La Paz,Murillo,El Alto,El Alto,848452,885825,345.284
+21103,La Paz,Sur Yungas,Yanacachi,Yanacachi,6420,7615,575.961
+31101,Cochabamba,Tapacarí,Tapacarí,Tapacarí,24625,24666,1557.43
+20804,La Paz,Ingavi,Desaguadero,Desaguadero,6987,7897,103.17
+20806,La Paz,Ingavi,Jesús de Machaca,Jesús de Machaka,15039,17016,984.997
+20802,La Paz,Ingavi,Puerto Mayor de Guaqui,Guaqui,7278,8592,189.577
+20604,La Paz,Larecaja,Quiabaya,Quiabaya,2684,4224,117.557
+20503,La Paz,Muñecas,Aucapata,Aucapata,5495,6721,232.762
+21303,La Paz,Aroma,Ayo Ayo,Ayo Ayo,7798,11258,554.548
+20606,La Paz,Larecaja,Tipuani,Tipuani,9985,7716,246.481
+20101,La Paz,Murillo,Nuestra Señora de La Paz,Nuestra Señora de La Paz,766468,757431,2026.917
+20601,La Paz,Larecaja,Sorata,Sorata,23512,30083,1888.074
+21105,La Paz,Sur Yungas,La Asunta,La Asunta,40178,45587,2810.761
+20501,La Paz,Muñecas,Chuma,Chuma,11473,17830,613.679
+20602,La Paz,Larecaja,Guanay,Guanay,14788,16386,3585.793
+20608,La Paz,Larecaja,Teoponte,Teoponte,9349,13379,1368.892
+20607,La Paz,Larecaja,Mapiri,Mapiri,13891,21843,1489.407
+21601,La Paz,Bautista Saavedra,Charazani,Villa General Juan José Pérez,13023,15763,2458.78
+51102,Potosí,José María Linares,"Caiza ""D""","Caiza ""D""",12067,12999,1314.323
+21701,La Paz,Manco Kapac,Copacabana,Copacabana,14931,17463,176.265
+10202,Chuquisaca,Azurduy,Tarvita,Villa Orías,14261,16812,1348.324
+50302,Potosí,Cornelio Saavedra,Chaquí,Chaquí,9910,9285,464.665
+51101,Potosí,José María Linares,Puna,Villa Talavera,21917,16389,1472.026
+51103,Potosí,José María Linares,Ckochas,Ckochas,15812,14338,2079.646
+10405,Chuquisaca,Tomina,El Villar,El Villar,4465,5654,886.107
+11002,Chuquisaca,Luis Calvo,Huacaya (Autonomía Guarani Chaqueño de Huacaya),Villa de Huacaya,2541,2547,1277.23
+20603,La Paz,Larecaja,Tacacoma,Tacacoma,8182,9761,793.955
+10502,Chuquisaca,Hernando Siles,Huacareta,San Pablo de Huacareta,8349,7200,2956.465
+10501,Chuquisaca,Hernando Siles,Monteagudo,Monteagudo,24303,24546,3366.844
+50101,Potosí,Tomás Frías,Potosí,Potosí,191302,218702,1190.163
+21702,La Paz,Manco Kapac,San Pedro de Tiquina,San Pedro de Tiquina,6052,9164,61.816
+70701,Santa Cruz,Cordillera,Lagunillas,Lagunillas,5366,5946,1104.531
+10404,Chuquisaca,Tomina,Alcalá,Alcalá,4902,3768,304.077
+10403,Chuquisaca,Tomina,Sopachuy,Villa de Sopachui,7312,6942,583.54
+10304,Chuquisaca,Zudáñez,Icla,Icla,7774,9155,797.331
+10102,Chuquisaca,Oropeza,Yotala,Yotala,9461,9256,432.212
+10602,Chuquisaca,Yamparáez,Yamparáez,Yamparáez,10111,8480,639.168
+10402,Chuquisaca,Tomina,Tomina,Villa de Tomina,8494,8509,807.912
+50404,Potosí,Chayanta,Ocurí,Ocurí,16118,14532,858.127
+21602,La Paz,Bautista Saavedra,Curva,Curva,3285,6611,580.887
+20702,La Paz,Franz Tamayo,Pelechuco,Pelechuco,6780,9060,2433.038
+21104,La Paz,Sur Yungas,Palos Blancos,Palos Blancos,24731,27137,3708.161
+20701,La Paz,Franz Tamayo,Apolo,Apolo,20308,19156,14142.706
+80304,Beni,General José Ballivián,Puerto Menor de Rurrenabaque,Rurrenabaque,19195,21240,2503.306
+21502,La Paz,Abel Iturralde,San Buenaventura,San Buenaventura,8711,10105,2949.463
+80401,Beni,Yacuma,Santa Ana,Santa Ana de Yacuma,17069,18088,18643.097
+80302,Beni,General José Ballivián,San Borja,San Borja,40864,45798,8739.068
+80301,Beni,General José Ballivián,Reyes,Reyes,13246,11478,11846.271
+90301,Pando,Madre de Dios,Puerto Gonzalo Moreno,Puerto Gonzalo Moreno,8160,12431,1269.439
+80703,Beni,Mamoré,Puerto Siles,Puerto Siles,945,1091,2079.653
+80402,Beni,Yacuma,Exaltación,Exaltación,6362,8012,24835.43
+80201,Beni,Vaca Diez,Riberalta,Riberalta,89022,110302,12797.901
+90102,Pando,Nicolás Suárez,Porvenir,Porvenir,7948,9353,1074.944
+90104,Pando,Nicolás Suárez,Bella Flor,Bella Flor,3909,3630,5233.179
+90202,Pando,Manuripi,San Pedro,San Pedro,2991,3518,2639.284
+90201,Pando,Manuripi,Puerto Rico,Puerto Rico,6239,7367,5254.906
+90401,Pando,Abuná,Santa Rosa,Santa Rosa,2395,2889,4416.076
+90402,Pando,Abuná,Ingavi,Ingavi,1654,2600,5435.654
+80202,Beni,Vaca Diez,Guayaramerín,Guayaramerín,41814,42031,6492.856
+90502,Pando,Federico Román,Villa Nueva,Loma Alta,2801,2511,2828.369
+90503,Pando,Federico Román,Santos Mercado,Santos Mercado,2165,2347,6639.493
+90501,Pando,Federico Román,Nueva Esperanza,Nueva Esperanza,2068,1598,3664.177
+20205,La Paz,Omasuyos,Santiago de Huata,Santiago de Huata,8562,9287,92.757
+21204,La Paz,Los Andes,Puerto Pérez,Puerto Pérez,6498,7900,65.124
+50204,Potosí,Rafael Bustillo,Chuquihuta Ayllu Jucumani,Chuquihuta Ayllu Jucumani,8019,8220,260.61
+90103,Pando,Nicolás Suárez,Bolpebra,Bolpebra,2173,2437,2479.36
+90203,Pando,Manuripi,Filadelfia,Filadelfia,5756,8045,11750.197
+22002,La Paz,Caranavi,Alto Beni,Alto Beni,11194,10585,1037.682
+22001,La Paz,Caranavi,Caranavi,Caranavi,50330,59676,1542.249
+20204,La Paz,Omasuyos,Huarina,Huarina,7948,8279,180.706
+20203,La Paz,Omasuyos,Chua Cocani,Chua Cocani,5003,7226,80.598
+20404,La Paz,Camacho,Humanata,Humanata,5342,5658,287.415
+11001,Chuquisaca,Luis Calvo,Villa Vaca Guzmán,Villa Vaca Guzmán,9720,13282,3763.77
+21203,La Paz,Los Andes,Batallas,Batallas,17426,20607,785.917
+10401,Chuquisaca,Tomina,Padilla,Padilla,10383,9192,1658.372
+10303,Chuquisaca,Zudáñez,Mojocoya,Villa de Mojocoya,8068,9055,1231.894
+70805,Santa Cruz,Valle Grande,Pucará,Pucará,2076,2015,679.398
+10801,Chuquisaca,Belisario Boeto,Villa Serrano,Villa Serrano,11161,9107,1720.333
+11003,Chuquisaca,Luis Calvo,Macharetí,Villa de Macharetí,7418,7235,7957.333
+70707,Santa Cruz,Cordillera,Boyuibe,Boyuibe,5087,5612,1618.608
+70704,Santa Cruz,Cordillera,Cuevo,Cuevo,5052,5335,883.607
+70706,Santa Cruz,Cordillera,Camiri,Camiri,33838,32285,1003.126
+30303,Cochabamba,Ayopaya,Cocapata,Cocapata,18076,19608,7067.033
+70801,Santa Cruz,Valle Grande,Vallegrande,Vallegrande,17208,17249,3198.767
+70705,Santa Cruz,Cordillera,Gutierrez (Autonomía Indígena Kereimba Iyaambae),Gutiérrez,12273,14389,2856.146
+10101,Chuquisaca,Oropeza,Sucre,Sucre,261622,296746,1671.113
+10302,Chuquisaca,Zudáñez,Presto,Presto,12385,12539,1343.33
+70804,Santa Cruz,Valle Grande,Postrervalle,Postrervalle,2390,1806,1110.763
+70802,Santa Cruz,Valle Grande,Trigal,Trigal,2135,2359,397.987
+70904,Santa Cruz,Florida,Quirusillas,Quirusillas,2995,3086,285.449
+70102,Santa Cruz,Andrés Ibáñez,Cotoca,Cotoca,55633,106603,616.754
+70403,Santa Cruz,Ichilo,Yapacaní,Yapacaní,50558,57794,9545.78
+71106,Santa Cruz,Ñuflo de Chávez,Cuatro Cañadas,Cuatro Cañadas,22845,25258,4426.02
+71103,Santa Cruz,Ñuflo de Chávez,San Ramón,San Ramón,7490,8541,500.259
+71102,Santa Cruz,Ñuflo de Chávez,San Javier,San Javier,13620,14888,2256.081
+70302,Santa Cruz,Velasco,San Miguel de Velasco,San Miguel,11327,15239,9544.769
+31003,Cochabamba,Chapare,Villa Tunari,Villa Tunari,71386,93747,11091.914
+31204,Cochabamba,Carrasco,Chimoré,Chimoré,21736,27521,2766.752
+31601,Cochabamba,Tiraque,Tiraque,Tiraque,21231,18475,1974.498
+31602,Cochabamba,Tiraque,Shinahota,Shinahota,20841,27172,732.404
+71001,Santa Cruz,Obispo Santisteban,Montero,Montero,109518,126886,245.017
+71501,Santa Cruz,Guarayos,Ascensión de Guarayos,Ascención de Guarayos,27070,34079,8974.556
+80602,Beni,Marbán,San Andrés,San Andrés,12503,15570,9899.75
+30502,Cochabamba,Arani,Vacas,Vacas,8940,8409,346.331
+31203,Cochabamba,Carrasco,Pocona,Pocona,10750,12258,902.793
+70202,Santa Cruz,Warnes,Okinawa Uno,Okinawa Uno,12482,10665,1026.046
+70201,Santa Cruz,Warnes,Warnes,Warnes,96406,151248,1332.844
+71002,Santa Cruz,Obispo Santisteban,General Saavedra,General Saavedra,14209,16598,530.968
+70502,Santa Cruz,Chiquitos,Pailón,Pailón,37866,54495,13671.621
+71004,Santa Cruz,Obispo Santisteban,Fernández Alonso,Fernández Alonso,15117,14610,758.972
+71003,Santa Cruz,Obispo Santisteban,Mineros,Mineros,23251,23110,424.053
+70902,Santa Cruz,Florida,Pampagrande,Pampa Grande,9198,9692,1000.146
+70903,Santa Cruz,Florida,Mairana,Mairana,10177,12735,738.863
+31205,Cochabamba,Carrasco,Puerto Villarroel,Puerto Villarroel,46627,64595,1963.641
+70603,Santa Cruz,Sara,Colpa Bélgica,Colpa Bélgica,6069,6007,289.734
+71401,Santa Cruz,Germán Busch,Puerto Suárez,Puerto Suarez,19829,17417,13335.518
+71403,Santa Cruz,Germán Busch,El Carmen Rivero Tórrez,El Carmen Rivero Tórrez,6342,8816,10616.557
+70503,Santa Cruz,Chiquitos,Roboré,Roboré,15641,18763,7146.879
+71201,Santa Cruz,Ángel Sandóval,San Matías,San Matías,14470,15378,26918.861
+70702,Santa Cruz,Cordillera,Charagua (Autonomía Guarani Charagua Iyambae),Charagua,32186,38420,70558.733
+70501,Santa Cruz,Chiquitos,San José de Chiquitos,San José,28922,40974,18965.292
+70303,Santa Cruz,Velasco,San Rafael,San Rafael,6139,8842,9642.931
+30301,Cochabamba,Ayopaya,Ayopaya,Villa de Independencia,23658,21815,1487.864
+70301,Santa Cruz,Velasco,San Ignacio de Velasco,San Ignacio,52362,67103,49066.306
+71502,Santa Cruz,Guarayos,Urubichá,Urubicha,7026,6555,16226.273
+80101,Beni,Cercado,Trinidad,Trinidad,106596,128589,1882.037
+71105,Santa Cruz,Ñuflo de Chávez,San Antonio de Lomerío,San Antonio de Lomerio,6481,6364,2369.555
+31202,Cochabamba,Carrasco,Pojo,Pojo,10156,11865,2388.398
+31206,Cochabamba,Carrasco,Entre Ríos,Entre Ríos,31550,45780,2181.142
+10103,Chuquisaca,Oropeza,Poroma,Poroma,16532,13649,1424.582
+31002,Cochabamba,Chapare,Colomi,Colomi,19285,21846,511.637
+31303,Cochabamba,Mizque,Alalay,Alalay,3447,3512,415.84
+31302,Cochabamba,Mizque,Vila Vila,Vila Vila,5459,5244,594.273
+21501,La Paz,Abel Iturralde,Ixiamas,Ixiamas,9362,12595,36968.174
+20502,La Paz,Muñecas,Ayata,Ayata,8410,9029,743.338
+51201,Potosí,Antonio Quijarro,Uyuni,Uyuni,29672,35318,7612.8
+20306,La Paz,Pacajes,Waldo Ballivián,Waldo Ballivian,5069,6442,107.867
+40401,Oruro,Sajama,Curahuara de Carangas,Curahuara de Carangas,4184,6683,2846.755
+40302,Oruro,Carangas,Choquecota,Choquecota,1850,2504,888.897
+40502,Oruro,Litoral,Escara,Escara,4223,4231,1327.037
+40902,Oruro,Sabaya,Coipasa,Coipasa,903,1406,202.911
+40903,Oruro,Sabaya,Uru Chipaya (Nación Originaria Uru Chipaya),Chipaya,2003,2355,353.986
+50202,Potosí,Rafael Bustillo,Chayanta,Chayanta,16129,16021,627.811
+40801,Oruro,Ladislao Cabrera,Salinas de Garci Mendoza (Autonomía Indígena Originario Campesina de Salinas),Salinas de Garcí Mendoza,11878,15934,5591.484
+50801,Potosí,Sur Chichas,Tupiza,Tupiza,44814,45590,6164.124
+50802,Potosí,Sur Chichas,Atocha,Atocha,11234,9610,2326.804
+50902,Potosí,Nor Lipez,San Pedro de Quemes,Villa San Pedro de Quemes,1060,1621,4348.968
+71104,Santa Cruz,Ñuflo de Chávez,San Julián,San Julián,47416,44909,5022.001
+71503,Santa Cruz,Guarayos,El Puente,El Puente,14205,17290,7884.175
+71301,Santa Cruz,Manuel María Caballero,Comarapa,Comarapa,15919,17195,3294.775
+60202,Tarija,Arce,Bermejo,Bermejo,34505,36970,391.632
+10704,Chuquisaca,Nor Cinti,Villa Charcas,Villa Charcas,16150,14282,686.797
+20401,La Paz,Camacho,Puerto Acosta,Puerto Acosta,11290,14012,349.681
+20405,La Paz,Camacho,Escoma,Escoma,7186,8837,120.336
+20305,La Paz,Pacajes,Charaña,Charaña,3246,4221,2905.629
+20201,La Paz,Omasuyos,Achacachi,Achacachi,46058,47257,741.147
+20807,La Paz,Ingavi,Taraco,Taraco,6603,7540,113.843
+20805,La Paz,Ingavi,La (Marka) San Andrés de Machaca,La (Marka) San Andrés de Machaca,6145,7936,1523.713
+50303,Potosí,Cornelio Saavedra,Tacobamba,Tacobamba,11835,14366,888.275
+40201,Oruro,Abaroa,Challapata,Challapata,28918,35427,2582.068
+50201,Potosí,Rafael Bustillo,Uncía,Uncía,22020,22768,693.203
+50402,Potosí,Chayanta,Ravelo,Ravelo,21213,16909,1346.77
+31301,Cochabamba,Mizque,Mizque,Mizque,19864,19896,1307.046
+30202,Cochabamba,Campero,Pasorapa,Pasorapa,6853,6475,2364.848
+50601,Potosí,Nor Chichas,Cotagaita,Cotagaita,31801,29221,6459.741
+10701,Chuquisaca,Nor Cinti,Camargo,Camargo,15644,14713,2079.723
+51501,Potosí,Modesto Omiste,Villazón,Villazón,44906,49340,2500.13
+60201,Tarija,Arce,Padcaya,Padcaya,18681,17817,4457.745
+51204,Potosí,Antonio Quijarro,TIOC-Jatun Ayllu Yura,Jatun Ayllu Yura,5935,5819,2120.815
+80901,Beni,Territorio Indígena Multiétnico,TIOC-Territorio Indígena Multiétnico,Territorio Indigena Multiétnico,3232,3973,6427.898

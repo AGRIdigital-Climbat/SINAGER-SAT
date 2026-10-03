@@ -173,3 +173,99 @@ class UbicacionResponse(BaseModel):
     municipio: dict[str, Any] | None = None
     provincia: dict[str, Any] | None = None
     departamento: dict[str, Any] | None = None
+
+
+# ── Censo 2024 (CPV-2024, INE): manzanos / comunidades ──
+# Encabezados estandar como en shared.departamento/provincia/municipio:
+# `codigo_ine` (clave censal INE) + `id_departamento` / `id_provincia` /
+# `id_municipio`. Los id_* se derivan de id_municipio (via la jerarquia).
+
+
+class MunicipioLite(BaseModel):
+    id: int
+    codigo_ine: str
+    nombre: str
+
+
+class _UnidadCensoBase(BaseModel):
+    """Columnas comunes de shared.manzanos / shared.comunidades (datos)."""
+
+    nombre: str
+    id_municipio: int
+    tipo_unidad: str = "Manzano"
+    personas: int = 0
+    viviendas: int = 0
+    lat: float | None = None
+    lon: float | None = None
+    area_oficial: str | None = None
+
+
+class ManzanoCreate(BaseModel):
+    codigo_ine: str
+    nombre: str
+    id_municipio: int
+    tipo_unidad: str = "Manzano"
+    personas: int = 0
+    viviendas: int = 0
+    lat: float | None = None
+    lon: float | None = None
+    area_oficial: str | None = None
+
+
+class ManzanoUpdate(BaseModel):
+    nombre: str | None = None
+    id_municipio: int | None = None
+    tipo_unidad: str | None = None
+    personas: int | None = None
+    viviendas: int | None = None
+    lat: float | None = None
+    lon: float | None = None
+    area_oficial: str | None = None
+
+
+class ManzanoResponse(_UnidadCensoBase):
+    codigo_ine: str
+    id_departamento: int | None = None
+    id_provincia: int | None = None
+    municipio: MunicipioLite | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ComunidadCreate(ManzanoCreate):
+    tipo_unidad: str = "Comunidad"
+
+
+class ComunidadUpdate(ManzanoUpdate):
+    pass
+
+
+class ComunidadResponse(ManzanoResponse):
+    pass
+
+
+# ── Censo 2024: Poblacion y viviendas (resumenes agregados) ──
+# Las agregaciones suman manzanos + comunidades (unidades disjuntas del CPV).
+
+
+class ResumenPoblacion(BaseModel):
+    nivel: str
+    id_departamento: int | None = None
+    id_provincia: int | None = None
+    id_municipio: int | None = None
+    codigo_ine: str | None = None
+    nombre: str
+    manzanos: int = 0
+    comunidades: int = 0
+    unidades_censales: int = 0
+    poblacion: int = 0
+    viviendas: int = 0
+
+
+class ResumenPoblacionUnidad(BaseModel):
+    codigo_ine: str
+    tipo_unidad: str
+    nombre: str
+    poblacion: int = 0
+    viviendas: int = 0

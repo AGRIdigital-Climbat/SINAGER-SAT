@@ -7,7 +7,7 @@ from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
 from . import service
 from .schemas import (
-    EdanUpdateV2, ConsolidarIn, CambiarEstadoEdanIn, LocalidadEstadoUpdate,
+    EdanUpdateV2, ConsolidarIn, LocalidadEstadoUpdate,
     ResumenReporteResponse, ReporteGeografiaResponse, ReporteAgriculturaResponse,
     ReportePecuarioResponse, MisResumenResponse,
 )
@@ -20,7 +20,6 @@ TAG_EDAN = "EDAN"
 TAG_EDAN_LOCALIDADES = "EDAN_LOCALIDADES"
 
 ROLES_EDAN_CREA = (1, 2, 3, 4, 5, 9)
-ROLES_ESTADO_EDAN = (1, 2, 3, 4, 5, 9)
 ROLES_LOCALES = (6, 7)
 ROLES_ASIGNA_ALCALDE = (6, 7)
 PU_ALCALDE_ONLY_FIELDS = {"id_usuario_alcalde"}
@@ -324,20 +323,6 @@ def actualizar_edan(id: int, data: EdanUpdateV2, db: Session = Depends(get_db), 
     return SuccessResponse(message="EDAN actualizado correctamente", data=result)
 
 
-@router.put("/{id}/estado", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_ESTADO_EDAN))],
-            summary="Cambiar estado de EDAN")
-def cambiar_estado_edan_endpoint(id: int, data: CambiarEstadoEdanIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    try:
-        result = service.cambiar_estado_edan(db, id, data.id_estado)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise db_error(e)
-    if not result:
-        raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return SuccessResponse(message="Estado de EDAN actualizado correctamente", data=result)
-
-
 @router.delete("/{id}", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_EDAN_CREA))],
                summary="Eliminar un EDAN (lógico o permanente)")
 def eliminar_edan(id: int, permanente: bool = Query(False), db: Session = Depends(get_db), _user=Depends(get_current_user)):
@@ -413,3 +398,4 @@ def cambiar_estado_localidad_endpoint(id_localidad: int, data: LocalidadEstadoUp
     if not result:
         raise HTTPException(status_code=404, detail="Localidad no encontrada")
     return SuccessResponse(message="Estado de localidad actualizado correctamente", data=result)
+

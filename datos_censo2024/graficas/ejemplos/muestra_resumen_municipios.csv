@@ -1,0 +1,11 @@
+codigo_municipio,nombre_dep,nombre_mun,n_manzanos,n_comunidades,poblacion_urbana,poblacion_rural,poblacion_total,poblacion_urbana_oficial,poblacion_rural_oficial,area_oficial
+10101,Chuquisaca,Sucre,7399,174,282616,14130,296746,275959,20787,Mixto
+10102,Chuquisaca,Yotala,556,43,5771,3485,9256,0,9256,Rural
+10103,Chuquisaca,Poroma,106,94,1523,12126,13649,0,13649,Rural
+10201,Chuquisaca,Azurduy,95,42,1398,6505,7903,0,7903,Rural
+10202,Chuquisaca,Tarvita,278,48,6955,9857,16812,0,16812,Rural
+10301,Chuquisaca,Zudáñez,143,28,5166,8528,13694,4790,8904,Mixto
+10302,Chuquisaca,Presto,366,37,5292,7247,12539,2220,10319,Mixto
+10303,Chuquisaca,Mojocoya,162,31,3399,5656,9055,2720,6335,Mixto
+10304,Chuquisaca,Icla,72,33,1191,7964,9155,0,9155,Rural
+10401,Chuquisaca,Padilla,181,58,4352,4840,9192,4232,4960,Mixto

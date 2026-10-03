@@ -19,7 +19,6 @@ TAG_EDAN_LOCALIDADES = "EDAN_LOCALIDADES"
 ROLES_LOCALES = (6, 7)          # CRUD localidades (UGR municipio + Responsable local)
 ROLES_EDAN_CREA = (6,)          # Solo UGR municipio crea EDAN consolidado
 ROLES_LECTURA = (6, 7, 8)       # Lectura (incluye alcalde)
-ROLES_ESTADO_EDAN = (1, 2, 3, 4, 5, 9)  # Editar estado_edan (todos EXCEPTO 6, 7, 8)
 
 
 def _require_rol(*roles):
@@ -668,24 +667,6 @@ def actualizar_edan(id: int, data: EdanUpdate, db: Session = Depends(get_db), _u
     if not result:
         raise HTTPException(status_code=404, detail="EDAN no encontrado")
     return SuccessResponse(message="EDAN actualizado correctamente", data=result)
-
-
-@router.put("/{id}/estado", tags=[TAG_EDAN], responses={200: {"model": SuccessResponse}},
-            dependencies=[Depends(_require_rol(*ROLES_ESTADO_EDAN))])
-def cambiar_estado_edan_endpoint(id: int, data: EstadoEdanUpdate,
-                                  db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    """Cambia solo el campo id_estado de un EDAN consolidado.
-    Acceso abierto para roles 1-5, 9 (admin, VIDECI, UGR Sectores, DGR, VIDECI Departamental).
-    Roles 6, 7, 8 NO pueden editar estado_edan."""
-    try:
-        result = service.cambiar_estado_edan(db, id, data.id_estado)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise _db_error(e)
-    if not result:
-        raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return SuccessResponse(message="Estado de EDAN actualizado correctamente", data=result)
 
 
 @router.delete("/{id}", tags=[TAG_EDAN], responses={200: {"model": MessageResponse}},

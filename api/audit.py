@@ -8,6 +8,7 @@ from .auth.jwt import verify_token
 URL_APP_MAP = [
     ("/api/v2/rea/", 4),
     ("/api/v2/edan/", 1),
+    ("/api/v2/rida/", 2),
     ("/api/v2/usuarios/", 9),
     ("/api/v2/shared/", 9),
     ("/api/v2/auth/", 9),
@@ -20,6 +21,25 @@ URL_APP_MAP = [
     ("/api/v1/upload/", 4),
 ]
 
+# Mapeo de sub-módulos para auditoría detallada
+URL_MODULO_MAP = [
+    ("/api/v2/rida/evento/", "rida/eventos"),
+    ("/api/v2/rida/eventos", "rida/eventos"),
+    ("/api/v2/rida/empadronamiento/", "rida/empadronamiento"),
+    ("/api/v2/rida/necesidades/", "rida/necesidades"),
+    ("/api/v2/edan/localidades/", "edan/localidades"),
+    ("/api/v2/edan/tipo_evento/", "edan/tipo_evento"),
+    ("/api/v2/edan/", "edan/cabecera"),
+    ("/api/v2/usuarios/", "usuarios"),
+    ("/api/v2/shared/", "shared"),
+    ("/api/v2/upload/", "upload"),
+    ("/api/v1/rida/", "rida"),
+    ("/api/v1/edan/", "edan"),
+    ("/api/v1/usuarios/", "usuarios"),
+    ("/api/v1/shared/", "shared"),
+    ("/api/v1/upload/", "upload"),
+]
+
 METHOD_ACTION = {"POST": "CREATE", "PUT": "UPDATE", "DELETE": "DELETE"}
 
 
@@ -27,6 +47,14 @@ def _get_id_aplicacion(path: str) -> int | None:
     for prefix, app_id in URL_APP_MAP:
         if path.startswith(prefix):
             return app_id
+    return None
+
+
+def _get_modulo(path: str) -> str | None:
+    """Extrae el sub-módulo del path para auditoría detallada."""
+    for prefix, modulo in URL_MODULO_MAP:
+        if path.startswith(prefix):
+            return modulo
     return None
 
 
@@ -69,10 +97,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         id_usuario = _get_usuario_id(request)
         id_aplicacion = _get_id_aplicacion(path)
+        modulo = _get_modulo(path)
         if id_aplicacion is None:
             return response
 
-        detalle = {"path": path, "method": method}
+        detalle = {"path": path, "method": method, "modulo": modulo}
         if body_data:
             if isinstance(body_data, dict):
                 clean_body = {k: v for k, v in body_data.items() if k != "contrasena"}
@@ -89,12 +118,13 @@ class AuditMiddleware(BaseHTTPMiddleware):
             db.execute(
                 text("""
                     INSERT INTO usuarios.auditoria
-                        (id_usuario, id_aplicacion, accion, detalle, ip_origen)
-                    VALUES (:u, :a, :ac, :d, :ip)
+                        (id_usuario, id_aplicacion, modulo, accion, detalle, ip_origen)
+                    VALUES (:u, :a, :m, :ac, :d, :ip)
                 """),
                 {
                     "u": id_usuario,
                     "a": id_aplicacion,
+                    "m": modulo,
                     "ac": METHOD_ACTION[method],
                     "d": json.dumps(detalle),
                     "ip": _get_client_ip(request),

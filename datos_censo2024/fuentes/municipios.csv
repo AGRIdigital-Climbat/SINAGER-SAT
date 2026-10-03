@@ -1,0 +1,344 @@
+"codigo_ine","idep","nombre_dep","iprov","nombre_prov","imun","nombre_mun","capital","superficie_km2"
+"010101","01","Chuquisaca","01","Oropeza","01","Sucre","Sucre",1671.1
+"010102","01","Chuquisaca","01","Oropeza","02","Yotala","Yotala",432.2
+"010103","01","Chuquisaca","01","Oropeza","03","Poroma","Poroma",1424.6
+"010201","01","Chuquisaca","02","Azurduy","01","Azurduy","Villa Azurduy",1723.2
+"010202","01","Chuquisaca","02","Azurduy","02","Tarvita","Villa Orías",1348.3
+"010301","01","Chuquisaca","03","Zudáñez","01","Zudáñez","Villa Zudáñez",654
+"010302","01","Chuquisaca","03","Zudáñez","02","Presto","Presto",1343.3
+"010303","01","Chuquisaca","03","Zudáñez","03","Mojocoya","Villa de Mojocoya",1231.9
+"010304","01","Chuquisaca","03","Zudáñez","04","Icla","Icla",797.3
+"010401","01","Chuquisaca","04","Tomina","01","Padilla","Padilla",1658.4
+"010402","01","Chuquisaca","04","Tomina","02","Tomina","Villa de Tomina",807.9
+"010403","01","Chuquisaca","04","Tomina","03","Sopachuy","Villa de Sopachui",583.5
+"010404","01","Chuquisaca","04","Tomina","04","Alcalá","Alcalá",304.1
+"010405","01","Chuquisaca","04","Tomina","05","El Villar","El Villar",886.1
+"010501","01","Chuquisaca","05","Hernando Siles","01","Monteagudo","Monteagudo",3366.8
+"010502","01","Chuquisaca","05","Hernando Siles","02","Huacareta","San Pablo de Huacareta",2956.5
+"010601","01","Chuquisaca","06","Yamparáez","01","Tarabuco","Tarabuco",1076.6
+"010602","01","Chuquisaca","06","Yamparáez","02","Yamparáez","Yamparáez",639.2
+"010701","01","Chuquisaca","07","Nor Cinti","01","Camargo","Camargo",2079.7
+"010702","01","Chuquisaca","07","Nor Cinti","02","San Lucas","San Lucas",3877.2
+"010703","01","Chuquisaca","07","Nor Cinti","03","Incahuasi","Incahuasi",1040.6
+"010704","01","Chuquisaca","07","Nor Cinti","04","Villa Charcas","Villa Charcas",686.8
+"010801","01","Chuquisaca","08","Belisario Boeto","01","Villa Serrano","Villa Serrano",1720.3
+"010901","01","Chuquisaca","09","Sud Cinti","01","Villa Abecia","Villa Abecia",659.8
+"010902","01","Chuquisaca","09","Sud Cinti","02","Culpina","Culpina",3888.7
+"010903","01","Chuquisaca","09","Sud Cinti","03","Las Carreras","Las Carreras",905.4
+"011001","01","Chuquisaca","10","Luis Calvo","01","Villa Vaca Guzmán","Villa Vaca Guzmán",3763.8
+"011002","01","Chuquisaca","10","Luis Calvo","02","Huacaya (Autonomía Guaraní Chaqueño de Huacaya)","Villa de Huacaya",1277.2
+"011003","01","Chuquisaca","10","Luis Calvo","03","Macharetí","Villa de Macharetí",7957.3
+"020101","02","La Paz","01","Murillo","01","Nuestra Señora de La Paz","Nuestra Señora de La Paz",2026.9
+"020102","02","La Paz","01","Murillo","02","Palca","Palca",730.6
+"020103","02","La Paz","01","Murillo","03","Mecapaca","Mecapaca",519.8
+"020104","02","La Paz","01","Murillo","04","Achocalla","Achocalla",176.9
+"020105","02","La Paz","01","Murillo","05","El Alto","El Alto",345.3
+"020201","02","La Paz","02","Omasuyos","01","Achacachi","Achacachi",741.1
+"020202","02","La Paz","02","Omasuyos","02","Villa Ancoraimes","Villa Ancoraimes",332.1
+"020203","02","La Paz","02","Omasuyos","03","Huarina","Huarina",180.7
+"020204","02","La Paz","02","Omasuyos","04","Santiago de Huata","Santiago de Huata",92.8
+"020205","02","La Paz","02","Omasuyos","05","Huatajata","Huatajata",19.4
+"020206","02","La Paz","02","Omasuyos","06","Chua Cocani","Chua Cocani",80.6
+"020301","02","La Paz","03","Pacajes","01","Corocoro","Corocoro",1093.8
+"020302","02","La Paz","03","Pacajes","02","Caquiaviri","Caquiaviri",1537.3
+"020303","02","La Paz","03","Pacajes","03","Calacoto","Calacoto",3876.6
+"020304","02","La Paz","03","Pacajes","04","Comanche","Comanche",446.8
+"020305","02","La Paz","03","Pacajes","05","Charaña","Charaña",2905.6
+"020306","02","La Paz","03","Pacajes","06","Waldo Ballivián","Waldo Ballivian",107.9
+"020307","02","La Paz","03","Pacajes","07","Nazacara de Pacajes","Nazacara de Pacajes",18.3
+"020308","02","La Paz","03","Pacajes","08","Santiago de Callapa","Santiago de Callapa",1183.4
+"020401","02","La Paz","04","Camacho","01","Puerto Acosta","Puerto Acosta",349.7
+"020402","02","La Paz","04","Camacho","02","Mocomoco","Mocomoco",648.5
+"020403","02","La Paz","04","Camacho","03","Puerto Mayor de Carabuco","Carabuco",382.5
+"020404","02","La Paz","04","Camacho","04","Humanata","Humanata",287.4
+"020405","02","La Paz","04","Camacho","05","Escoma","Escoma",120.3
+"020501","02","La Paz","05","Muñecas","01","Chuma","Chuma",613.7
+"020502","02","La Paz","05","Muñecas","02","Ayata","Ayata",743.3
+"020503","02","La Paz","05","Muñecas","03","Aucapata","Aucapata",232.8
+"020601","02","La Paz","06","Larecaja","01","Sorata","Sorata",1888.1
+"020602","02","La Paz","06","Larecaja","02","Guanay","Guanay",3585.8
+"020603","02","La Paz","06","Larecaja","03","Tacacoma","Tacacoma",794
+"020604","02","La Paz","06","Larecaja","04","Quiabaya","Quiabaya",117.6
+"020605","02","La Paz","06","Larecaja","05","Combaya","Combaya",89.9
+"020606","02","La Paz","06","Larecaja","06","Tipuani","Tipuani",246.5
+"020607","02","La Paz","06","Larecaja","07","Mapiri","Mapiri",1489.4
+"020608","02","La Paz","06","Larecaja","08","Teoponte","Teoponte",1368.9
+"020701","02","La Paz","07","Franz Tamayo","01","Apolo","Apolo",14142.7
+"020702","02","La Paz","07","Franz Tamayo","02","Pelechuco","Pelechuco",2433
+"020801","02","La Paz","08","Ingavi","01","Viacha","Viacha",842.6
+"020802","02","La Paz","08","Ingavi","02","Puerto Mayor de Guaqui","Guaqui",189.6
+"020803","02","La Paz","08","Ingavi","03","Tiahuanacu","Tiahuanacu",349.9
+"020804","02","La Paz","08","Ingavi","04","Desaguadero","Desaguadero",103.2
+"020805","02","La Paz","08","Ingavi","05","La (Marka) San Andrés de Machaca","La (Marka) San Andrés de Machaca",1523.7
+"020806","02","La Paz","08","Ingavi","06","Jesús de Machaka","Jesús de Machaka",985
+"020807","02","La Paz","08","Ingavi","07","Taraco","Taraco",113.8
+"020901","02","La Paz","09","Loayza","01","Luribay","Luribay",447.6
+"020902","02","La Paz","09","Loayza","02","Sapahaqui","Sapahaqui",809.7
+"020903","02","La Paz","09","Loayza","03","Yaco","Yaco",591.1
+"020904","02","La Paz","09","Loayza","04","Malla","Malla",348
+"020905","02","La Paz","09","Loayza","05","Cairoma","Cairoma",680.4
+"021001","02","La Paz","10","Inquisivi","01","Inquisivi","Inquisivi",3264.3
+"021002","02","La Paz","10","Inquisivi","02","Quime","Quime",989.7
+"021003","02","La Paz","10","Inquisivi","03","Cajuata","Cajuata",706.7
+"021004","02","La Paz","10","Inquisivi","04","Colquiri","Colquiri",1004.1
+"021005","02","La Paz","10","Inquisivi","05","Ichoca","Ichoca",833.6
+"021006","02","La Paz","10","Inquisivi","06","Villa Libertad Licoma","Villa Libertad Licoma",195.5
+"021101","02","La Paz","11","Sur Yungas","01","Chulumani","Villa de la Libertad",299.6
+"021102","02","La Paz","11","Sur Yungas","02","Irupana","Villa de Lanza",1348.7
+"021103","02","La Paz","11","Sur Yungas","03","Yanacachi","Yanacachi",576
+"021104","02","La Paz","11","Sur Yungas","04","Palos Blancos","Palos Blancos",3708.2
+"021105","02","La Paz","11","Sur Yungas","05","La Asunta","La Asunta",2810.8
+"021201","02","La Paz","12","Los Andes","01","Pucarani","Pucarani",1247.7
+"021202","02","La Paz","12","Los Andes","02","Laja","Laja",685.4
+"021203","02","La Paz","12","Los Andes","03","Batallas","Batallas",785.9
+"021204","02","La Paz","12","Los Andes","04","Puerto Pérez","Puerto Pérez",65.1
+"021301","02","La Paz","13","Aroma","01","Sicasica","Villa Aroma",1725.6
+"021302","02","La Paz","13","Aroma","02","Umala","Umala",864.4
+"021303","02","La Paz","13","Aroma","03","Ayo Ayo","Ayo Ayo",554.5
+"021304","02","La Paz","13","Aroma","04","Calamarca","Calamarca",477
+"021305","02","La Paz","13","Aroma","05","Patacamaya","Patacamaya",552.7
+"021306","02","La Paz","13","Aroma","06","Colquencha","Colquencha",338.7
+"021307","02","La Paz","13","Aroma","07","Collana","Collana",105.5
+"021401","02","La Paz","14","Nor Yungas","01","Coroico","Coroico",1083.6
+"021402","02","La Paz","14","Nor Yungas","02","Coripata","Coripata",687.5
+"021501","02","La Paz","15","Abel Iturralde","01","Ixiamas","Ixiamas",36968.2
+"021502","02","La Paz","15","Abel Iturralde","02","San Buenaventura","San Buenaventura",2949.5
+"021601","02","La Paz","16","Bautista Saavedra","01","Charazani","Villa General Juan José Pérez",2458.8
+"021602","02","La Paz","16","Bautista Saavedra","02","Curva","Curva",580.9
+"021701","02","La Paz","17","Manco Kapac","01","Copacabana","Copacabana",176.3
+"021702","02","La Paz","17","Manco Kapac","02","San Pedro de Tiquina","San Pedro de Tiquina",61.8
+"021703","02","La Paz","17","Manco Kapac","03","Tito Yupanqui","Tito Yupanqui",12.8
+"021801","02","La Paz","18","Gualberto Villarroel","01","San Pedro de Curahuara","San Pedro de Curahuara",784.8
+"021802","02","La Paz","18","Gualberto Villarroel","02","Papel Pampa","Papel Pampa",854.4
+"021803","02","La Paz","18","Gualberto Villarroel","03","Chacarilla","Chacarilla",360.7
+"021901","02","La Paz","19","General José Manuel Pando","01","Santiago de Machaca","Santiago de Machaca",1293.4
+"021902","02","La Paz","19","General José Manuel Pando","02","Catacora","Catacora",520.4
+"022001","02","La Paz","20","Caranavi","01","Caranavi","Caranavi",1542.2
+"022002","02","La Paz","20","Caranavi","02","Alto Beni","Alto Beni",1037.7
+"030101","03","Cochabamba","01","Cercado","01","Cochabamba","Cochabamba",285.4
+"030201","03","Cochabamba","02","Campero","01","Aiquile","Aiquile",2662.3
+"030202","03","Cochabamba","02","Campero","02","Pasorapa","Pasorapa",2364.8
+"030203","03","Cochabamba","02","Campero","03","Omereque","Omereque",761.9
+"030301","03","Cochabamba","03","Ayopaya","01","Ayopaya","Villa de Independencia",1487.9
+"030302","03","Cochabamba","03","Ayopaya","02","Morochata","Morochata",732.2
+"030303","03","Cochabamba","03","Ayopaya","03","Cocapata","Cocapata",7067
+"030401","03","Cochabamba","04","Esteban Arze","01","Tarata","Tarata",336.3
+"030402","03","Cochabamba","04","Esteban Arze","02","Anzaldo","Villa de Anzaldo",665
+"030403","03","Cochabamba","04","Esteban Arze","03","Arbieto","Arbieto",146.7
+"030404","03","Cochabamba","04","Esteban Arze","04","Sacabamba","Sacabamba",194.9
+"030501","03","Cochabamba","05","Arani","01","Arani","Arani",204.5
+"030502","03","Cochabamba","05","Arani","02","Vacas","Vacas",346.3
+"030601","03","Cochabamba","06","Arque","01","Arque","Villa de Arque",515.5
+"030602","03","Cochabamba","06","Arque","02","Tacopaya","Tacopaya",583.2
+"030701","03","Cochabamba","07","Capinota","01","Capinota","Capinota",564.7
+"030702","03","Cochabamba","07","Capinota","02","Santiváñez","Villa Santivañez",297.6
+"030703","03","Cochabamba","07","Capinota","03","Sicaya","Sicaya",114.6
+"030801","03","Cochabamba","08","Germán Jordán","01","Cliza","Cliza",55.3
+"030802","03","Cochabamba","08","Germán Jordán","02","Toco","Toco",61.5
+"030803","03","Cochabamba","08","Germán Jordán","03","Tolata","Tolata",70.8
+"030901","03","Cochabamba","09","Quillacollo","01","Quillacollo","Quillacollo",563.1
+"030902","03","Cochabamba","09","Quillacollo","02","Sipesipe","Sipesipe",501.3
+"030903","03","Cochabamba","09","Quillacollo","03","Tiquipaya","Tiquipaya",314.5
+"030904","03","Cochabamba","09","Quillacollo","04","Vinto","Vinto",213.4
+"030905","03","Cochabamba","09","Quillacollo","05","Colcapirhua","Colcapirhua",29
+"031001","03","Cochabamba","10","Chapare","01","Sacaba","Sacaba",745.2
+"031002","03","Cochabamba","10","Chapare","02","Colomi","Colomi",511.6
+"031003","03","Cochabamba","10","Chapare","03","Villa Tunari","Villa Tunari",11091.9
+"031101","03","Cochabamba","11","Tapacarí","01","Tapacarí","Tapacarí",1557.4
+"031201","03","Cochabamba","12","Carrasco","01","Totora","Totora",2120.4
+"031202","03","Cochabamba","12","Carrasco","02","Pojo","Pojo",2388.4
+"031203","03","Cochabamba","12","Carrasco","03","Pocona","Pocona",902.8
+"031204","03","Cochabamba","12","Carrasco","04","Chimoré","Chimoré",2766.8
+"031205","03","Cochabamba","12","Carrasco","05","Puerto Villarroel","Puerto Villarroel",1963.6
+"031206","03","Cochabamba","12","Carrasco","06","Entre Ríos","Entre Ríos",2181.1
+"031301","03","Cochabamba","13","Mizque","01","Mizque","Mizque",1307
+"031302","03","Cochabamba","13","Mizque","02","Vila Vila","Vila Vila",594.3
+"031303","03","Cochabamba","13","Mizque","03","Alalay","Alalay",415.8
+"031304","03","Cochabamba","13","Mizque","04","TIOC-Raqaypampa","Raqaypampa",564.5
+"031401","03","Cochabamba","14","Punata","01","Punata","Villa Punata",85.3
+"031402","03","Cochabamba","14","Punata","02","Villa Rivero","Villa Rivero",98.9
+"031403","03","Cochabamba","14","Punata","03","San Benito","Villa José Quintín Mendoza",140.2
+"031404","03","Cochabamba","14","Punata","04","Tacachi","Tacachi",19.8
+"031405","03","Cochabamba","14","Punata","05","Villa Gualberto Villarroel","Villa Gualberto Villarroel",72.1
+"031501","03","Cochabamba","15","Bolívar","01","Bolívar","Bolivar",679.8
+"031601","03","Cochabamba","16","Tiraque","01","Tiraque","Tiraque",1974.5
+"031602","03","Cochabamba","16","Tiraque","02","Shinahota","Shinahota",732.4
+"040101","04","Oruro","01","Cercado","01","Oruro","Oruro",257.3
+"040102","04","Oruro","01","Cercado","02","Caracollo","Caracollo",2357.2
+"040103","04","Oruro","01","Cercado","03","El Choro","El Choro",1037.6
+"040104","04","Oruro","01","Cercado","04","Paria","Soracachi",1451.6
+"040201","04","Oruro","02","Abaroa","01","Challapata","Challapata",2582.1
+"040202","04","Oruro","02","Abaroa","02","Santuario de Quillacas","Santuario de Quillacas",927.5
+"040301","04","Oruro","03","Carangas","01","Corque","Corque",3246.1
+"040302","04","Oruro","03","Carangas","02","Choquecota","Choquecota",888.9
+"040401","04","Oruro","04","Sajama","01","Curahuara de Carangas","Curahuara de Carangas",2846.8
+"040402","04","Oruro","04","Sajama","02","Turco","Turco",4691.8
+"040501","04","Oruro","05","Litoral","01","Huachacalla","Huachacalla",20.7
+"040502","04","Oruro","05","Litoral","02","Escara","Escara",1327
+"040503","04","Oruro","05","Litoral","03","Cruz de Machacamarca","Cruz de Machacamarca",526.6
+"040504","04","Oruro","05","Litoral","04","Yunguyo del Litoral","Yunguyo del Litoral",179.1
+"040505","04","Oruro","05","Litoral","05","Esmeralda","Esmeralda",582.7
+"040601","04","Oruro","06","Poopó","01","Poopó","Villa de Poopó",685.7
+"040602","04","Oruro","06","Poopó","02","Pazña","Pazña",740.5
+"040603","04","Oruro","06","Poopó","03","Antequera","Antequera",277.8
+"040701","04","Oruro","07","Pantaleón Dalence","01","Huanuni","Villa de Huanuni",563.6
+"040702","04","Oruro","07","Pantaleón Dalence","02","Machacamarca","Machacamarca",323.8
+"040801","04","Oruro","08","Ladislao Cabrera","01","Salinas de Garci Mendoza (Autonomía Indígena Originario Campesina de Salinas)","Salinas de Garcí Mendoza",5591.5
+"040802","04","Oruro","08","Ladislao Cabrera","02","Pampa Aullagas","Pampa Aullagas",1011.6
+"040901","04","Oruro","09","Sabaya","01","Sabaya","Sabaya",3588.9
+"040902","04","Oruro","09","Sabaya","02","Coipasa","Coipasa",202.9
+"040903","04","Oruro","09","Sabaya","03","Uru Chipaya (Nación Originaria Uru Chipaya)","Chipaya",354
+"041001","04","Oruro","10","Saucarí","01","Toledo","Toledo",3035.1
+"041101","04","Oruro","11","Tomás Barrón","01","Eucaliptus","Eucaliptus",364.3
+"041201","04","Oruro","12","Sur Carangas","01","Andamarca","Santiago de Andamarca",2314.7
+"041202","04","Oruro","12","Sur Carangas","02","Belén de Andamarca","Belén de Andamarca",1063
+"041301","04","Oruro","13","San Pedro de Totora","01","Totora","Totora",1370.2
+"041401","04","Oruro","14","Sebastián Pagador","01","Santiago de Huari","Santiago de Huari",2390
+"041501","04","Oruro","15","Mejillones","01","La Rivera","La Rivera",217.4
+"041502","04","Oruro","15","Mejillones","02","Todos Santos","Todos Santos",217.5
+"041503","04","Oruro","15","Mejillones","03","Carangas","Carangas",226.4
+"041601","04","Oruro","16","Nor Carangas","01","Santiago de Huayllamarca","Santiago de Huayllamarca",897.7
+"050101","05","Potosí","01","Tomás Frías","01","Potosí","Potosí",1190.2
+"050102","05","Potosí","01","Tomás Frías","02","Tinguipaya","Tinguipaya",1421.6
+"050103","05","Potosí","01","Tomás Frías","03","Yocalla","Villa de Yocalla",897.1
+"050104","05","Potosí","01","Tomás Frías","04","Urmiri","Belén de Urmiri",1240.1
+"050201","05","Potosí","02","Rafael Bustillo","01","Uncía","Uncía",693.2
+"050202","05","Potosí","02","Rafael Bustillo","02","Chayanta","Chayanta",627.8
+"050203","05","Potosí","02","Rafael Bustillo","03","Llallagua","Llallagua",524.4
+"050204","05","Potosí","02","Rafael Bustillo","04","Chuquihuta Ayllu Jucumani","Chuquihuta Ayllu Jucumani",260.6
+"050301","05","Potosí","03","Cornelio Saavedra","01","Betanzos","Villa de Betanzos",1866.4
+"050302","05","Potosí","03","Cornelio Saavedra","02","Chaquí","Chaquí",464.7
+"050303","05","Potosí","03","Cornelio Saavedra","03","Tacobamba","Tacobamba",888.3
+"050401","05","Potosí","04","Chayanta","01","Colquechaca","Colquechaca",669.3
+"050402","05","Potosí","04","Chayanta","02","Ravelo","Ravelo",1346.8
+"050403","05","Potosí","04","Chayanta","03","Pocoata","Pocoata",1182.9
+"050404","05","Potosí","04","Chayanta","04","Ocurí","Ocurí",858.1
+"050405","05","Potosí","04","Chayanta","05","San Pedro de Macha","San Pedro de Macha",1065
+"050501","05","Potosí","05","Charcas","01","San Pedro","San Pedro",2198.7
+"050502","05","Potosí","05","Charcas","02","Toro Toro","Toro Toro",1173.7
+"050601","05","Potosí","06","Nor Chichas","01","Cotagaita","Cotagaita",6459.7
+"050602","05","Potosí","06","Nor Chichas","02","Vitichi","Vitiche",1612.6
+"050701","05","Potosí","07","Alonso de Ibáñez","01","Sacaca","Villa de Sacaca",909.1
+"050702","05","Potosí","07","Alonso de Ibáñez","02","Caripuyo","Caripuyo",518.1
+"050801","05","Potosí","08","Sur Chichas","01","Tupiza","Tupiza",6164.1
+"050802","05","Potosí","08","Sur Chichas","02","Atocha","Atocha",2326.8
+"050901","05","Potosí","09","Nor Lípez","01","Colcha ""K""","Villa Martín",18188.6
+"050902","05","Potosí","09","Nor Lípez","02","San Pedro de Quemes","Villa San Pedro de Quemes",4349
+"051001","05","Potosí","10","Sur Lípez","01","San Pablo","San Pablo de Lípez",13291.5
+"051002","05","Potosí","10","Sur Lípez","02","Mojinete","Mojinete",400.1
+"051003","05","Potosí","10","Sur Lípez","03","San Antonio de Esmoruco","San Antonio de Esmoruco",2528.5
+"051101","05","Potosí","11","José María Linares","01","Puna","Villa Talavera",1472
+"051102","05","Potosí","11","José María Linares","02","Caiza ""D""","Caiza ""D""",1314.3
+"051103","05","Potosí","11","José María Linares","03","Ckochas","Ckochas",2079.6
+"051201","05","Potosí","12","Antonio Quijarro","01","Uyuni","Uyuni",7612.8
+"051202","05","Potosí","12","Antonio Quijarro","02","Tomave","Tomave",6087.6
+"051203","05","Potosí","12","Antonio Quijarro","03","Porco","Porco",1002.8
+"051204","05","Potosí","12","Antonio Quijarro","04","TIOC-Jatun Ayllu Yura","Jatun Ayllu Yura",2120.8
+"051301","05","Potosí","13","General Bernardino Bilbao","01","Arampampa","Arampampa",383.8
+"051302","05","Potosí","13","General Bernardino Bilbao","02","Acasio","Acasio",372.9
+"051401","05","Potosí","14","Daniel Campos","01","Llica","Llica",5679.9
+"051402","05","Potosí","14","Daniel Campos","02","Tahua","Tahua",1300.5
+"051501","05","Potosí","15","Modesto Omiste","01","Villazón","Villazón",2500.1
+"051601","05","Potosí","16","Enrique Baldivieso","01","San Agustín","San Agustín",2345.1
+"060101","06","Tarija","01","Cercado","01","Tarija","Tarija",2064.6
+"060201","06","Tarija","02","Arce","01","Padcaya","Padcaya",4457.7
+"060202","06","Tarija","02","Arce","02","Bermejo","Bermejo",391.6
+"060301","06","Tarija","03","Gran Chaco","01","Yacuiba","Yacuiba",3928.8
+"060302","06","Tarija","03","Gran Chaco","02","Caraparí","Caraparí",2932.5
+"060303","06","Tarija","03","Gran Chaco","03","Villa Montes","Villa Montes",10837
+"060401","06","Tarija","04","Avilez","01","Uriondo","Concepción",826.3
+"060402","06","Tarija","04","Avilez","02","Yunchará","Yunchará",1848.3
+"060501","06","Tarija","05","Méndez","01","San Lorenzo","Villa San Lorenzo",1976.9
+"060502","06","Tarija","05","Méndez","02","El Puente","El Puente",2062.7
+"060601","06","Tarija","06","O'Connor","01","Entre Ríos","Entre Ríos",5943.5
+"070101","07","Santa Cruz","01","Andrés Ibáñez","01","Santa Cruz de la Sierra","Santa Cruz de la Sierra",1290.6
+"070102","07","Santa Cruz","01","Andrés Ibáñez","02","Cotoca","Cotoca",616.8
+"070103","07","Santa Cruz","01","Andrés Ibáñez","03","Porongo","Porongo (Ayacucho)",933.4
+"070104","07","Santa Cruz","01","Andrés Ibáñez","04","La Guardia","La Guardia",971.2
+"070105","07","Santa Cruz","01","Andrés Ibáñez","05","El Torno","El Torno",963.5
+"070201","07","Santa Cruz","02","Warnes","01","Warnes","Warnes",1332.8
+"070202","07","Santa Cruz","02","Warnes","02","Okinawa Uno","Okinawa Uno",1026
+"070301","07","Santa Cruz","03","Velasco","01","San Ignacio","San Ignacio",49066.3
+"070302","07","Santa Cruz","03","Velasco","02","San Miguel","San Miguel",9544.8
+"070303","07","Santa Cruz","03","Velasco","03","San Rafael","San Rafael",9642.9
+"070401","07","Santa Cruz","04","Ichilo","01","Buena Vista","Buena Vista",2711.5
+"070402","07","Santa Cruz","04","Ichilo","02","San Carlos","San Carlos",1208.3
+"070403","07","Santa Cruz","04","Ichilo","03","Yapacaní","Yapacaní",9545.8
+"070404","07","Santa Cruz","04","Ichilo","04","San Juan","San Juan",1574.6
+"070501","07","Santa Cruz","05","Chiquitos","01","San José","San José",18965.3
+"070502","07","Santa Cruz","05","Chiquitos","02","Pailón","Pailón",13671.6
+"070503","07","Santa Cruz","05","Chiquitos","03","Roboré","Roboré",7146.9
+"070601","07","Santa Cruz","06","Sara","01","Portachuelo","Portachuelo",1101.9
+"070602","07","Santa Cruz","06","Sara","02","Santa Rosa","Santa Rosa",4062.7
+"070603","07","Santa Cruz","06","Sara","03","Colpa Bélgica","Colpa Bélgica",289.7
+"070701","07","Santa Cruz","07","Cordillera","01","Lagunillas","Lagunillas",1104.5
+"070702","07","Santa Cruz","07","Cordillera","02","Charagua (Autonomía Guaraní Charagua Iyambae)","Charagua",70558.7
+"070703","07","Santa Cruz","07","Cordillera","03","Cabezas","Cabezas",4987.5
+"070704","07","Santa Cruz","07","Cordillera","04","Cuevo","Cuevo",883.6
+"070705","07","Santa Cruz","07","Cordillera","05","Gutiérrez (Autonomía Indígena Kereimba Iyaambae)","Gutiérrez",2856.1
+"070706","07","Santa Cruz","07","Cordillera","06","Camiri","Camiri",1003.1
+"070707","07","Santa Cruz","07","Cordillera","07","Boyuibe","Boyuibe",1618.6
+"070801","07","Santa Cruz","08","Valle Grande","01","Vallegrande","Vallegrande",3198.8
+"070802","07","Santa Cruz","08","Valle Grande","02","Trigal","Trigal",398
+"070803","07","Santa Cruz","08","Valle Grande","03","Moromoro","Moromoro",676
+"070804","07","Santa Cruz","08","Valle Grande","04","Postrervalle","Postrervalle",1110.8
+"070805","07","Santa Cruz","08","Valle Grande","05","Pucará","Pucará",679.4
+"070901","07","Santa Cruz","09","Florida","01","Samaipata","Samaipata",1913.3
+"070902","07","Santa Cruz","09","Florida","02","Pampagrande","Pampa Grande",1000.1
+"070903","07","Santa Cruz","09","Florida","03","Mairana","Mairana",738.9
+"070904","07","Santa Cruz","09","Florida","04","Quirusillas","Quirusillas",285.4
+"071001","07","Santa Cruz","10","Obispo Santisteban","01","Montero","Montero",245
+"071002","07","Santa Cruz","10","Obispo Santisteban","02","General Saavedra","General Saavedra",531
+"071003","07","Santa Cruz","10","Obispo Santisteban","03","Mineros","Mineros",424.1
+"071004","07","Santa Cruz","10","Obispo Santisteban","04","Fernández Alonso","Fernández Alonso",759
+"071005","07","Santa Cruz","10","Obispo Santisteban","05","San Pedro","San Pedro",3053
+"071101","07","Santa Cruz","11","Ñuflo de Chávez","01","Concepción","Concepción",28943
+"071102","07","Santa Cruz","11","Ñuflo de Chávez","02","San Javier","San Javier",2256.1
+"071103","07","Santa Cruz","11","Ñuflo de Chávez","03","San Julián","San Julián",5022
+"071104","07","Santa Cruz","11","Ñuflo de Chávez","04","San Antonio de Lomerio","San Antonio de Lomerio",2369.6
+"071105","07","Santa Cruz","11","Ñuflo de Chávez","05","San Ramón","San Ramón",500.3
+"071106","07","Santa Cruz","11","Ñuflo de Chávez","06","Cuatro Cañadas","Cuatro Cañadas",4426
+"071201","07","Santa Cruz","12","Ángel Sandoval","01","San Matías","San Matías",26918.9
+"071301","07","Santa Cruz","13","Manuel María Caballero","01","Comarapa","Comarapa",3294.8
+"071302","07","Santa Cruz","13","Manuel María Caballero","02","Saipina","Saipina",446.9
+"071401","07","Santa Cruz","14","Germán Busch","01","Puerto Suárez","Puerto Suarez",13335.5
+"071402","07","Santa Cruz","14","Germán Busch","02","Puerto Quijarro","Puerto Quijarro",1429.6
+"071403","07","Santa Cruz","14","Germán Busch","03","El Carmen Rivero Tórrez","El Carmen Rivero Tórrez",10616.6
+"071501","07","Santa Cruz","15","Guarayos","01","Ascención de Guarayos","Ascención de Guarayos",8974.6
+"071502","07","Santa Cruz","15","Guarayos","02","Urubichá","Urubicha",16226.3
+"071503","07","Santa Cruz","15","Guarayos","03","El Puente","El Puente",7884.2
+"080101","08","Beni","01","Cercado","01","Trinidad","Trinidad",1882
+"080102","08","Beni","01","Cercado","02","San Javier","San Javier",8736
+"080201","08","Beni","02","Vaca Diez","01","Riberalta","Riberalta",12797.9
+"080202","08","Beni","02","Vaca Diez","02","Guayaramerín","Guayaramerín",6492.9
+"080301","08","Beni","03","General José Ballivián","01","Reyes","Reyes",11846.3
+"080302","08","Beni","03","General José Ballivián","02","San Borja","San Borja",8739.1
+"080303","08","Beni","03","General José Ballivián","03","Santa Rosa","Santa Rosa",9456.6
+"080304","08","Beni","03","General José Ballivián","04","Puerto Menor de Rurrenabaque","Rurrenabaque",2503.3
+"080401","08","Beni","04","Yacuma","01","Santa Ana","Santa Ana de Yacuma",18643.1
+"080402","08","Beni","04","Yacuma","02","Exaltación","Exaltación",24835.4
+"080501","08","Beni","05","Moxos","01","San Ignacio","San Ignacio",21045.7
+"080601","08","Beni","06","Marbán","01","Loreto","Loreto",6778
+"080602","08","Beni","06","Marbán","02","San Andrés","San Andrés",9899.7
+"080701","08","Beni","07","Mamoré","01","San Joaquín","San Joaquín",8646.3
+"080702","08","Beni","07","Mamoré","02","San Ramón","San Ramón",7952.9
+"080703","08","Beni","07","Mamoré","03","Puerto Siles","Puerto Siles",2079.7
+"080801","08","Beni","08","Iténez","01","Magdalena","Magdalena",14048.8
+"080802","08","Beni","08","Iténez","02","Baures","Baures",17596.7
+"080803","08","Beni","08","Iténez","03","Huacaraje","Huacaraje",5484.3
+"080901","08","Beni","09","Territorio Indígena Multiétnico","01","TIOC-Territorio Indígena Multiétnico","Territorio Indigena Multiétnico",6427.9
+"090101","09","Pando","01","Nicolás Suárez","01","Cobija","Cobija",450
+"090102","09","Pando","01","Nicolás Suárez","02","Porvenir","Porvenir",1074.9
+"090103","09","Pando","01","Nicolás Suárez","03","Bolpebra","Bolpebra",2479.4
+"090104","09","Pando","01","Nicolás Suárez","04","Bella Flor","Bella Flor",5233.2
+"090201","09","Pando","02","Manuripi","01","Puerto Rico","Puerto Rico",5254.9
+"090202","09","Pando","02","Manuripi","02","San Pedro","San Pedro",2639.3
+"090203","09","Pando","02","Manuripi","03","Filadelfia","Filadelfia",11750.2
+"090301","09","Pando","03","Madre de Dios","01","Puerto Gonzalo Moreno","Puerto Gonzalo Moreno",1269.4
+"090302","09","Pando","03","Madre de Dios","02","San Lorenzo","San Lorenzo",3160.7
+"090303","09","Pando","03","Madre de Dios","03","Sena","Sena",7540.3
+"090401","09","Pando","04","Abuná","01","Santa Rosa","Santa Rosa",4416.1
+"090402","09","Pando","04","Abuná","02","Ingavi","Ingavi",5435.7
+"090501","09","Pando","05","Federico Román","01","Nueva Esperanza","Nueva Esperanza",3664.2
+"090502","09","Pando","05","Federico Román","02","Villa Nueva","Loma Alta",2828.4
+"090503","09","Pando","05","Federico Román","03","Santos Mercado","Santos Mercado",6639.5

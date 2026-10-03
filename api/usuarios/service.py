@@ -1,3 +1,8 @@
+import re
+import unicodedata
+from io import BytesIO
+
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..auth.jwt import hash_password
@@ -425,7 +430,11 @@ def get_auditoria(db: Session, id_usuario: int | None = None,
                   fecha_hasta: str | None = None,
                   id_rol: int | None = None,
                   id_municipio: int | None = None,
-                  skip: int = 0, limit: int = 100):
+                  id_departamento: int | None = None,
+                  id_provincia: int | None = None,
+                  modulo: str | None = None,
+                  busqueda: str | None = None,
+                  skip: int = 0, limit: int = 100, todos: bool = False):
     conditions = []
     params = {}
 
@@ -450,6 +459,18 @@ def get_auditoria(db: Session, id_usuario: int | None = None,
     if id_municipio is not None:
         conditions.append("u.id_municipio = :id_municipio")
         params["id_municipio"] = id_municipio
+    if id_departamento is not None:
+        conditions.append("u.id_departamento = :id_departamento")
+        params["id_departamento"] = id_departamento
+    if id_provincia is not None:
+        conditions.append("u.id_provincia = :id_provincia")
+        params["id_provincia"] = id_provincia
+    if modulo is not None:
+        conditions.append("a.modulo = :modulo")
+        params["modulo"] = modulo
+    if busqueda is not None:
+        conditions.append("a.detalle::text ILIKE :busqueda_patron")
+        params["busqueda_patron"] = f"%{busqueda}%"
 
     where_clause = " AND ".join(conditions) if conditions else "TRUE"
 
@@ -468,6 +489,9 @@ def get_auditoria(db: Session, id_usuario: int | None = None,
         params,
     ).scalar()
 
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    query_params = {**params, "limit": limit, "skip": skip} if not todos else params
+
     rows = db.execute(
         text(f"""
             SELECT a.*,
@@ -481,9 +505,286 @@ def get_auditoria(db: Session, id_usuario: int | None = None,
             {joins}
             WHERE {where_clause}
             ORDER BY a.fecha DESC
-            LIMIT :limit OFFSET :skip
+            {page}
         """),
-        {**params, "limit": limit, "skip": skip},
+        query_params,
     ).mappings().all()
 
     return [dict(r) for r in rows], total
+
+
+# ============================================================================
+#  IMPORTACIÓN MASIVA DE USUARIOS DESDE EXCEL (.xlsx)
+# ============================================================================
+
+COLUMNAS_ESPERADAS = {
+    "NOMBRE COMPLETO": "nombre",
+    "CARNET DE IDENTIDAD": "carnet",
+    "CELULAR": "celular",
+    "ROL": "rol",
+    "CORREO ELECTRONICO": "correo",
+    "CARGO": "cargo",
+    "DEPARTAMENTO": "departamento",
+    "PROVINCIA": "provincia",
+    "MUNICIPIO": "municipio",
+    "COMUNIDAD": "comunidad",
+}
+
+NOMBRES_LABEL = {
+    "nombre": "Nombre Completo",
+    "carnet": "Carnet de Identidad",
+    "celular": "Celular",
+    "rol": "Rol",
+    "correo": "Correo electrónico",
+    "cargo": "Cargo",
+    "departamento": "Departamento",
+    "provincia": "Provincia",
+    "municipio": "Municipio",
+    "comunidad": "Comunidad",
+}
+
+MAX_EXCEL_BYTES = 10 * 1024 * 1024
+
+
+def _normalizar(texto):
+    """Mayúsculas + sin tildes/acentos + espacios colapsados (para comparar nombres)."""
+    if texto is None:
+        return ""
+    s = unicodedata.normalize("NFD", str(texto))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return " ".join(s.split()).upper()
+
+
+def _solo_digitos(texto):
+    if texto is None:
+        return ""
+    return re.sub(r"\D", "", str(texto))
+
+
+def _indexar_roles(db: Session) -> dict[str, int]:
+    rows = db.execute(text("SELECT id_rol, nombre FROM usuarios.rol")).mappings().all()
+    return {_normalizar(r["nombre"]): r["id_rol"] for r in rows}
+
+
+def _resolver_rol(idx_roles: dict[str, int], nombre: str) -> int:
+    rid = idx_roles.get(_normalizar(nombre))
+    if rid is None:
+        raise ValueError(f"Rol no encontrado: {nombre}")
+    return rid
+
+
+def _indexar_geografia(db: Session) -> dict:
+    deptos = db.execute(text("SELECT id, nombre FROM shared.departamento")).mappings().all()
+    provs = db.execute(
+        text("SELECT id, id_departamento, nombre FROM shared.provincia")
+    ).mappings().all()
+    munis = db.execute(
+        text("SELECT id, id_departamento, id_provincia, nombre FROM shared.municipio")
+    ).mappings().all()
+
+    depto_por_id = {d["id"]: d["nombre"] for d in deptos}
+    prov_por_id = {p["id"]: p["nombre"] for p in provs}
+
+    idx_deptos = {_normalizar(d["nombre"]): d["id"] for d in deptos}
+    idx_provs = {}
+    for p in provs:
+        depto_nombre = depto_por_id.get(p["id_departamento"], "")
+        idx_provs.setdefault((_normalizar(depto_nombre), _normalizar(p["nombre"])), []).append(p["id"])
+    idx_munis = {}
+    for m in munis:
+        depto_nombre = depto_por_id.get(m["id_departamento"], "")
+        prov_nombre = prov_por_id.get(m["id_provincia"], "")
+        if depto_nombre and prov_nombre:
+            idx_munis.setdefault(
+                (_normalizar(depto_nombre), _normalizar(prov_nombre), _normalizar(m["nombre"])),
+                [],
+            ).append(m["id"])
+
+    return {"departamentos": idx_deptos, "provincias": idx_provs, "municipios": idx_munis}
+
+
+def _resolver_geografia(db: Session, idx: dict, depto: str, prov: str, muni: str):
+    id_departamento = idx["departamentos"].get(_normalizar(depto))
+    if id_departamento is None:
+        raise ValueError(f"Departamento no encontrado: {depto}")
+
+    prov_ids = idx["provincias"].get((_normalizar(depto), _normalizar(prov)), [])
+    if not prov_ids:
+        raise ValueError(f"Provincia '{prov}' no encontrada en '{depto}'")
+    if len(prov_ids) > 1:
+        raise ValueError(f"Provincia '{prov}' ambigua en '{depto}'")
+    id_provincia = prov_ids[0]
+
+    mun_ids = idx["municipios"].get((_normalizar(depto), _normalizar(prov), _normalizar(muni)), [])
+    if not mun_ids:
+        raise ValueError(f"Municipio '{muni}' no encontrado en '{prov}' ({depto})")
+    if len(mun_ids) > 1:
+        raise ValueError(f"Municipio '{muni}' ambiguo en '{prov}' ({depto})")
+    id_municipio = mun_ids[0]
+
+    validar_geografia(db, id_departamento, id_provincia, id_municipio)
+    return id_departamento, id_provincia, id_municipio
+
+
+def importar_usuarios_excel(db: Session, contents: bytes, nombre_archivo: str = "usuarios.xlsx") -> dict:
+    """
+    Lee un .xlsx y crea usuarios en masa.
+
+    Columnas esperadas (exactas): Nombre Completo, Carnet de Identidad, Celular,
+    Rol, Correo electrónico, Cargo, Departamento, Provincia, Municipio, Comunidad.
+
+    Por fila:
+      - usuario = solo dígitos del Carnet (único)
+      - contraseña inicial = Celular, hasheada con bcrypt (nunca en texto plano)
+      - Rol y geografía se resuelven por nombre (insensible a acentos/mayúsculas)
+      - La cadena geográfica municipio→provincia→departamento se valida en la BD
+
+    Devuelve un resumen con totales y detalle de errores por fila.
+    """
+    if not contents:
+        raise ValueError("El archivo está vacío")
+    if len(contents) > MAX_EXCEL_BYTES:
+        raise ValueError(f"El archivo excede el límite de {MAX_EXCEL_BYTES // (1024 * 1024)} MB")
+
+    try:
+        wb = load_workbook(BytesIO(contents), data_only=True, read_only=True)
+    except Exception:
+        raise ValueError("El archivo no es un .xlsx válido")
+    ws = wb.active
+    if ws is None:
+        raise ValueError("El Excel no contiene hojas de cálculo")
+
+    # ── Validar encabezados ──
+    fila0 = next(ws.iter_rows(min_row=1, max_row=1), None)
+    headers = [_normalizar(c.value) for c in fila0] if fila0 else []
+    presentes = set(headers)
+    faltantes = [NOMBRES_LABEL[campo] for norm, campo in COLUMNAS_ESPERADAS.items() if norm not in presentes]
+    if faltantes:
+        raise ValueError("Columnas requeridas faltantes en el Excel: " + ", ".join(faltantes))
+
+    cols = {}
+    for i, h in enumerate(headers):
+        if h in COLUMNAS_ESPERADAS and COLUMNAS_ESPERADAS[h] not in cols:
+            cols[COLUMNAS_ESPERADAS[h]] = i
+
+    idx_roles = _indexar_roles(db)
+    idx_geo = _indexar_geografia(db)
+
+    total_procesados = 0
+    usuarios_creados = 0
+    usuarios_duplicados = 0
+    registros_con_errores = 0
+    detalle = []
+    credenciales_generadas = []
+    vistos = set()
+
+    for num_fila, r in enumerate(ws.iter_rows(min_row=2), start=2):
+        values = [c.value for c in r]
+        fila = num_fila
+
+        def _valor(campo):
+            i = cols.get(campo)
+            if i is None or i >= len(values):
+                return ""
+            v = values[i]
+            return str(v).strip() if v is not None else ""
+
+        if not any(_valor(f) for f in ("nombre", "carnet", "celular", "rol",
+                                       "correo", "cargo", "departamento",
+                                       "provincia", "municipio", "comunidad")):
+            continue
+
+        total_procesados += 1
+
+        # 1) Todos los campos obligatorios
+        vacios = [NOMBRES_LABEL[f] for f in COLUMNAS_ESPERADAS.values() if not _valor(f)]
+        if vacios:
+            registros_con_errores += 1
+            detalle.append({"fila": fila, "error": "Campos vacíos: " + ", ".join(vacios)})
+            continue
+
+        carnet_dig = _solo_digitos(_valor("carnet"))
+        if not carnet_dig:
+            registros_con_errores += 1
+            detalle.append({"fila": fila, "error": "El Carnet no contiene dígitos"})
+            continue
+        usuario = carnet_dig
+
+        # 2) Duplicados (mismo lote y contra BD)
+        if usuario in vistos:
+            usuarios_duplicados += 1
+            detalle.append({"fila": fila, "error": f"Carnet duplicado en el archivo: {carnet_dig}"})
+            continue
+        exists = db.execute(
+            text("SELECT 1 FROM usuarios.usuario WHERE carnet = :c OR usuario = :u LIMIT 1"),
+            {"c": carnet_dig, "u": usuario},
+        ).scalar()
+        if exists:
+            usuarios_duplicados += 1
+            detalle.append({"fila": fila, "error": f"Carnet ya registrado: {carnet_dig}"})
+            continue
+
+        # 3) Rol y geografía
+        try:
+            id_rol = _resolver_rol(idx_roles, _valor("rol"))
+            geo = _resolver_geografia(
+                db, idx_geo, _valor("departamento"), _valor("provincia"), _valor("municipio"),
+            )
+        except ValueError as e:
+            registros_con_errores += 1
+            detalle.append({"fila": fila, "error": str(e)})
+            continue
+
+        # 4) Insertar con contraseña hasheada (bcrypt)
+        hashed = hash_password(_valor("celular"))
+        try:
+            db.execute(
+                text("""
+                    INSERT INTO usuarios.usuario
+                        (usuario, contrasena, nombre, celular, carnet, comunidad,
+                         correo, cargo, id_departamento, id_provincia, id_municipio, id_rol, activo)
+                    VALUES
+                        (:usuario, :contrasena, :nombre, :celular, :carnet, :comunidad,
+                         :correo, :cargo, :id_departamento, :id_provincia, :id_municipio, :id_rol, :activo)
+                """),
+                {
+                    "usuario": usuario,
+                    "contrasena": hashed,
+                    "nombre": _valor("nombre"),
+                    "celular": _valor("celular"),
+                    "carnet": carnet_dig,
+                    "comunidad": _valor("comunidad"),
+                    "correo": _valor("correo"),
+                    "cargo": _valor("cargo"),
+                    "id_departamento": geo[0],
+                    "id_provincia": geo[1],
+                    "id_municipio": geo[2],
+                    "id_rol": id_rol,
+                    "activo": True,
+                },
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            registros_con_errores += 1
+            detalle.append({"fila": fila, "error": f"Error al insertar: {e}"})
+            continue
+
+        vistos.add(usuario)
+        usuarios_creados += 1
+        credenciales_generadas.append({
+            "usuario": usuario,
+            "contrasena_inicial": _valor("celular"),
+            "nombre": _valor("nombre"),
+        })
+
+    wb.close()
+
+    return {
+        "total_procesados": total_procesados,
+        "usuarios_creados": usuarios_creados,
+        "usuarios_duplicados": usuarios_duplicados,
+        "registros_con_errores": registros_con_errores,
+        "detalle": detalle,
+        "credenciales_generadas": credenciales_generadas,
+    }

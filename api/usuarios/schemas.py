@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
@@ -183,9 +184,15 @@ class AuditoriaResponse(BaseModel):
     id_auditoria: int
     id_usuario: int | None = None
     id_aplicacion: int | None = None
+    modulo: str | None = None
     accion: str
-    detalle: str | None = None
+    detalle: dict | None = None
     ip_origen: str | None = None
-    fecha: str | None = None
+    fecha: datetime | None = None
+    usuario_nombre: str | None = None
+    rol_nombre: str | None = None
+    municipio_nombre: str | None = None
+    departamento_nombre: str | None = None
+    app_nombre: str | None = None
     class Config:
         from_attributes = True

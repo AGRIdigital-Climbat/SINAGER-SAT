@@ -1,0 +1,114 @@
+codigo_provincia,idep,nombre_dep,iprov,nombre_prov
+101,1,Chuquisaca,1,Oropeza
+102,1,Chuquisaca,2,Azurduy
+103,1,Chuquisaca,3,Zudáñez
+104,1,Chuquisaca,4,Tomina
+105,1,Chuquisaca,5,Hernando Siles
+106,1,Chuquisaca,6,Yamparáez
+107,1,Chuquisaca,7,Nor Cinti
+108,1,Chuquisaca,8,Belisario Boeto
+109,1,Chuquisaca,9,Sud Cinti
+110,1,Chuquisaca,10,Luis Calvo
+201,2,La Paz,1,Murillo
+202,2,La Paz,2,Omasuyos
+203,2,La Paz,3,Pacajes
+204,2,La Paz,4,Camacho
+205,2,La Paz,5,Muñecas
+206,2,La Paz,6,Larecaja
+207,2,La Paz,7,Franz Tamayo
+208,2,La Paz,8,Ingavi
+209,2,La Paz,9,Loayza
+210,2,La Paz,10,Inquisivi
+211,2,La Paz,11,Sur Yungas
+212,2,La Paz,12,Los Andes
+213,2,La Paz,13,Aroma
+214,2,La Paz,14,Nor Yungas
+215,2,La Paz,15,Abel Iturralde
+216,2,La Paz,16,Bautista Saavedra
+217,2,La Paz,17,Manco Kapac
+218,2,La Paz,18,Gualberto Villarroel
+219,2,La Paz,19,General José Manuel Pando
+220,2,La Paz,20,Caranavi
+301,3,Cochabamba,1,Cercado
+302,3,Cochabamba,2,Campero
+303,3,Cochabamba,3,Ayopaya
+304,3,Cochabamba,4,Esteban Arze
+305,3,Cochabamba,5,Arani
+306,3,Cochabamba,6,Arque
+307,3,Cochabamba,7,Capinota
+308,3,Cochabamba,8,Germán Jordán
+309,3,Cochabamba,9,Quillacollo
+310,3,Cochabamba,10,Chapare
+311,3,Cochabamba,11,Tapacarí
+312,3,Cochabamba,12,Carrasco
+313,3,Cochabamba,13,Mizque
+314,3,Cochabamba,14,Punata
+315,3,Cochabamba,15,Bolívar
+316,3,Cochabamba,16,Tiraque
+401,4,Oruro,1,Cercado
+402,4,Oruro,2,Abaroa
+403,4,Oruro,3,Carangas
+404,4,Oruro,4,Sajama
+405,4,Oruro,5,Litoral
+406,4,Oruro,6,Poopó
+407,4,Oruro,7,Pantaleón Dalence
+408,4,Oruro,8,Ladislao Cabrera
+409,4,Oruro,9,Sabaya
+410,4,Oruro,10,Saucarí
+411,4,Oruro,11,Tomás Barrón
+412,4,Oruro,12,Sur Carangas
+413,4,Oruro,13,San Pedro de Totora
+414,4,Oruro,14,Sebastián Pagador
+415,4,Oruro,15,Mejillones
+416,4,Oruro,16,Nor Carangas
+501,5,Potosí,1,Tomás Frías
+502,5,Potosí,2,Rafael Bustillo
+503,5,Potosí,3,Cornelio Saavedra
+504,5,Potosí,4,Chayanta
+505,5,Potosí,5,Charcas
+506,5,Potosí,6,Nor Chichas
+507,5,Potosí,7,Alonso de Ibáñez
+508,5,Potosí,8,Sur Chichas
+509,5,Potosí,9,Nor Lípez
+510,5,Potosí,10,Sur Lípez
+511,5,Potosí,11,José María Linares
+512,5,Potosí,12,Antonio Quijarro
+513,5,Potosí,13,General Bernardino Bilbao
+514,5,Potosí,14,Daniel Campos
+515,5,Potosí,15,Modesto Omiste
+516,5,Potosí,16,Enrique Baldivieso
+601,6,Tarija,1,Cercado
+602,6,Tarija,2,Arce
+603,6,Tarija,3,Gran Chaco
+604,6,Tarija,4,Avilez
+605,6,Tarija,5,Méndez
+606,6,Tarija,6,O'Connor
+701,7,Santa Cruz,1,Andrés Ibáñez
+702,7,Santa Cruz,2,Warnes
+703,7,Santa Cruz,3,Velasco
+704,7,Santa Cruz,4,Ichilo
+705,7,Santa Cruz,5,Chiquitos
+706,7,Santa Cruz,6,Sara
+707,7,Santa Cruz,7,Cordillera
+708,7,Santa Cruz,8,Valle Grande
+709,7,Santa Cruz,9,Florida
+710,7,Santa Cruz,10,Obispo Santisteban
+711,7,Santa Cruz,11,Ñuflo de Chávez
+712,7,Santa Cruz,12,Ángel Sandoval
+713,7,Santa Cruz,13,Manuel María Caballero
+714,7,Santa Cruz,14,Germán Busch
+715,7,Santa Cruz,15,Guarayos
+801,8,Beni,1,Cercado
+802,8,Beni,2,Vaca Diez
+803,8,Beni,3,General José Ballivián
+804,8,Beni,4,Yacuma
+805,8,Beni,5,Moxos
+806,8,Beni,6,Marbán
+807,8,Beni,7,Mamoré
+808,8,Beni,8,Iténez
+809,8,Beni,9,Territorio Indígena Multiétnico
+901,9,Pando,1,Nicolás Suárez
+902,9,Pando,2,Manuripi
+903,9,Pando,3,Madre de Dios
+904,9,Pando,4,Abuná
+905,9,Pando,5,Federico Román

@@ -140,10 +140,17 @@ def _sanitize_filename(filename: str) -> str:
 async def save_documento_pdf(
     file: UploadFile,
     db: Session,
-    id_edan: int,
     id_usuario: int,
+    subfolder: str,
+    id_municipio: int | None = None,
 ) -> tuple[str, int, str, bytes]:
-    """Guarda un PDF en /uploads/edan/documentos/{id_edan}/ y devuelve (path, size, hash_sha256, contents).
+    """Guarda un PDF bajo /uploads/{subfolder}/ y devuelve (path, size, hash_sha256, contents).
+
+    El repositorio es compartido por EDAN y RIDA, asi que la carpeta de destino
+    la decide el llamador: 'edan/documentos/{id_edan}' o
+    'rida/documentos/{id_formulario_rida}'. Esta funcion solo se encarga del
+    archivo; validar que la entidad de destino exista es responsabilidad de
+    quien llama (api.repositorio.service.resolver_destino_documento).
 
     Validaciones:
       - MIME type debe ser application/pdf
@@ -172,17 +179,11 @@ async def save_documento_pdf(
     import hashlib
     hash_sha256 = hashlib.sha256(contents).hexdigest()
 
-    edan_row = db.execute(
-        text("SELECT id_municipio FROM edan.edan WHERE id_edan = :id"),
-        {"id": id_edan},
-    ).mappings().first()
-    if not edan_row:
-        raise HTTPException(status_code=404, detail=f"EDAN {id_edan} no encontrado")
-
-    codigo_ine = _get_municipio_codigo(db, edan_row["id_municipio"])
+    # El codigo INE solo va en el nombre del archivo; si el municipio no se
+    # pudo resolver se usa un marcador y el documento se guarda igual.
+    codigo_ine = _get_municipio_codigo(db, id_municipio) if id_municipio else "SINMUNICIPIO"
     timestamp_short = str(int(time.time()))[-8:] + uuid.uuid4().hex[:4]
     filename = f"doc_{codigo_ine}_{id_usuario}_{timestamp_short}.pdf"
-    subfolder = f"edan/documentos/{id_edan}"
 
     upload_dir = Path(settings.UPLOAD_DIR) / subfolder
     upload_dir.mkdir(parents=True, exist_ok=True)
