@@ -5,11 +5,10 @@ from ..dependencies import get_current_user
 
 
 # Roles permitidos para operaciones SINB
-ROLES_SINB_ADMIN = (1, 2)  # superadmin, admin
+ROLES_SINB_ADMIN = (1, 2)  # superadmin, admin — única vía de modificar/borrar catálogos
 ROLES_SINB_PRONOSTICO = (1, 2, 9)  # superadmin, admin, VIDECI Departamental
-ROLES_SINB_OBSERVACION = (1, 2, 6, 7, 8, 9, 12, 13)  # todos los roles SINB
 ROLES_SINB_VALIDACION = (1, 2, 9)  # validación manual
-ROLES_SINB_LOCAL = (6, 7, 8, 12, 13)  # roles locales (UGR, Responsable, Alcalde, Recolector, Observador)
+ROLES_SINB_LOCAL = (1, 6, 7, 8, 12, 13)  # admin + roles locales (UGR, Responsable, Alcalde, Recolector, Observador)
 
 
 def require_rol(*roles_allowed):
@@ -22,6 +21,23 @@ def require_rol(*roles_allowed):
             )
         return user
     return dependency
+
+
+def autorizar_propietario(registro: dict, user: dict, campo: str = "id_usuario_subio"):
+    """
+    Estricto: solo el usuario que creó el registro puede modificarlo/eliminarlo.
+    No hay excepción, tampoco para roles 1 o 2 (superadmin/admin).
+    Lanza HTTPException 404 si el registro no existe o 403 si no es el autor.
+    """
+    if not registro:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro no encontrado")
+    autor = registro.get(campo)
+    if autor is None or autor != user.get("id_usuario"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el usuario que subió el registro puede modificarlo",
+        )
+    return True
 
 
 def scope_geografico(user: dict, id_departamento=None, id_provincia=None, id_municipio=None):

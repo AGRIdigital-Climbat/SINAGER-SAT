@@ -85,6 +85,7 @@ def mis_reportes_localidades(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     solo_huerfanas: bool | None = Query(None, description="True=huérfanas, False=consolidadas, None=todas"),
     id_departamento: int | None = Query(None, description="Filtrar por departamento (FK shared.departamento)"),
     id_municipio: int | None = Query(None, description="Filtrar por municipio (FK shared.municipio)"),
@@ -95,6 +96,7 @@ def mis_reportes_localidades(
 ):
     sc = service.scope_mis_localidades_v2(_user, id_usuario, geo=(id_departamento, id_municipio))
     data, total = service.get_mis_localidades(db, uid=sc["id_usuario"], skip=skip, limit=limit,
+                                              todos=todos,
                                               solo_huerfanas=solo_huerfanas,
                                               solo_con_datos=(modo == "comprimido"),
                                               id_departamento=sc["id_departamento"],
@@ -109,16 +111,22 @@ def mis_reportes_localidades(
                         "(las vacías se omiten).\n\n"
                         "Todos los filtros son **opcionales** y combinables (AND):\n"
                         "- `fecha_llenado_desde` / `fecha_llenado_hasta`: rango de fecha de llenado de la cabecera.\n"
+                        "- `fecha_evento_desde` / `fecha_evento_hasta`: rango de fecha del evento.\n"
                         "- `id_tipo_evento`, `id_tipo_localidad`, `id_departamento`, `id_provincia`, `id_municipio`, "
                         "`id_estado`: filtros por FK.\n"
                         "- `solo_huerfanas`: `true`=huérfanas (`id_edan IS NULL`), `false`=consolidadas, `null`=todas.\n"
                         "- `id_usuario`: si se envía, limita a las localidades de ese usuario.\n\n"
+                        "**Alcance por rol**: 5/9→su departamento, 8→su municipio, 6/7→TODO su municipio "
+                        "(el `id_municipio` del query se ignora a favor del del token); 1-4 nacional.\n\n"
                         "Si se omite `id_departamento` y `id_municipio`, trae localidades de todo el país.")
 def filtrar_localidades(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     fecha_llenado_desde: date | None = Query(None, description="Filtrar por rango: fecha de llenado del reporte (inclusive)"),
     fecha_llenado_hasta: date | None = Query(None, description="Filtrar por rango: fecha de llenado del reporte (inclusive)"),
+    fecha_evento_desde: date | None = Query(None, description="Filtrar por rango: fecha del evento (inclusive)"),
+    fecha_evento_hasta: date | None = Query(None, description="Filtrar por rango: fecha del evento (inclusive)"),
     id_tipo_evento: int | None = Query(None, description="Filtrar por tipo de evento (FK edan.tipo_evento)"),
     id_tipo_localidad: int | None = Query(None, description="Filtrar por tipo de localidad (FK edan.tipo_localidad)"),
     id_departamento: int | None = Query(None, description="Filtrar por departamento (FK shared.departamento)"),
@@ -135,10 +143,21 @@ def filtrar_localidades(
         id_departamento = scope["id_departamento"]
     if "id_municipio" in scope:
         id_municipio = scope["id_municipio"]
+    # Rol 6/7 (roles propios): alcance de TODO su municipio. El id_municipio
+    # del query se ignora a favor del forzado del token (ver service.scope_*).
+    if _user.get("id_rol") in service.ROLES_PROPIOS:
+        mun = _user.get("id_municipio")
+        if mun is None:
+            raise HTTPException(status_code=403,
+                                detail="El usuario no tiene municipio asignado")
+        id_departamento = None
+        id_municipio = mun
     data, total = service.filtrar_localidades_documento(
-        db, skip=skip, limit=limit,
+        db, skip=skip, limit=limit, todos=todos,
         fecha_llenado_desde=fecha_llenado_desde,
         fecha_llenado_hasta=fecha_llenado_hasta,
+        fecha_evento_desde=fecha_evento_desde,
+        fecha_evento_hasta=fecha_evento_hasta,
         id_tipo_evento=id_tipo_evento,
         id_tipo_localidad=id_tipo_localidad,
         id_departamento=id_departamento,
@@ -175,13 +194,14 @@ def mis_estados_localidades(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(200, ge=1, le=1000),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
     sc = service.scope_mis_localidades_v2(_user, id_usuario)
     data, total = service.list_mis_localidades_estados(
         db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
-        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
+        id_municipio=sc["id_municipio"], skip=skip, limit=limit, todos=todos)
     return SuccessResponse(message="Estados de mis localidades listados correctamente", data=data, total=total)
 
 
@@ -524,17 +544,33 @@ def _registrar_seccion_1n(path, tag, label, tabla, create_fn, pk_col):
     @router.get(f"/localidades/{{id_localidad}}/{path}", tags=[TAG_EDAN_LOCALIDADES, tag],
                 summary=f"Listar {label} de una localidad")
     def _list(id_localidad: str, skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000),
+              todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
               db: Session = Depends(get_db), _user=Depends(get_current_user)):
         id_edan = service._resolve_localidad_id(db, id_localidad)
         service.validar_scope_localidad(db, _user, id_edan)
-        params = {"id": id_edan, "limit": limit, "skip": skip}
+        # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+        page = "" if todos else " LIMIT :limit OFFSET :skip"
+        params = {"id": id_edan}
+        if not todos:
+            params.update({"limit": limit, "skip": skip})
         rows = service._rows(db, f"""
             SELECT * FROM edan.{tabla} WHERE id_edan_localidad = :id
-            ORDER BY {pk_col} DESC LIMIT :limit OFFSET :skip
+            ORDER BY {pk_col} DESC {page}
         """, params)
         total = service._row(db, f"SELECT COUNT(*) AS c FROM edan.{tabla} WHERE id_edan_localidad = :id",
                              {"id": id_edan})["c"]
-        return SuccessResponse(message=f"{label} listados", data=[dict(r) for r in rows], total=total)
+        data = [dict(r) for r in rows]
+        if tabla == "edan_localidades_danos_vivienda":
+            # v2.53.0: la fila padre lleva el agregado comunidad; las viviendas
+            # (una por casa, con coords y foto) van anidadas. El padre solo omite
+            # coordenadas si tiene viviendas hijas; las filas legacy sin viviendas
+            # conservan las suyas.
+            for d in data:
+                d["viviendas"] = service._viviendas(db, d["id_dano_vivienda"])
+                if d["viviendas"]:
+                    d["coordenada_lat"] = None
+                    d["coordenada_lon"] = None
+        return SuccessResponse(message=f"{label} listados", data=data, total=total)
 
     schema_cls = PATH_TO_SCHEMA[path]
 

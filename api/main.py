@@ -13,6 +13,8 @@ from .edan.router_v2_edan import router as edan_router_v2_edan
 from .edan.router_v2_aprobaciones import router as edan_router_v2_aprobaciones
 from .edan.router_v2_localidades import router as edan_router_v2_localidades
 from .edan.router_v2_catalogos import router as edan_router_v2_catalogos
+from .edan.router_v2_resumen import router as edan_router_v2_resumen
+from .edan.router_v2_nuevas import router as edan_router_v2_nuevas
 from .usuarios.router import router as usuarios_router, router_v2 as usuarios_router_v2
 from .upload import router as upload_router
 from .repositorio.router import router as repositorio_router, router_v2 as repositorio_router_v2
@@ -20,6 +22,8 @@ from .firma_digital.router import router as firma_digital_router
 from .rida.router import router as rida_empadronamiento_router
 from .rida.router_eventos import router as rida_eventos_router
 from .rida.necesidades import necesidades_router
+from .rida.solicitudes import solicitudes_router
+from .ayuda_humanitaria import ayuda_humanitaria_router
 from .sinb.router_v2 import router as sinb_router
 from .sinb.router_ndvi import router as ndvi_router
 from .audit import AuditMiddleware
@@ -41,17 +45,13 @@ TAGS_METADATA_V1 = [
     {"name": "EDAN",                      "description": "Cabecera EDAN: CRUD principal, reportes agregados, catálogos (tipo evento, estado, tipo localidad), sincronización offline-first, consolidar, fotos por municipio. El estado del EDAN no se cambia por API: lo maneja el motor de aprobaciones (ver EDAN_APROBACIONES)."},
     {"name": "EDAN_LOCALIDADES",          "description": "Localidades del EDAN: CRUD anidado, sync móvil, mis-resumen/mis-reportes de huérfanas, cambio de estado, items de daños/servicios con foto y coordenadas (viales, infra pública, vivienda, agricultura, pecuario, salud, servicios básicos, unidades educativas)."},
     {"name": "SINB > Catálogos Bioculturales", "description": "Catálogos bioculturales completos (grupo, indicador, característica, comportamiento, significado) sin paginación"},
-    {"name": "SINB > Observaciones", "description": "CRUD observaciones con registros (últimos 15, filtros geográficos, validación)"},
     {"name": "SINB > Predicciones", "description": "Sistema de predicción biocultural en 3 horizontes: largo plazo (estacional), corto plazo (temporal) y avisos inmediatos (24-48h)"},
     {"name": "SINB > Predicciones > Largo Plazo (Estacionales)", "description": "Pronósticos estacionales para temporada agrícola completa con escenarios y observadores asignados"},
     {"name": "SINB > Predicciones > Corto Plazo (Temporales)", "description": "Pronósticos temporales (semanal/quincenal/mensual) con categorías y confianza"},
     {"name": "SINB > Predicciones > Avisos (Alertas 24-48h)", "description": "Alertas inminentes dictadas por productores (24-48h vigencia) con verificación rápida de cumplimiento"},
     {"name": "SINB > Validación de Predicciones", "description": "Validación automática (tarea diaria) y manual (experto) de predicciones vencidas"},
-    {"name": "SINB > Recomendaciones", "description": "Recomendaciones locales por dimensión y categoría"},
-    {"name": "SINB > Mapas GeoJSON", "description": "GeoJSON de observaciones, comunidades, municipios y manzanos para mapas web"},
-    {"name": "SINB > Reportes Enriquecidos", "description": "Reportes de observaciones, predicciones y calendario de siembra"},
-    {"name": "SINB > Observadores e Índices", "description": "Índices de acierto de observadores (CORTO y LARGO plazo), asignación a predicciones"},
-    {"name": "SINB > Galería de Evidencias", "description": "Galería colaborativa de fotos y audio de bioindicadores (múltiples usuarios pueden subir evidencias del mismo indicador)"},
+    {"name": "SINB > Recomendaciones", "description": "Recomendaciones locales basadas en bioindicadores"},
+    {"name": "SINB > Observadores", "description": "Ranking de observadores y recolectores por aportes"},
     {"name": "SINB > NDVI Satelital", "description": "Series históricas de NDVI desde Sentinel-2 (EarthSearch). Monitoreo de vegetación, alertas de sequía, evolución temporal por comunidad."},
     {"name": "Usuarios > Cuentas",        "description": "CRUD de cuentas de usuario"},
     {"name": "Usuarios > Roles",          "description": "Roles y asignación usuario-rol"},
@@ -63,6 +63,7 @@ TAGS_METADATA_V1 = [
     {"name": "Upload",                    "description": "Subida de archivos (imágenes)"},
     {"name": "Repositorio > Catálogo",    "description": "Tipos de documento PDF admitidos por el repositorio"},
     {"name": "Repositorio > Documentos",  "description": "Gestión de documentos PDF vinculados a EDAN: subir, listar, filtrar por metadata estructurada, buscar por nombre, descargar y eliminar."},
+    {"name": "RIDA > Solicitudes",        "description": "Gestión de solicitudes de ayuda/rehabilitación: creación desde formulario, checklist de requisitos, carga de documentos por requisito, flujo de aprobaciones (UGR, Alcalde, DGR, VIDECID, Dirección)."},
 ]
 
 V1_ROUTERS = [
@@ -82,13 +83,24 @@ V2_ROUTERS = [
     ("repositorio", repositorio_router_v2),
     ("edan_v2", edan_router_v2),
     ("edan_catalogos", edan_router_v2_catalogos),
+    # edan_cabecera ANTES que edan_nuevas: sus literales GET /mis-resumen,
+    # /mis-estados, /mis-reportes, /reportes/* y los catch-alls PUT|DELETE
+    # /{id:int} no deben ser capturados por los GET /{ref} nuevos de
+    # edan_nuevas (uuid_edan o id). Las rutas viejas /, /{id},
+    # /consolidar/pendientes, /{ref}/deshacer y POST /consolidar se
+    # eliminaron de cabecera: ahora sólo las nuevas (uuid §20.17) responden.
     ("edan_cabecera", edan_router_v2_edan),
+    ("edan_resumen", edan_router_v2_resumen),
+    ("edan_nuevas", edan_router_v2_nuevas),
     ("edan_aprobaciones", edan_router_v2_aprobaciones),
     ("edan_localidades", edan_router_v2_localidades),
     ("firma_digital", firma_digital_router),
     ("rida_empadronamiento", rida_empadronamiento_router),
     ("rida_eventos", rida_eventos_router),
     ("rida_necesidades", necesidades_router),
+    ("rida_solicitudes", solicitudes_router),
+    ("ayuda_humanitaria", ayuda_humanitaria_router),
+    ("almacenes", almacenes_router),
     ("sinb", sinb_router),
     ("sinb_ndvi", ndvi_router),
 ]

@@ -171,7 +171,7 @@ class PermisoBatchRequest(BaseModel):
 class SesionResponse(BaseModel):
     id_sesion: int
     id_usuario: int
-    token: str
+    token: str | None = None
     fecha_inicio: str | None = None
     fecha_expiracion: str | None = None
     ip_origen: str | None = None

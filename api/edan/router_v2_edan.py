@@ -1,13 +1,12 @@
-from typing import Literal
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..dependencies import get_current_user
 from ..database import get_db
 from ..response import SuccessResponse, MessageResponse
+from ..pagination import paginar_lista
 from . import service
 from .schemas import (
-    EdanUpdateV2, ConsolidarIn, LocalidadEstadoUpdate,
+    EdanUpdateV2, LocalidadEstadoUpdate,
     ResumenReporteResponse, ReporteGeografiaResponse, ReporteAgriculturaResponse,
     ReportePecuarioResponse, MisResumenResponse,
 )
@@ -106,12 +105,14 @@ def reportes_mis_reportes_edan(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
     sc = service.scope_mis_edan_v2(_user, id_usuario)
     data, total = service.get_mis_edans(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
-                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
+                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit,
+                                        todos=todos)
     return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
 
 
@@ -136,11 +137,16 @@ def reportes_resumen_edan(
                         "acumulados, desglose de huérfanas/consolidadas. Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_geografico_edan(
     f: dict = Depends(_filtros_dep_reporte),
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_geografico(db, f) or []
+    total = len(data)
+    data = paginar_lista(data, limit, skip, todos)
     return ReporteGeografiaResponse(message="Reporte geográfico generado correctamente",
-                                    data=data, total=len(data))
+                                    data=data, total=total)
 
 
 @router.get("/reportes/agricultura", tags=[TAG_EDAN],
@@ -150,11 +156,16 @@ def reportes_geografico_edan(
                         "Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_agricultura_edan(
     f: dict = Depends(_filtros_dep_reporte),
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_agricultura(db, f) or []
+    total = len(data)
+    data = paginar_lista(data, limit, skip, todos)
     return ReporteAgriculturaResponse(message="Reporte de agricultura generado correctamente",
-                                      data=data, total=len(data))
+                                      data=data, total=total)
 
 
 @router.get("/reportes/pecuario", tags=[TAG_EDAN],
@@ -164,18 +175,16 @@ def reportes_agricultura_edan(
                         "Scope: 5/9 → departamento; 8 → municipio.")
 def reportes_pecuario_edan(
     f: dict = Depends(_filtros_dep_reporte),
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
 ):
     data = service.reporte_pecuario(db, f) or []
+    total = len(data)
+    data = paginar_lista(data, limit, skip, todos)
     return ReportePecuarioResponse(message="Reporte de pecuario generado correctamente",
-                                   data=data, total=len(data))
-
-
-@router.get("/", tags=[TAG_EDAN], summary="Listar EDANs con filtros")
-def listar_edans(f: dict = Depends(_filtros_dep), skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=500),
-                 db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    data, total = service.get_edans(db, dict(f), skip=skip, limit=limit)
-    return SuccessResponse(message="EDANs listados correctamente", data=data, total=total)
+                                   data=data, total=total)
 
 
 @router.get("/mis-resumen", tags=[TAG_EDAN], response_model=MisResumenResponse,
@@ -202,6 +211,7 @@ def mis_estados_edan(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(200, ge=1, le=1000),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -209,7 +219,7 @@ def mis_estados_edan(
     data, total = service.list_mis_edans_estados(db, uid=sc["id_usuario"],
                                                  id_departamento=sc["id_departamento"],
                                                  id_municipio=sc["id_municipio"],
-                                                 skip=skip, limit=limit)
+                                                 skip=skip, limit=limit, todos=todos)
     return SuccessResponse(message="Estados de mis EDAN listados correctamente", data=data, total=total)
 
 
@@ -222,69 +232,15 @@ def mis_reportes_edan(
     id_usuario: int | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
     sc = service.scope_mis_edan_v2(_user, id_usuario)
     data, total = service.get_mis_edans(db, uid=sc["id_usuario"], id_departamento=sc["id_departamento"],
-                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit)
+                                        id_municipio=sc["id_municipio"], skip=skip, limit=limit,
+                                        todos=todos)
     return SuccessResponse(message="Reportes EDAN del usuario listados correctamente", data=data, total=total)
-
-
-# ============================================================================
-#  SYNC EDAN + CONSOLIDAR PENDIENTES
-# ============================================================================
-
-@router.get("/consolidar/pendientes", tags=[TAG_EDAN_LOCALIDADES],
-            responses={200: {"model": SuccessResponse}},
-            summary="Listar EDAN localidades listas para consolidar",
-            description="Devuelve las EDAN localidades huérfanas (id_edan IS NULL) agrupadas por\n"
-                        "(municipio, tipo_evento), con conteos y totales agregados.\n\n"
-                        "Por defecto muestra TODOS los estados. Use `estado` para filtrar\n"
-                        "(ILIKE: 'aprobado' matchea 'Aprobado UGR' y 'Aprobado Ajuste UGR')\n"
-                        "o `id_estado` para un estado específico.\n\n"
-                        "El UGR municipio usa esto para decidir cuáles agrupar en un nuevo EDAN.")
-def consolidar_pendientes(
-    id_municipio: int | None = Query(None, description="Municipio del UGR (opcional)"),
-    estado: str | None = Query(None, description="Estado de localidad (ILIKE, ej: 'aprobado')"),
-    id_estado: int | None = Query(None, description="ID de estado específico"),
-    db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
-):
-    scope = service.scope_geografico(_user)
-    if "id_municipio" in scope:
-        id_municipio = scope["id_municipio"]
-    if "id_departamento" in scope:
-        id_municipio = None
-    data = service.listar_consolidables(db, id_municipio=id_municipio,
-                                         estado_nombre=estado, id_estado=id_estado)
-    if "id_departamento" in scope:
-        data = [g for g in data if g.get("id_departamento") == scope["id_departamento"]]
-    if "id_municipio" in scope:
-        data = [g for g in data if g.get("id_municipio") == scope["id_municipio"]]
-    return SuccessResponse(message="EDAN localidades consolidadas listadas correctamente",
-                           data=data, total=len(data))
-
-
-
-
-@router.get("/{id}", tags=[TAG_EDAN],
-            summary="Obtener EDAN completo (detallado o compacto)",
-            description="Devuelve la cabecera del EDAN + localidades + resumen por secciones.\n\n"
-                        "**`modo=detallado`** (default): cabecera + `localidades[]` completas (las 14\n"
-                        "secciones, tengan datos o no) + `resumen_secciones` + `reportes_rea`.\n"
-                        "**`modo=compacto`**: cabecera + `localidades[]` en formato **comprimido**\n"
-                        "(los 22 flags `imp_*` + SOLO las secciones con datos, igual que localidad v2)\n"
-                        "+ `sumatorias` (totales por sección del EDAN) + `resumen_secciones` + `reportes_rea`.")
-def obtener_edan(id: int, modo: Literal["detallado", "compacto"] = Query(
-        "detallado", description="detallado=localidades con las 14 secciones; "
-                                 "compacto=localidades solo con secciones con datos + sumatorias"),
-        db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    service.validar_scope_edan(db, _user, id)
-    result = service.get_edan_completo(db, id, modo=modo)
-    if not result:
-        raise HTTPException(status_code=404, detail="EDAN no encontrado")
-    return SuccessResponse(message="EDAN obtenido correctamente", data=result)
 
 
 @router.put("/{id}", tags=[TAG_EDAN],
@@ -336,28 +292,12 @@ def eliminar_edan(id: int, permanente: bool = Query(False), db: Session = Depend
     return SuccessResponse(message="EDAN marcado para eliminación", data=result)
 
 
-@router.put("/{id}/deshacer", tags=[TAG_EDAN], dependencies=[Depends(require_rol(*ROLES_LOCALES))],
-            summary="Deshacer consolidación de un EDAN")
-def deshacer_edan(id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    try:
-        result = service.deshacer_consolidacion(db, id, _user["id_usuario"])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise db_error(e)
-    return SuccessResponse(message="EDAN deshecho correctamente", data=result)
-
-
-@router.post("/consolidar", tags=[TAG_EDAN_LOCALIDADES], dependencies=[Depends(require_rol(*ROLES_LOCALES))],
-             summary="Consolidar EDAN localidades en un nuevo EDAN")
-def consolidar(data: ConsolidarIn, db: Session = Depends(get_db), _user=Depends(get_current_user)):
-    try:
-        result = service.consolidar(db, data.id_municipio, data.id_tipo_evento, data.localidad_ids, _user["id_usuario"])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise db_error(e)
-    return SuccessResponse(message="EDAN consolidado correctamente", data=result)
+# OJO: PUT /{id}/deshacer y POST /consolidar se eliminaron de este router
+# (API vieja): ahora viven en router_v2_nuevas como PUT /{ref}/deshacer y
+# POST /consolidar con contrato uuid (§20.17) y deben ganar en enrutado
+# (main.V2_ROUTERS: edan_cabecera ANTES que edan_nuevas; aquí sólo quedan
+# las rutas no capturadas: /reportes/*, /mis-*, PUT|DELETE /{id},
+# POST /consolidar/auto, PUT /localidades/*).
 
 
 @router.post("/consolidar/auto", tags=[TAG_EDAN_LOCALIDADES], dependencies=[Depends(require_rol(*ROLES_LOCALES))],

@@ -208,8 +208,12 @@ def create_usuarios_router(open_catalogos: bool = False) -> APIRouter:
     # ──────────────────────────────────────────────
 
     @router.get("/sesiones", tags=[TAG_SES], response_model=DataListResponse[SesionResponse])
-    def listar_sesiones(id_usuario: int | None = Query(None), db: Session = Depends(get_db), _user=Depends(_catalogo_dep())):
-        items = service.get_sesiones(db, id_usuario)
+    def listar_sesiones(id_usuario: int | None = Query(None),
+                        limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: límite histórico de 100 (sin filtro de usuario)"),
+                        skip: int = Query(0, ge=0, description="Registros a saltar"),
+                        todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
+                        db: Session = Depends(get_db), _user=Depends(_catalogo_dep())):
+        items = service.get_sesiones(db, id_usuario, limit=limit, skip=skip, todos=todos)
         return SuccessResponse(message="Sesiones listadas correctamente", data=items, total=len(items))
 
     @router.get("/auditoria", tags=[TAG_AUD], response_model=DataListResponse[AuditoriaResponse],
@@ -264,6 +268,7 @@ def create_usuarios_router(open_catalogos: bool = False) -> APIRouter:
         id_rol: int | None = Query(None, description="Filtrar por rol"),
         skip: int = 0,
         limit: int = 50,
+        todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(_catalogo_dep()),
     ):
@@ -274,7 +279,7 @@ def create_usuarios_router(open_catalogos: bool = False) -> APIRouter:
                 detail="Solo se permite un filtro de geografía a la vez (departamento, provincia o municipio)",
             )
         items, total = service.get_usuarios(
-            db, id_departamento, id_provincia, id_municipio, id_rol, skip, limit,
+            db, id_departamento, id_provincia, id_municipio, id_rol, skip, limit, todos,
         )
         return SuccessResponse(message="Usuarios listados correctamente", data=items, total=total)
 

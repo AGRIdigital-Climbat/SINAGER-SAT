@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Path, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Literal
-from datetime import date
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..response import SuccessResponse, DataListResponse, DataItemResponse
+from ..pagination import pagina_limit_offset
+from ..upload import save_upload_file, delete_file_from_server
 from . import service
+from .service import _row, _rows
 from .schemas import (
     GrupoCreate, GrupoUpdate, GrupoResponse,
     IndicadorNaturalCreate, IndicadorNaturalUpdate, IndicadorNaturalResponse,
@@ -16,22 +19,20 @@ from .schemas import (
     ComportamientoCreate, ComportamientoUpdate, ComportamientoResponse,
     SignificadoCreate, SignificadoUpdate, SignificadoResponse,
     ZonaGeograficaCreate, ZonaGeograficaUpdate, ZonaGeograficaResponse,
-    CampoPronosticoCreate, CampoPronosticoUpdate, CampoPronosticoResponse,
+    CategoriaPronosticoCreate, CategoriaPronosticoUpdate, CategoriaPronosticoResponse,
     EscenarioCreate, EscenarioUpdate, EscenarioResponse,
-    CategoriaPronosticoTemporalCreate, CategoriaPronosticoTemporalUpdate,
-    DimensionRecomendacionCreate, DimensionRecomendacionUpdate,
-    CategoriaComportamientoCreate, CategoriaComportamientoUpdate,
-    ObservacionCreate, ObservacionUpdate, ObservacionResponse,
-    PronosticoEstacionalCreate, PronosticoEstacionalUpdate, PronosticoEstacionalResponse,
-    PronosticoTemporalCreate, PronosticoTemporalUpdate, PronosticoTemporalResponse,
+    PronosticoLargoCreate, PronosticoLargoUpdate, PronosticoLargoResponse,
+    PronosticoCortoCreate, PronosticoCortoUpdate, PronosticoCortoResponse,
     VerificacionPronosticoCreate, CalculoVerificacionRequest, CalculoVerificacionResponse,
-    RecomendacionLocalCreate, RecomendacionLocalUpdate,
     AvisoCreate, AvisoUpdate, AvisoResponse,
-    ObservadorIndiceCreate, ObservadorIndiceResponse,
+    ObservadorIndiceCreate, ObservadorIndiceUpdate, ObservadorIndiceResponse,
     PronosticoObservadorCreate, PronosticoObservadorResponse,
     MapaFiltros,
+    IndicadorFotoUpdate, IndicadorFotoResponse,
+    PronosticoDiarioHistoricoRequest, PronosticoDiarioResponse, PronosticoDiarioHistoricoResponse,
+    PronosticoDigitalConsultarRequest, PronosticoDigitalConsultarResponse,
 )
-from .utils import require_rol, scope_geografico, ROLES_SINB_ADMIN, ROLES_SINB_PRONOSTICO, ROLES_SINB_OBSERVACION, ROLES_SINB_VALIDACION, ROLES_SINB_LOCAL
+from .utils import require_rol, scope_geografico, autorizar_propietario, ROLES_SINB_ADMIN, ROLES_SINB_VALIDACION
 
 
 router = APIRouter(prefix="/sinb")
@@ -47,12 +48,23 @@ TAGS_PREDICCIONES_LARGO = "SINB > Predicciones > Largo Plazo (Estacionales)"
 TAGS_PREDICCIONES_CORTO = "SINB > Predicciones > Corto Plazo (Temporales)"
 TAGS_PREDICCIONES_AVISOS = "SINB > Predicciones > Avisos (Alertas 24-48h)"
 TAGS_PREDICCIONES_DIGITALES = "SINB > Predicciones > Pronósticos Digitales (Open-Meteo)"
-TAGS_OBSERVACIONES = "SINB > Observaciones"
 TAGS_VALIDACION = "SINB > Validación de Predicciones"
-TAGS_RECOMENDACIONES = "SINB > Recomendaciones"
 TAGS_MAPAS = "SINB > Mapas GeoJSON"
-TAGS_REPORTES = "SINB > Reportes Enriquecidos"
-TAGS_OBSERVADORES = "SINB > Observadores e Índices"
+TAGS_REPORTES = "SINB > Reportes"
+TAGS_OBSERVADORES = "SINB > Observadores"
+
+
+# ============================================================================
+# CONTROL DE AUTORÍA (editar/borrar: solo el usuario que creó el registro)
+# ============================================================================
+
+def _exigir_autor(db: Session, sql: str, id_, user: dict, campo: str = "id_usuario_subio"):
+    """Carga la fila y exige que el usuario sea su autor.
+
+    404 si el registro no existe, 403 si existe pero no es del usuario.
+    No hay excepción para superadmin/admin: la regla es estricta.
+    """
+    autorizar_propietario(_row(db, sql, {"id": id_}), user, campo)
 
 
 # ============================================================================
@@ -70,11 +82,10 @@ def listar_grupos(db: Session = Depends(get_db)):
 
 
 @router.post("/grupo", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))],
              summary="Crear grupo biocultural")
 def crear_grupo(data: GrupoCreate, db: Session = Depends(get_db),
                 user=Depends(get_current_user)):
-    """Crear nuevo grupo biocultural. Requiere rol admin o superadmin."""
+    """Crear nuevo grupo biocultural. Cualquier usuario autenticado."""
     result = service.create_grupo(db, data.model_dump())
     return SuccessResponse(message="Grupo creado correctamente", data=result)
 
@@ -100,9 +111,14 @@ def actualizar_grupo(id: UUID, data: GrupoUpdate, db: Session = Depends(get_db))
 
 @router.delete("/grupo/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_grupo(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar lógico de grupo (cambia estado a ELIMINADO)."""
-    service.delete_grupo(db, id)
+def eliminar_grupo(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar grupo **definitivamente** (borrado físico).
+
+    Deja registro en `sinb.registro_borrado` para que la app offline la retire de su caché.
+    Si el grupo aún tiene indicadores, comportamientos, significados o pronósticos arriba,
+    responde 409 con el detalle: retírelo con `estado: INACTIVO` o borre antes lo que lo usa."""
+    service.delete_grupo(db, id, user["id_usuario"])
     return {"message": "Grupo eliminado correctamente"}
 
 
@@ -122,8 +138,7 @@ def listar_indicadores(
     return SuccessResponse(message="Indicadores listados correctamente", data=data)
 
 
-@router.post("/indicador-natural", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
+@router.post("/indicador-natural", tags=[TAGS_CATALOGOS], status_code=201)
 def crear_indicador(data: IndicadorNaturalCreate, db: Session = Depends(get_db),
                     user=Depends(get_current_user)):
     """Crear nuevo indicador natural."""
@@ -152,9 +167,13 @@ def actualizar_indicador(id: UUID, data: IndicadorNaturalUpdate, db: Session = D
 
 @router.delete("/indicador-natural/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_indicador(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar lógico de indicador natural."""
-    service.delete_indicador_natural(db, id)
+def eliminar_indicador(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar indicador natural **definitivamente** (borrado físico).
+
+    Deja registro en `sinb.registro_borrado`. Responde 409 si todavía tiene características,
+    fotos, índices de observador o pronósticos: así ninguna foto de campo se pierde."""
+    service.delete_indicador_natural(db, id, user["id_usuario"])
     return {"message": "Indicador eliminado correctamente"}
 
 
@@ -171,9 +190,20 @@ def listar_caracteristicas(
     return SuccessResponse(message="Características listadas correctamente", data=data)
 
 
-@router.post("/caracteristica", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_caracteristica(data: CaracteristicaCreate, db: Session = Depends(get_db)):
+@router.get("/caracteristica/{id}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[CaracteristicaResponse],
+            summary="Obtener característica por ID")
+def obtener_caracteristica(id: UUID, db: Session = Depends(get_db)):
+    """Obtener característica por su ID."""
+    result = service.get_caracteristica(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Característica no encontrado")
+    return SuccessResponse(message="Característica obtenida correctamente", data=result)
+
+
+@router.post("/caracteristica", tags=[TAGS_CATALOGOS], status_code=201)
+def crear_caracteristica(data: CaracteristicaCreate, db: Session = Depends(get_db),
+                         user=Depends(get_current_user)):
     """Crear característica."""
     result = service.create_caracteristica(db, data.model_dump())
     return SuccessResponse(message="Característica creada correctamente", data=result)
@@ -191,9 +221,11 @@ def actualizar_caracteristica(id: UUID, data: CaracteristicaUpdate, db: Session 
 
 @router.delete("/caracteristica/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_caracteristica(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar característica."""
-    service.delete_caracteristica(db, id)
+def eliminar_caracteristica(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar característica **definitivamente** (borrado físico + registro de borrado).
+    Responde 409 si tiene comportamientos o pronósticos arriba."""
+    service.delete_caracteristica(db, id, user["id_usuario"])
     return {"message": "Característica eliminada correctamente"}
 
 
@@ -211,9 +243,20 @@ def listar_comportamientos(
     return SuccessResponse(message="Comportamientos listados correctamente", data=data)
 
 
-@router.post("/comportamiento", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_comportamiento(data: ComportamientoCreate, db: Session = Depends(get_db)):
+@router.get("/comportamiento/{id}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[ComportamientoResponse],
+            summary="Obtener comportamiento por ID")
+def obtener_comportamiento(id: UUID, db: Session = Depends(get_db)):
+    """Obtener comportamiento por su ID."""
+    result = service.get_comportamiento(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Comportamiento no encontrado")
+    return SuccessResponse(message="Comportamiento obtenido correctamente", data=result)
+
+
+@router.post("/comportamiento", tags=[TAGS_CATALOGOS], status_code=201)
+def crear_comportamiento(data: ComportamientoCreate, db: Session = Depends(get_db),
+                         user=Depends(get_current_user)):
     """Crear comportamiento."""
     result = service.create_comportamiento(db, data.model_dump())
     return SuccessResponse(message="Comportamiento creado correctamente", data=result)
@@ -231,9 +274,11 @@ def actualizar_comportamiento(id: UUID, data: ComportamientoUpdate, db: Session 
 
 @router.delete("/comportamiento/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_comportamiento(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar comportamiento."""
-    service.delete_comportamiento(db, id)
+def eliminar_comportamiento(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar comportamiento **definitivamente** (borrado físico + registro de borrado).
+    Responde 409 si tiene significados o pronósticos arriba."""
+    service.delete_comportamiento(db, id, user["id_usuario"])
     return {"message": "Comportamiento eliminado correctamente"}
 
 
@@ -252,9 +297,20 @@ def listar_significados(
     return SuccessResponse(message="Significados listados correctamente", data=data)
 
 
-@router.post("/significado", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_significado(data: SignificadoCreate, db: Session = Depends(get_db)):
+@router.get("/significado/{id}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[SignificadoResponse],
+            summary="Obtener significado por ID")
+def obtener_significado(id: UUID, db: Session = Depends(get_db)):
+    """Obtener significado por su ID."""
+    result = service.get_significado(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Significado no encontrado")
+    return SuccessResponse(message="Significado obtenido correctamente", data=result)
+
+
+@router.post("/significado", tags=[TAGS_CATALOGOS], status_code=201)
+def crear_significado(data: SignificadoCreate, db: Session = Depends(get_db),
+                      user=Depends(get_current_user)):
     """Crear significado."""
     result = service.create_significado(db, data.model_dump())
     return SuccessResponse(message="Significado creado correctamente", data=result)
@@ -272,9 +328,10 @@ def actualizar_significado(id: UUID, data: SignificadoUpdate, db: Session = Depe
 
 @router.delete("/significado/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_significado(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar significado."""
-    service.delete_significado(db, id)
+def eliminar_significado(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar significado **definitivamente** (borrado físico + registro de borrado)."""
+    service.delete_significado(db, id, user["id_usuario"])
     return {"message": "Significado eliminado correctamente"}
 
 
@@ -288,9 +345,20 @@ def listar_zonas_geograficas(db: Session = Depends(get_db)):
     return SuccessResponse(message="Zonas listadas correctamente", data=data)
 
 
-@router.post("/zona-geografica", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_zona_geografica(data: ZonaGeograficaCreate, db: Session = Depends(get_db)):
+@router.get("/zona-geografica/{id}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[ZonaGeograficaResponse],
+            summary="Obtener zona geográfica por ID")
+def obtener_zona_geografica(id: UUID, db: Session = Depends(get_db)):
+    """Obtener zona geográfica por su ID."""
+    result = service.get_zona_geografica(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Zona geográfica no encontrado")
+    return SuccessResponse(message="Zona geográfica obtenida correctamente", data=result)
+
+
+@router.post("/zona-geografica", tags=[TAGS_CATALOGOS], status_code=201)
+def crear_zona_geografica(data: ZonaGeograficaCreate, db: Session = Depends(get_db),
+                          user=Depends(get_current_user)):
     """Crear zona geográfica."""
     result = service.create_zona_geografica(db, data.model_dump())
     return SuccessResponse(message="Zona creada correctamente", data=result)
@@ -308,75 +376,102 @@ def actualizar_zona_geografica(id: UUID, data: ZonaGeograficaUpdate, db: Session
 
 @router.delete("/zona-geografica/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_zona_geografica(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar zona geográfica."""
-    service.delete_zona_geografica(db, id)
+def eliminar_zona_geografica(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar zona geográfica **definitivamente** (borrado físico + registro de borrado)."""
+    service.delete_zona_geografica(db, id, user["id_usuario"])
     return {"message": "Zona eliminada correctamente"}
 
 
-# --- Campo Pronóstico ---
+# --- Categoría Pronóstico ---
 
-@router.get("/campo-pronostico", tags=[TAGS_CATALOGOS],
-            summary="Listar campos de pronóstico (completo)")
-def listar_campos_pronostico(
+@router.get("/categoria-pronostico", tags=[TAGS_CATALOGOS],
+            summary="Listar categorías de pronóstico (completo)")
+def listar_categorias_pronostico(
     nombre: str | None = Query(None, description="Buscar por nombre"),
-    tipo: str | None = Query(None, description="Filtrar por tipo"),
     db: Session = Depends(get_db)
 ):
-    """Obtener campos de pronóstico activos."""
-    data = service.get_campos_pronostico(db, nombre, tipo)
-    return SuccessResponse(message="Campos listados correctamente", data=data)
+    """Obtener categorías de pronóstico activas."""
+    data = service.get_categorias_pronostico(db, nombre)
+    return SuccessResponse(message="Categorías listadas correctamente", data=data)
 
 
-@router.post("/campo-pronostico", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_campo_pronostico(data: CampoPronosticoCreate, db: Session = Depends(get_db)):
-    """Crear campo de pronóstico."""
-    result = service.create_campo_pronostico(db, data.model_dump())
-    return SuccessResponse(message="Campo creado correctamente", data=result)
-
-
-@router.put("/campo-pronostico/{id}", tags=[TAGS_CATALOGOS],
-            dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def actualizar_campo_pronostico(id: UUID, data: CampoPronosticoUpdate, db: Session = Depends(get_db)):
-    """Actualizar campo de pronóstico."""
-    result = service.update_campo_pronostico(db, id, data.model_dump(exclude_unset=True))
+@router.get("/categoria-pronostico/{id}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[CategoriaPronosticoResponse],
+            summary="Obtener categoría de pronóstico por ID")
+def obtener_categoria_pronostico(id: UUID, db: Session = Depends(get_db)):
+    """Obtener categoría de pronóstico por su ID."""
+    result = service.get_categoria_pronostico(db, id)
     if not result:
-        raise HTTPException(status_code=404, detail="Campo no encontrado")
-    return SuccessResponse(message="Campo actualizado correctamente", data=result)
+        raise HTTPException(status_code=404, detail="Categoría de pronóstico no encontrado")
+    return SuccessResponse(message="Categoría de pronóstico obtenido correctamente", data=result)
 
 
-@router.delete("/campo-pronostico/{id}", tags=[TAGS_CATALOGOS],
+@router.post("/categoria-pronostico", tags=[TAGS_CATALOGOS], status_code=201)
+def crear_categoria_pronostico(data: CategoriaPronosticoCreate, db: Session = Depends(get_db),
+                               user=Depends(get_current_user)):
+    """Crear categoría de pronóstico."""
+    result = service.create_categoria_pronostico(db, data.model_dump())
+    return SuccessResponse(message="Categoría creada correctamente", data=result)
+
+
+@router.put("/categoria-pronostico/{id}", tags=[TAGS_CATALOGOS],
+            dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
+def actualizar_categoria_pronostico(id: UUID, data: CategoriaPronosticoUpdate, db: Session = Depends(get_db)):
+    """Actualizar categoría de pronóstico."""
+    result = service.update_categoria_pronostico(db, id, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    return SuccessResponse(message="Categoría actualizada correctamente", data=result)
+
+
+@router.delete("/categoria-pronostico/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_campo_pronostico(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar campo de pronóstico."""
-    service.delete_campo_pronostico(db, id)
-    return {"message": "Campo eliminado correctamente"}
+def eliminar_categoria_pronostico(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar categoría de pronóstico **definitivamente** (borrado físico + registro de borrado).
+    Responde 409 si tiene escenarios, bloques de pronóstico, pronósticos cortos o avisos."""
+    service.delete_categoria_pronostico(db, id, user["id_usuario"])
+    return {"message": "Categoría eliminada correctamente"}
 
 
 # --- Escenario ---
 
 @router.get("/escenario", tags=[TAGS_CATALOGOS],
+            response_model=DataListResponse[EscenarioResponse],
             summary="Listar escenarios (completo)")
 def listar_escenarios(
-    id_campo_pronostico: UUID | None = Query(None, description="Filtrar por campo"),
+    id_categoria: UUID | None = Query(None, description="Filtrar por categoría"),
     db: Session = Depends(get_db)
 ):
     """Obtener escenarios activos."""
-    data = service.get_escenarios(db, id_campo_pronostico)
+    data = service.get_escenarios(db, id_categoria)
     return SuccessResponse(message="Escenarios listados correctamente", data=data)
 
 
+@router.get("/escenario/{id}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[EscenarioResponse],
+            summary="Obtener escenario por ID")
+def obtener_escenario(id: UUID, db: Session = Depends(get_db)):
+    """Obtener escenario por su ID."""
+    result = service.get_escenario(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Escenario no encontrado")
+    return SuccessResponse(message="Escenario obtenido correctamente", data=result)
+
+
 @router.post("/escenario", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_escenario(data: EscenarioCreate, db: Session = Depends(get_db)):
+             response_model=DataItemResponse[EscenarioResponse])
+def crear_escenario(data: EscenarioCreate, db: Session = Depends(get_db),
+                    user=Depends(get_current_user)):
     """Crear escenario."""
     result = service.create_escenario(db, data.model_dump())
     return SuccessResponse(message="Escenario creado correctamente", data=result)
 
 
 @router.put("/escenario/{id}", tags=[TAGS_CATALOGOS],
-            dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
+            dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))],
+            response_model=DataItemResponse[EscenarioResponse])
 def actualizar_escenario(id: UUID, data: EscenarioUpdate, db: Session = Depends(get_db)):
     """Actualizar escenario."""
     result = service.update_escenario(db, id, data.model_dump(exclude_unset=True))
@@ -387,316 +482,332 @@ def actualizar_escenario(id: UUID, data: EscenarioUpdate, db: Session = Depends(
 
 @router.delete("/escenario/{id}", tags=[TAGS_CATALOGOS],
                dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_escenario(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar escenario."""
-    service.delete_escenario(db, id)
+def eliminar_escenario(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar escenario **definitivamente** (borrado físico + registro de borrado).
+    Responde 409 si está asignado a algún bloque de pronóstico."""
+    service.delete_escenario(db, id, user["id_usuario"])
     return {"message": "Escenario eliminado correctamente"}
+
+
+# ============================================================================
+# CONTROL DE BORRADOS (sincronización offline)
+# ============================================================================
+
+@router.get("/catalogo/borrados", tags=[TAGS_CATALOGOS],
+            summary="Listar borrados físicos desde una fecha (sync offline)")
+def listar_borrados(
+    desde: datetime | None = Query(None, description="Only borrados a partir de este instante (ISO 8601). Sin valor: todos"),
+    tabla: Literal["grupo", "indicador_natural", "caracteristica", "comportamiento",
+                   "significado", "zona_geografica", "categoria_pronostico", "escenario",
+                   "avisos", "indicador_foto", "observador_indice",
+                   "pronostico_largo", "pronostico_corto"] | None = Query(
+        None, description="Filtrar por tabla borrada"),
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
+    db: Session = Depends(get_db)
+):
+    """
+    Borrar por API es físico, así que la fila desaparece sin dejar rastro en su tabla.
+    Este listado es el registro aparte (`sinb.registro_borrado`) para que la app offline
+    sepa qué retirar de su caché desde su última descarga.
+
+    Pública, igual que los catálogos. `codigo` es el código o nombre que tenía la fila y
+    `id_off` el identificador del dispositivo, cuando existía.
+    """
+    data, total = service.get_borrados(db, desde, tabla, limit=limit, skip=skip, todos=todos)
+    return SuccessResponse(message="Borrados listados correctamente", data=data, total=total)
 
 
 # --- Dimensión Recomendación ---
 
-@router.get("/dimension-recomendacion", tags=[TAGS_CATALOGOS],
-            summary="Listar dimensiones de recomendación (completo)")
-def listar_dimensiones(db: Session = Depends(get_db)):
-    """Obtener dimensiones de recomendación activas."""
-    data = service.get_dimensiones_recomendacion(db)
-    return SuccessResponse(message="Dimensiones listadas correctamente", data=data)
-
-
-@router.post("/dimension-recomendacion", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_dimension(data: DimensionRecomendacionCreate, db: Session = Depends(get_db)):
-    """Crear dimensión de recomendación."""
-    result = service.create_dimension_recomendacion(db, data.model_dump())
-    return SuccessResponse(message="Dimensión creada correctamente", data=result)
-
-
-@router.put("/dimension-recomendacion/{id}", tags=[TAGS_CATALOGOS],
-            dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def actualizar_dimension(id: UUID, data: DimensionRecomendacionUpdate, db: Session = Depends(get_db)):
-    """Actualizar dimensión."""
-    result = service.update_dimension_recomendacion(db, id, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="Dimensión no encontrada")
-    return SuccessResponse(message="Dimensión actualizada correctamente", data=result)
-
-
-@router.delete("/dimension-recomendacion/{id}", tags=[TAGS_CATALOGOS],
-               dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_dimension(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar dimensión."""
-    service.delete_dimension_recomendacion(db, id)
-    return {"message": "Dimensión eliminada correctamente"}
-
-
-# --- Categoría Comportamiento ---
-
-@router.get("/categoria-comportamiento", tags=[TAGS_CATALOGOS],
-            summary="Listar categorías de comportamiento (completo)")
-def listar_categorias(
-    id_dimension: UUID | None = Query(None, description="Filtrar por dimensión"),
-    db: Session = Depends(get_db)
-):
-    """Obtener categorías de comportamiento activas."""
-    data = service.get_categorias_comportamiento(db, id_dimension)
-    return SuccessResponse(message="Categorías listadas correctamente", data=data)
-
-
-@router.post("/categoria-comportamiento", tags=[TAGS_CATALOGOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def crear_categoria(data: CategoriaComportamientoCreate, db: Session = Depends(get_db)):
-    """Crear categoría de comportamiento."""
-    result = service.create_categoria_comportamiento(db, data.model_dump())
-    return SuccessResponse(message="Categoría creada correctamente", data=result)
-
-
-@router.put("/categoria-comportamiento/{id}", tags=[TAGS_CATALOGOS],
-            dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def actualizar_categoria(id: UUID, data: CategoriaComportamientoUpdate, db: Session = Depends(get_db)):
-    """Actualizar categoría."""
-    result = service.update_categoria_comportamiento(db, id, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="Categoría no encontrada")
-    return SuccessResponse(message="Categoría actualizada correctamente", data=result)
-
-
-@router.delete("/categoria-comportamiento/{id}", tags=[TAGS_CATALOGOS],
-               dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_categoria(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar categoría."""
-    service.delete_categoria_comportamiento(db, id)
-    return {"message": "Categoría eliminada correctamente"}
-
-
-# ============================================================================
-# OBSERVACIONES (últimos 15, paginación, filtros geográficos)
-# ============================================================================
-
-@router.get("/observacion", tags=[TAGS_OBSERVACIONES],
-            summary="Listar observaciones (últimos 15, con filtros)")
-def listar_observaciones(
-    skip: int = Query(0, ge=0, description="Saltar para paginación"),
-    limit: int = Query(15, ge=1, le=100, description="Límite de registros (default 15, max 100)"),
-    id_municipio: int | None = Query(None, description="Filtrar por municipio"),
-    id_departamento: int | None = Query(None, description="Filtrar por departamento"),
-    codigo_comunidad: str | None = Query(None, description="Filtrar por comunidad"),
-    id_usuario_responsable: int | None = Query(None, description="Filtrar por responsable"),
-    fecha_inicio_desde: date | None = Query(None, description="Fecha inicio desde"),
-    fecha_inicio_hasta: date | None = Query(None, description="Fecha inicio hasta"),
-    es_validada: bool | None = Query(None, description="Filtrar por validación"),
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user)
-):
-    """
-    Listar observaciones con paginación (default últimos 15) y filtros opcionales.
-    
-    - **Filtros geográficos**: se aplican automáticamente según el rol del usuario
-    - **Roles locales** (UGR, Responsable, Alcalde): ven solo su municipio
-    - **Roles nacionales** (admin, VIDECI): ven todos o filtran por parámetros
-    """
-    # Aplicar scope geográfico según rol
-    scope = scope_geografico(user, id_departamento, None, id_municipio)
-    filters = {
-        **scope,
-        "codigo_comunidad": codigo_comunidad,
-        "id_usuario_responsable": id_usuario_responsable,
-        "fecha_inicio_desde": fecha_inicio_desde,
-        "fecha_inicio_hasta": fecha_inicio_hasta,
-        "es_validada": es_validada,
-    }
-    
-    data, total = service.get_observaciones(db, skip=skip, limit=limit, filters=filters)
-    return SuccessResponse(message="Observaciones listadas correctamente", data=data, total=total)
-
-
-@router.get("/observacion/{id}", tags=[TAGS_OBSERVACIONES],
-            summary="Obtener observación completa con registros")
-def obtener_observacion(id: UUID, db: Session = Depends(get_db),
-                        user=Depends(get_current_user)):
-    """Obtener observación con todos sus registros anidados."""
-    result = service.get_observacion(db, id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Observación no encontrada")
-    return SuccessResponse(message="Observación obtenida correctamente", data=result)
-
-
-@router.post("/observacion", tags=[TAGS_OBSERVACIONES], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_OBSERVACION))],
-             summary="Crear observación con registros opcionales")
-def crear_observacion(data: ObservacionCreate, db: Session = Depends(get_db),
-                      user=Depends(get_current_user)):
-    """
-    Crear observación con registros opcionales.
-    
-    - **codigo_corto**: se genera automáticamente
-    - **id_usuario_responsable**: si no se envía, usa el usuario actual
-    - **observacion_registro**: lista opcional de registros anidados
-    """
-    result = service.create_observacion(db, data.model_dump(), user["id_usuario"])
-    return SuccessResponse(message="Observación creada correctamente", data=result)
-
-
-@router.put("/observacion/{id}", tags=[TAGS_OBSERVACIONES],
-            dependencies=[Depends(require_rol(*ROLES_SINB_OBSERVACION))])
-def actualizar_observacion(id: UUID, data: ObservacionUpdate, db: Session = Depends(get_db)):
-    """Actualizar observación existente."""
-    result = service.update_observacion(db, id, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="Observación no encontrada")
-    return SuccessResponse(message="Observación actualizada correctamente", data=result)
-
-
-@router.delete("/observacion/{id}", tags=[TAGS_OBSERVACIONES],
-               dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))])
-def eliminar_observacion(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar lógico de observación."""
-    service.delete_observacion(db, id)
-    return {"message": "Observación eliminada correctamente"}
 
 
 # ============================================================================
 # PRONÓSTICOS ESTACIONALES Y TEMPORALES
 # ============================================================================
 
-@router.get("/pronostico-estacional", tags=[TAGS_PREDICCIONES_LARGO],
+@router.get("/pronostico-largo", tags=[TAGS_PREDICCIONES_LARGO],
+            response_model=DataListResponse[PronosticoLargoResponse],
             summary="Listar pronósticos estacionales (últimos 15)")
 def listar_pronosticos_estacionales(
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
-    id_campo_pronostico: UUID | None = Query(None, description="Filtrar por campo"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
+    id_categoria: UUID | None = Query(None, description="Filtrar por categoría"),
     fecha_emision_desde: date | None = Query(None, description="Fecha emisión desde"),
     fecha_emision_hasta: date | None = Query(None, description="Fecha emisión hasta"),
-    estado: str | None = Query(None, description="Filtrar por estado"),
-    id_usuario_elabora: int | None = Query(None, description="Filtrar por elaborador"),
+    estado: Literal["EMITIDO", "ACEPTADO", "RECHAZADO", "EN_REVISION"] | None = Query(
+        None, description="Filtrar por estado de validación"),
+    id_usuario_subio: int | None = Query(None, description="Filtrar por elaborador"),
+    id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+    codigo_comunidad: str | None = Query(None, description="Filtrar por comunidad"),
     db: Session = Depends(get_db)
 ):
-    """Listar pronósticos estacionales con paginación y filtros."""
+    """Listar pronósticos estacionales con paginación y filtros.
+
+    - `limit`: cantidad (los más recientes primero); `skip`: offset.
+    - `todos=true`: ignora `limit`/`skip` y devuelve el conjunto completo.
+
+    Cada elemento viene con sus hijos anidados: `pronosticos[].escenarios[]` (donde vive la
+    `confianza` ALTA | MEDIA | BAJA), `recomendaciones[]` (texto libre) y `observadores[]`
+    (solo `id_usuario`, `nombre`, `usuario`, `fecha_asignacion`, `id_observador_off`).
+    """
     data, total = service.get_pronosticos_estacionales(
-        db, skip=skip, limit=limit,
-        id_campo=id_campo_pronostico,
+        db, skip=skip, limit=limit, todos=todos,
+        id_categoria=id_categoria,
         fecha_emision_desde=fecha_emision_desde,
         fecha_emision_hasta=fecha_emision_hasta,
         estado=estado,
-        id_usuario_elabora=id_usuario_elabora
+        id_usuario_subio=id_usuario_subio,
+        id_municipio=id_municipio,
+        codigo_comunidad=codigo_comunidad
     )
     return SuccessResponse(message="Pronósticos estacionales listados", data=data, total=total)
 
 
-@router.get("/pronostico-estacional/{id}", tags=[TAGS_PREDICCIONES_LARGO],
+@router.get("/pronostico-largo/{id}", tags=[TAGS_PREDICCIONES_LARGO],
+            response_model=DataItemResponse[PronosticoLargoResponse],
             summary="Obtener pronóstico estacional completo")
 def obtener_pronostico_estacional(id: UUID, db: Session = Depends(get_db)):
-    """Obtener pronóstico estacional con escenarios y observadores asignados."""
-    result = service.get_pronostico_estacional(db, id)
+    """Obtener un pronóstico estacional completo.
+
+    Devuelve la cabecera, `periodo`, `cadena_biocultural`, `contexto`, los bloques
+    `pronosticos[]` con sus `escenarios[]` (cada uno con `confianza` ALTA | MEDIA | BAJA o
+    null), las `recomendaciones[]` en texto libre y los `observadores[]` asignados.
+    La confianza **solo** está en los escenarios: los observadores no llevan confianza.
+    `tipo_registro` es INDIVIDUAL (1 observador) o COLECTIVO (2+).
+    """
+    result = service.get_pronostico_largo(db, id)
     if not result:
         raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
     return SuccessResponse(message="Pronóstico obtenido correctamente", data=result)
 
 
-@router.post("/pronostico-estacional", tags=[TAGS_PREDICCIONES_LARGO], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))],
+@router.post("/pronostico-largo", tags=[TAGS_PREDICCIONES_LARGO], status_code=201,
+             response_model=DataItemResponse[PronosticoLargoResponse],
              summary="Crear pronóstico estacional con escenarios y observadores")
-def crear_pronostico_estacional(data: PronosticoEstacionalCreate, db: Session = Depends(get_db),
+def crear_pronostico_estacional(data: PronosticoLargoCreate, db: Session = Depends(get_db),
                                  user=Depends(get_current_user)):
     """
-    Crear pronóstico estacional.
-    
-    - **escenarios**: lista opcional de escenarios con probabilidad
-    - **observadores**: lista opcional de observadores asignados
-    - **id_usuario_elabora**: si no se envía, usa el usuario actual
+    Crear pronóstico largo plazo con contrato anidado (MD 15).
+
+    - **cadena_biocultural**: grupo → indicador → característica → comportamiento (obligatoria y coherente)
+    - **periodo**: inicio y fin (fin >= inicio)
+    - **pronosticos**: 1..N bloques por categoría con sus escenarios
+    - **recomendaciones**: texto libre — cada una con `id_recomendacion` (opcional, lo genera el
+      servidor si no viene), `id_recomendacion_off` y `nombre` (el texto de la recomendación)
+    - **escenarios**: `{id_escenario, confianza}` donde `confianza` es ALTA, MEDIA o BAJA (opcional)
+    - **observadores**: 1..N obligatorios — auto-registro o en representación (recolector).
+      Solo llevan `id_usuario` (y `id_observador_off` opcional): la confianza no aplica al
+      observador, va en los **escenarios** del bloque
+    - **id_usuario_subio**: lo fija siempre el servidor (usuario actual)
+
+    **Permisos:** cualquier usuario autenticado puede crear; editar/eliminar es
+    exclusivo del autor del pronóstico (sin excepción, tampoco superadmin/admin).
+
+    Ejemplo:
+    ```json
+    {
+      "texto_observador": "Aullido ronco a finales de septiembre",
+      "id_municipio": 20302,
+      "codigo_comunidad": "05507675566-D",
+      "cadena_biocultural": {
+        "id_grupo": "a97a54ca-a4d2-4c73-81b5-18184c88a592",
+        "id_indicador_natural": "94fa9644-9b49-4b98-8a24-3d54dff31d23",
+        "id_caracteristica": "57fe3a82-c3db-4679-9267-954579061513",
+        "id_comportamiento": "ea9c032f-c37c-489b-a7f8-5fc53d25b8d4"
+      },
+      "periodo": {"inicio": "2026-09-01", "fin": "2026-12-15"},
+      "contexto": {"latitud": -17.5, "longitud": -66.1, "altitud": 3800},
+      "pronosticos": [
+        {
+          "id_categoria": "01f7aa3d-5736-44b5-8004-d9b56becd265",
+          "id_escenarios": [
+            {"id_escenario": "5f028719-7f55-488b-a4f3-be413e0e1173", "confianza": "ALTA"},
+            {"id_escenario": "9dd808be-49b1-4394-962f-dc5ab4cf7d24", "confianza": "MEDIA"},
+            {"id_escenario": "e67decf3-ffa2-46ea-b05e-d4a3e7419b8d", "confianza": "BAJA"}
+          ]
+        },
+        {
+          "id_categoria": "a714e69f-3d73-4090-95cb-513f3b13af11",
+          "id_escenarios": [{"id_escenario": "4acceb80-2150-4d94-9306-c5889c1c578e"}]
+        }
+      ],
+      "recomendaciones": [
+        {
+          "id_recomendacion_off": "rec-off-001",
+          "nombre": "Sembrar variedades de ciclo corto antes del 15 de octubre"
+        },
+        {
+          "id_recomendacion_off": "rec-off-002",
+          "nombre": "Aplicar cobertura mortera en suelos con humedad deficitaria"
+        }
+      ],
+      "observadores": [{"id_usuario": 810}]
+    }
+    ```
     """
-    result = service.create_pronostico_estacional(db, data.model_dump(), user["id_usuario"])
+    result = service.create_pronostico_largo(db, data.model_dump(), user["id_usuario"])
     return SuccessResponse(message="Pronóstico creado correctamente", data=result)
 
 
-@router.put("/pronostico-estacional/{id}", tags=[TAGS_PREDICCIONES_LARGO],
-            dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))])
-def actualizar_pronostico_estacional(id: UUID, data: PronosticoEstacionalUpdate,
-                                      db: Session = Depends(get_db)):
-    """Actualizar pronóstico estacional."""
-    result = service.update_pronostico_estacional(db, id, data.model_dump(exclude_unset=True))
+@router.put("/pronostico-largo/{id}", tags=[TAGS_PREDICCIONES_LARGO],
+            response_model=DataItemResponse[PronosticoLargoResponse])
+def actualizar_pronostico_estacional(id: UUID, data: PronosticoLargoUpdate,
+                                     db: Session = Depends(get_db),
+                                     user=Depends(get_current_user)):
+    """Actualizar pronóstico estacional (parcial: solo se modifican los campos enviados).
+    Solo el autor del pronóstico.
+
+    - `pronosticos`: si se envía, **reemplaza** todos los bloques y sus escenarios; cada
+      escenario acepta uuid plano o `{id_escenario, confianza}` con confianza ALTA | MEDIA | BAJA
+    - `recomendaciones`: si se envía, **reemplaza** todas las recomendaciones en texto libre
+    - `periodo`, `contexto`, `cadena_biocultural`: se actualiza campo a campo; los que no
+      se envían conservan su valor anterior (no hay forma de ponerlos a NULL con este PUT)
+    - `estado`: EMITIDO | ACEPTADO | RECHAZADO | EN_REVISION
+    - `observadores`: **no se editan aquí** (se ignoran); se gestionan con
+      `POST /pronostico/{id}/observadores` y `DELETE /pronostico/{id}/observador/{id_usuario}`
+
+    La respuesta trae el pronóstico completo releyendo los hijos, con la confianza solo en
+    `pronosticos[].escenarios[]`.
+    """
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_largo WHERE id = :id", id, user)
+    result = service.update_pronostico_largo(db, id, data.model_dump(exclude_unset=True))
     if not result:
         raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
     return SuccessResponse(message="Pronóstico actualizado correctamente", data=result)
 
 
-@router.delete("/pronostico-estacional/{id}", tags=[TAGS_PREDICCIONES_LARGO],
-               dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))])
-def eliminar_pronostico_estacional(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar pronóstico estacional."""
-    service.delete_pronostico_estacional(db, id)
+@router.delete("/pronostico-largo/{id}", tags=[TAGS_PREDICCIONES_LARGO])
+def eliminar_pronostico_estacional(id: UUID, db: Session = Depends(get_db),
+                                   user=Depends(get_current_user)):
+    """Eliminar pronóstico estacional. Solo el autor del pronóstico.
+
+    Borrado físico: elimina en cascada sus bloques con escenarios, sus recomendaciones y
+    sus observadores, y deja el tombstone para la sincronización offline.
+    """
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_largo WHERE id = :id", id, user)
+    service.delete_pronostico_largo(db, id, user["id_usuario"])
     return {"message": "Pronóstico eliminado correctamente"}
 
 
-@router.post("/pronostico-estacional/{id}/escenario", tags=[TAGS_PREDICCIONES_LARGO],
-             dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))],
-             summary="Agregar escenario a pronóstico")
-def agregar_escenario(id: UUID, id_escenario: UUID = Query(...),
-                      probabilidad: float = Query(..., ge=0, le=100),
-                      db: Session = Depends(get_db)):
-    """Agregar o actualizar escenario de pronóstico estacional."""
-    result = service.add_escenario_a_pronostico(db, id, id_escenario, probabilidad)
+
+@router.post("/pronostico-largo/{id}/item/{id_item}/escenario",
+             tags=[TAGS_PREDICCIONES_LARGO],
+             summary="Agregar escenario a un bloque del pronóstico")
+def agregar_escenario(id: UUID, id_item: UUID, id_escenario: UUID = Query(...),
+                      confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = Query(
+                          None, description="Confianza del escenario (opcional)"),
+                      db: Session = Depends(get_db),
+                      user=Depends(get_current_user)):
+    """Agregar o actualizar un escenario dentro de un bloque (categoría) del pronóstico.
+
+    Solo el autor. El escenario debe existir y pertenecer a la categoría del bloque
+    (`id_categoria`); si ya estaba asignado, se actualiza su `confianza`.
+    `confianza`: ALTA | MEDIA | BAJA, opcional. Otros valores devuelven 422.
+    """
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_largo WHERE id = :id", id, user)
+    result = service.add_escenario_a_pronostico(db, id, id_item, id_escenario, confianza)
     return SuccessResponse(message="Escenario agregado correctamente", data=result)
 
 
-@router.delete("/pronostico-estacional/{id}/escenario/{id_escenario}",
-               tags=[TAGS_PREDICCIONES_LARGO],
-               dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))])
-def remover_escenario(id: UUID, id_escenario: UUID, db: Session = Depends(get_db)):
-    """Remover escenario de pronóstico estacional."""
-    service.remove_escenario_de_pronostico(db, id, id_escenario)
+@router.put("/pronostico-largo/{id}/item/{id_item}/escenario/{id_escenario}",
+            tags=[TAGS_PREDICCIONES_LARGO],
+            summary="Actualizar confianza de un escenario de un bloque")
+def actualizar_escenario(id: UUID, id_item: UUID, id_escenario: UUID,
+                         confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = Query(
+                             None, description="Confianza del escenario; sin parámetro = dejarla vacía"),
+                         db: Session = Depends(get_db),
+                         user=Depends(get_current_user)):
+    """Actualizar la confianza (ALTA|MEDIA|BAJA) de un escenario ya asignado en un bloque. Solo el autor."""
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_largo WHERE id = :id", id, user)
+    result = service.update_escenario_en_pronostico(db, id, id_item, id_escenario, confianza)
+    if not result:
+        raise HTTPException(status_code=404, detail="Escenario no encontrado en el bloque")
+    return SuccessResponse(message="Escenario actualizado correctamente", data=result)
+
+
+@router.delete("/pronostico-largo/{id}/item/{id_item}/escenario/{id_escenario}",
+               tags=[TAGS_PREDICCIONES_LARGO])
+def remover_escenario(id: UUID, id_item: UUID, id_escenario: UUID,
+                      db: Session = Depends(get_db),
+                      user=Depends(get_current_user)):
+    """Remover un escenario de un bloque del pronóstico. Solo el autor."""
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_largo WHERE id = :id", id, user)
+    service.remove_escenario_de_pronostico(db, id, id_item, id_escenario)
     return {"message": "Escenario removido correctamente"}
 
 
 # --- Pronósticos Temporales (Corto Plazo) ---
 
-@router.get("/pronostico-temporal", tags=[TAGS_PREDICCIONES_CORTO],
+@router.get("/pronostico-corto", tags=[TAGS_PREDICCIONES_CORTO], response_model=SuccessResponse,
             summary="Listar pronósticos temporales (últimos 15)")
 def listar_pronosticos_temporales(
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     id_categoria: UUID | None = Query(None, description="Filtrar por categoría"),
-    id_campo_pronostico: UUID | None = Query(None, description="Filtrar por campo"),
     fecha_emision_desde: date | None = Query(None, description="Fecha emisión desde"),
-    confianza: str | None = Query(None, description="Filtrar por confianza"),
-    estado: str | None = Query(None, description="Filtrar por estado"),
+    confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = Query(
+        None, description="Filtrar por confianza del pronóstico"),
+    estado: Literal["EMITIDO", "ACEPTADO", "RECHAZADO", "EN_REVISION"] | None = Query(
+        None, description="Filtrar por estado de validación"),
+    codigo_comunidad: str | None = Query(None, description="Filtrar por comunidad"),
     db: Session = Depends(get_db)
 ):
-    """Listar pronósticos temporales con paginación."""
+    """Listar pronósticos temporales con paginación.
+
+    `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
+    """
     data, total = service.get_pronosticos_temporales(
-        db, skip=skip, limit=limit,
+        db, skip=skip, limit=limit, todos=todos,
         id_categoria=id_categoria,
-        id_campo=id_campo_pronostico,
         fecha_emision_desde=fecha_emision_desde,
         confianza=confianza,
-        estado=estado
+        estado=estado,
+        codigo_comunidad=codigo_comunidad
     )
     return SuccessResponse(message="Pronósticos temporales listados", data=data, total=total)
 
 
-@router.post("/pronostico-temporal", tags=[TAGS_PREDICCIONES_CORTO], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))])
-def crear_pronostico_temporal(data: PronosticoTemporalCreate, db: Session = Depends(get_db)):
-    """Crear pronóstico temporal."""
-    result = service.create_pronostico_temporal(db, data.model_dump())
+@router.get("/pronostico-corto/{id}", tags=[TAGS_PREDICCIONES_CORTO], response_model=SuccessResponse)
+def obtener_pronostico_corto(id: UUID, db: Session = Depends(get_db),
+                         current_user: dict = Depends(get_current_user)):
+    """Obtener pronóstico de corto plazo completo."""
+    result = service.get_pronostico_corto_by_id(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
+    return SuccessResponse(message="Pronóstico de corto plazo", data=result)
+
+
+@router.post("/pronostico-corto", tags=[TAGS_PREDICCIONES_CORTO], status_code=201)
+def crear_pronostico_temporal(data: PronosticoCortoCreate, db: Session = Depends(get_db),
+                              user=Depends(get_current_user)):
+    """Crear pronóstico temporal. Cualquier usuario autenticado."""
+    result = service.create_pronostico_corto(db, data.model_dump(), user["id_usuario"])
     return SuccessResponse(message="Pronóstico temporal creado correctamente", data=result)
 
 
-@router.put("/pronostico-temporal/{id}", tags=[TAGS_PREDICCIONES_CORTO],
-            dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))])
-def actualizar_pronostico_temporal(id: UUID, data: PronosticoTemporalUpdate,
-                                    db: Session = Depends(get_db)):
-    """Actualizar pronóstico temporal."""
-    result = service.update_pronostico_temporal(db, id, data.model_dump(exclude_unset=True))
+@router.put("/pronostico-corto/{id}", tags=[TAGS_PREDICCIONES_CORTO])
+def actualizar_pronostico_temporal(id: UUID, data: PronosticoCortoUpdate,
+                                   db: Session = Depends(get_db),
+                                   user=Depends(get_current_user)):
+    """Actualizar pronóstico temporal. Solo el autor."""
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_corto WHERE id = :id", id, user)
+    result = service.update_pronostico_corto(db, id, data.model_dump(exclude_unset=True))
     if not result:
         raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
     return SuccessResponse(message="Pronóstico actualizado correctamente", data=result)
 
 
-@router.delete("/pronostico-temporal/{id}", tags=[TAGS_PREDICCIONES_CORTO],
-               dependencies=[Depends(require_rol(*ROLES_SINB_PRONOSTICO))])
-def eliminar_pronostico_temporal(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar pronóstico temporal."""
-    service.delete_pronostico_temporal(db, id)
+@router.delete("/pronostico-corto/{id}", tags=[TAGS_PREDICCIONES_CORTO])
+def eliminar_pronostico_temporal(id: UUID, db: Session = Depends(get_db),
+                                 user=Depends(get_current_user)):
+    """Eliminar pronóstico temporal. Solo el autor."""
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.pronostico_corto WHERE id = :id", id, user)
+    service.delete_pronostico_corto(db, id, user["id_usuario"])
     return {"message": "Pronóstico eliminado correctamente"}
 
 
@@ -705,7 +816,7 @@ def eliminar_pronostico_temporal(id: UUID, db: Session = Depends(get_db)):
 # ============================================================================
 
 @router.post("/pronostico/{id}/observadores", tags=[TAGS_OBSERVADORES],
-             dependencies=[Depends(require_rol(6, 7, 8, 12, 13))],  # Roles locales
+             dependencies=[Depends(require_rol(1, 6, 7, 8, 12, 13))],
              summary="Asignar observadores a pronóstico (recolector → observadores)")
 def asignar_observadores(
     id: UUID,
@@ -718,6 +829,9 @@ def asignar_observadores(
     
     **Requiere que todos los observadores sean del mismo municipio.**
     El recolector menciona y destaca los nombres de los observadores locales.
+    
+    `confianza` solo aplica a pronósticos **temporales**; en los estacionales (largo) se
+    ignora, porque la confianza de esos va en los escenarios de cada bloque.
     """
     result = service.asignar_observadores_a_pronostico(
         db, id, data.tipo_pronostico, data.id_observadores, data.confianza,
@@ -727,7 +841,7 @@ def asignar_observadores(
 
 
 @router.delete("/pronostico/{id}/observador/{id_usuario}", tags=[TAGS_OBSERVADORES],
-               dependencies=[Depends(require_rol(6, 7, 8, 12, 13))])
+               dependencies=[Depends(require_rol(1, 6, 7, 8, 12, 13))])
 def remover_observador(
     id: UUID,
     id_usuario: int,
@@ -739,13 +853,32 @@ def remover_observador(
     return {"message": "Observador removido correctamente"}
 
 
+@router.get("/pronostico/{id}/observadores", tags=[TAGS_OBSERVADORES],
+            summary="Listar observadores asignados a un pronóstico")
+def listar_observadores_de_pronostico(
+    id: UUID,
+    tipo_pronostico: Literal["estacional", "temporal"] = Query(...),
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
+    db: Session = Depends(get_db)
+):
+    """Observadores asignados a un pronóstico estacional o temporal.
+
+    `confianza` solo tiene valor en los pronósticos **temporales**; en los estacionales
+    siempre devuelve null porque en largo plazo la confianza vive en los escenarios.
+    """
+    data, total = service.get_observadores_de_pronostico(
+        db, id, tipo_pronostico, limit=limit, skip=skip, todos=todos)
+    return SuccessResponse(message="Observadores asignados listados", data=data, total=total)
+
+
 # ============================================================================
 # VALIDACIÓN DE PRONÓSTICOS (Automática y Manual)
 # ============================================================================
 
 @router.post("/verificacion/calcular", tags=[TAGS_VALIDACION],
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))],
-             summary="Calcular verificación AUTOMÁTICA de pronósticos vencidos")
+             summary="Calcular verificación AUTOMÁTICA de pronósticos vencidos (cron)")
 def calcular_verificacion_automatica(
     data: CalculoVerificacionRequest,
     db: Session = Depends(get_db)
@@ -767,9 +900,14 @@ def calcular_verificacion_automatica(
 
 @router.get("/verificacion/pendientes", tags=[TAGS_VALIDACION],
             summary="Listar pronósticos pendientes de verificación")
-def listar_verificaciones_pendientes(db: Session = Depends(get_db)):
+def listar_verificaciones_pendientes(
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
+    db: Session = Depends(get_db),
+):
     """Obtener lista de pronósticos vencidos pendientes de verificación."""
-    data = service.get_verificaciones_pendientes(db)
+    data = service.get_verificaciones_pendientes(db, limit=limit, skip=skip, todos=todos)
     return SuccessResponse(message="Verificaciones pendientes listadas", data=data)
 
 
@@ -803,99 +941,109 @@ def validar_pronostico_manual(
 
 
 # ============================================================================
-# RECOMENDACIONES LOCALES
+# RANKING DE OBSERVADORES Y RECOLECTORES
 # ============================================================================
 
-@router.get("/recomendacion-local", tags=[TAGS_RECOMENDACIONES],
-            summary="Listar recomendaciones locales (últimos 15)")
-def listar_recomendaciones(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(15, ge=1, le=100),
-    id_dimension: UUID | None = Query(None, description="Filtrar por dimensión"),
-    id_categoria: UUID | None = Query(None, description="Filtrar por categoría"),
+@router.get("/observadores/ranking", tags=[TAGS_OBSERVADORES],
+            summary="Ranking de observadores por aportes")
+def ranking_observadores(
+    rol: int | None = Query(None, description="Filtrar por rol (12=recolector, 13=observador)"),
     id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+    desde: date | None = Query(None, description="Fecha desde"),
+    hasta: date | None = Query(None, description="Fecha hasta"),
+    limite: int = Query(20, ge=1, le=100, description="Top N"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT (omite también `limite`)"),
     db: Session = Depends(get_db)
 ):
-    """Listar recomendaciones locales con paginación."""
-    from sqlalchemy import text
-    params = {"limit": limit, "skip": skip}
-    where = ["rl.estado = 'ACTIVO'"]
+    """
+    Ranking de usuarios por cantidad de reportes:
+    - Pronósticos largo plazo
+    - Pronósticos corto plazo  
+    - Avisos
+    - Fotos de indicadores naturales
     
-    if id_dimension:
-        where.append("rl.id_dimension = :id_dimension")
-        params["id_dimension"] = id_dimension
-    if id_categoria:
-        where.append("rl.id_categoria = :id_categoria")
-        params["id_categoria"] = id_categoria
+    Retorna posición, id_usuario, nombre, rol, conteos por tipo y total.
+    """
+    where = ["u.activo = true"]
+    params = {"limite": limite}
+    
+    if rol:
+        where.append("u.id_rol = :rol")
+        params["rol"] = rol
     if id_municipio:
-        where.append("rl.id_municipio = :id_municipio")
+        where.append("u.id_municipio = :id_municipio")
         params["id_municipio"] = id_municipio
     
     where_clause = " AND ".join(where)
+    page, page_params = pagina_limit_offset(None if todos else limite, skip, todos)
+    params.update(page_params)
     
     data = service._rows(db, f"""
-        SELECT rl.*, d.nombre as dimension_nombre, c.nombre as categoria_nombre,
-               m.nombre as municipio_nombre
-        FROM sinb.recomendacion_local rl
-        JOIN sinb.dimension_recomendacion d ON d.id = rl.id_dimension
-        JOIN sinb.categoria_comportamiento c ON c.id = rl.id_categoria
-        LEFT JOIN shared.municipio m ON m.id = rl.id_municipio
+        WITH conteos AS (
+            SELECT id_usuario_subio as id_usuario, 
+                   'pronostico_largo' as tipo, COUNT(*) as cantidad
+            FROM sinb.pronostico_largo WHERE id_usuario_subio IS NOT NULL
+            GROUP BY id_usuario_subio
+            UNION ALL
+            SELECT id_usuario_subio, 'pronostico_corto', COUNT(*)
+            FROM sinb.pronostico_corto WHERE id_usuario_subio IS NOT NULL
+            GROUP BY id_usuario_subio
+            UNION ALL
+            SELECT id_usuario_subio, 'avisos', COUNT(*)
+            FROM sinb.avisos WHERE id_usuario_subio IS NOT NULL
+            GROUP BY id_usuario_subio
+            UNION ALL
+            SELECT id_usuario_subio, 'fotos', COUNT(*)
+            FROM sinb.indicador_foto
+            GROUP BY id_usuario_subio
+        ),
+        total_por_usuario AS (
+            SELECT id_usuario, SUM(cantidad) as total
+            FROM conteos
+            GROUP BY id_usuario
+        )
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY t.total DESC) as posicion,
+            u.id_usuario,
+            u.usuario,
+            u.nombre,
+            u.id_rol,
+            r.nombre as rol_nombre,
+            COALESCE((SELECT cantidad FROM conteos WHERE id_usuario = u.id_usuario AND tipo = 'pronostico_largo'), 0) as pronosticos_largo,
+            COALESCE((SELECT cantidad FROM conteos WHERE id_usuario = u.id_usuario AND tipo = 'pronostico_corto'), 0) as pronosticos_corto,
+            COALESCE((SELECT cantidad FROM conteos WHERE id_usuario = u.id_usuario AND tipo = 'avisos'), 0) as avisos,
+            COALESCE((SELECT cantidad FROM conteos WHERE id_usuario = u.id_usuario AND tipo = 'fotos'), 0) as fotos,
+            t.total
+        FROM total_por_usuario t
+        JOIN usuarios.usuario u ON u.id_usuario = t.id_usuario
+        JOIN usuarios.rol r ON r.id_rol = u.id_rol
         WHERE {where_clause}
-        ORDER BY rl.creado_en DESC
-        LIMIT :limit OFFSET :skip
+        ORDER BY t.total DESC
+        {page}
     """, params)
     
-    return SuccessResponse(message="Recomendaciones listadas", data=data)
-
-
-@router.post("/recomendacion-local", tags=[TAGS_RECOMENDACIONES], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_LOCAL))])
-def crear_recomendacion(data: RecomendacionLocalCreate, db: Session = Depends(get_db),
-                        user=Depends(get_current_user)):
-    """Crear recomendación local."""
-    payload = data.model_dump()
-    if not payload.get("id_usuario_elabora"):
-        payload["id_usuario_elabora"] = user["id_usuario"]
-    
-    result = service._row(db, """
-        INSERT INTO sinb.recomendacion_local 
-        (texto, id_dimension, id_categoria, codigo_comunidad, id_municipio, 
-         id_usuario_elabora, estado)
-        VALUES (:texto, :id_dimension, :id_categoria, :codigo_comunidad, :id_municipio,
-                :id_usuario_elabora, 'ACTIVO')
-        RETURNING *
-    """, payload)
-    db.commit()
-    return SuccessResponse(message="Recomendación creada correctamente", data=result)
-
-
-@router.delete("/recomendacion-local/{id}", tags=[TAGS_RECOMENDACIONES],
-               dependencies=[Depends(require_rol(*ROLES_SINB_LOCAL))])
-def eliminar_recomendacion(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar recomendación local."""
-    service._execute(db, """
-        UPDATE sinb.recomendacion_local SET estado = 'ELIMINADO' WHERE id = :id
-    """, {"id": id})
-    db.commit()
-    return {"message": "Recomendación eliminada correctamente"}
+    return SuccessResponse(message="Ranking obtenido", data=data)
 
 
 # ============================================================================
-# AVISOS DE CORTO PLAZO
-# ============================================================================
 
-@router.get("/aviso", tags=[TAGS_PREDICCIONES_AVISOS],
+@router.get("/avisos", tags=[TAGS_PREDICCIONES_AVISOS],
             summary="Listar avisos de corto plazo (últimos 15)")
 def listar_avisos(
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     id_municipio: int | None = Query(None, description="Filtrar por municipio"),
     codigo_comunidad: str | None = Query(None, description="Filtrar por comunidad"),
     vigente: bool | None = Query(None, description="Solo vigentes"),
     db: Session = Depends(get_db)
 ):
-    """Listar avisos de corto plazo con paginación y filtros."""
-    params = {"limit": limit, "skip": skip}
+    """Listar avisos de corto plazo con paginación y filtros.
+
+    `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
+    """
+    params = {}
     where = ["a.estado = 'ACTIVO'"]
     
     if id_municipio:
@@ -909,57 +1057,83 @@ def listar_avisos(
     
     where_clause = " AND ".join(where)
     
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    if not todos:
+        params.update({"limit": limit, "skip": skip})
+
     data = service._rows(db, f"""
-        SELECT a.*, cp.nombre as campo_nombre, m.nombre as municipio_nombre,
+        SELECT a.*, cp.nombre as categoria_nombre, m.nombre as municipio_nombre,
                u.nombre as emisor_nombre
-        FROM sinb.aviso a
-        LEFT JOIN sinb.campo_pronostico cp ON cp.id = a.id_campo_pronostico
+        FROM sinb.avisos a
+        LEFT JOIN sinb.categoria_pronostico cp ON cp.id = a.id_categoria
         LEFT JOIN shared.municipio m ON m.id = a.id_municipio
-        LEFT JOIN usuarios.usuario u ON u.id_usuario = a.id_usuario_emite
+        LEFT JOIN usuarios.usuario u ON u.id_usuario = a.id_usuario_subio
         WHERE {where_clause}
         ORDER BY a.fecha_emision DESC
-        LIMIT :limit OFFSET :skip
+        {page}
     """, params)
     
     return SuccessResponse(message="Avisos listados", data=data)
 
 
-@router.post("/aviso", tags=[TAGS_PREDICCIONES_AVISOS], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_LOCAL))])
+@router.get("/avisos/{id}", tags=[TAGS_PREDICCIONES_AVISOS],
+            response_model=DataItemResponse[AvisoResponse],
+            summary="Obtener aviso por ID")
+def obtener_aviso(id: UUID, db: Session = Depends(get_db)):
+    """Obtener un aviso por su ID."""
+    result = service.get_aviso(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Aviso no encontrado")
+    return SuccessResponse(message="Aviso obtenido correctamente", data=result)
+
+
+@router.post("/avisos", tags=[TAGS_PREDICCIONES_AVISOS], status_code=201)
 def crear_aviso(data: AvisoCreate, db: Session = Depends(get_db),
                 user=Depends(get_current_user)):
     """
-    Crear aviso de corto plazo.
-    
+    Crear aviso de corto plazo. Cualquier usuario autenticado.
+
     **Flujo:** El productor dicta el aviso («va a granizar») → se asigna a comunidad →
     vence en 24-48h → se verifica si cumplió.
     """
     payload = data.model_dump()
     payload["codigo"] = f"AV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    payload["id_usuario_emite"] = user["id_usuario"]
-    payload["fecha_vencimiento"] = f"NOW() + INTERVAL '{data.vigencia_horas} HOURS'"
+    payload["id_usuario_subio"] = user["id_usuario"]
+    from datetime import timedelta
+    payload["fecha_vencimiento"] = datetime.now() + timedelta(hours=data.vigencia_horas)
     
-    result = service._row(db, """
-        INSERT INTO sinb.aviso 
-        (codigo, id_campo_pronostico, codigo_comunidad, id_municipio, mensaje,
-         fecha_emision, vigencia_horas, fecha_vencimiento, id_usuario_emite, estado)
-        VALUES (:codigo, :id_campo_pronostico, :codigo_comunidad, :id_municipio, :mensaje,
-                NOW(), :vigencia_horas, NOW() + INTERVAL ':vigencia_horas HOURS',
-                :id_usuario_emite, 'ACTIVO')
+    result = service._crear_unico(db, """
+        INSERT INTO sinb.avisos 
+        (codigo, id_categoria, codigo_comunidad, id_municipio, mensaje,
+         fecha_emision, vigencia_horas, fecha_vencimiento, id_usuario_subio, estado)
+        VALUES (:codigo, :id_categoria, :codigo_comunidad, :id_municipio, :mensaje,
+                NOW(), :vigencia_horas, :fecha_vencimiento,
+                :id_usuario_subio, 'ACTIVO')
         RETURNING *
-    """, payload)
-    db.commit()
+    """, payload, f"El aviso '{payload['codigo']}'")
     return SuccessResponse(message="Aviso creado correctamente", data=result)
 
 
-@router.delete("/aviso/{id}", tags=[TAGS_PREDICCIONES_AVISOS],
-               dependencies=[Depends(require_rol(*ROLES_SINB_LOCAL))])
-def eliminar_aviso(id: UUID, db: Session = Depends(get_db)):
-    """Eliminar aviso."""
-    service._execute(db, """
-        UPDATE sinb.aviso SET estado = 'ELIMINADO' WHERE id = :id
-    """, {"id": id})
-    db.commit()
+@router.put("/avisos/{id}", tags=[TAGS_PREDICCIONES_AVISOS],
+            response_model=DataItemResponse[AvisoResponse],
+            summary="Actualizar aviso de corto plazo")
+def actualizar_aviso(id: UUID, data: AvisoUpdate, db: Session = Depends(get_db),
+                     user=Depends(get_current_user)):
+    """Actualizar mensaje/vigencia/estado de un aviso. Solo el autor."""
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.avisos WHERE id = :id", id, user)
+    result = service.update_aviso(db, id, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="Aviso no encontrado")
+    return SuccessResponse(message="Aviso actualizado correctamente", data=result)
+
+
+@router.delete("/avisos/{id}", tags=[TAGS_PREDICCIONES_AVISOS])
+def eliminar_aviso(id: UUID, db: Session = Depends(get_db),
+                   user=Depends(get_current_user)):
+    """Eliminar aviso **definitivamente** (borrado físico + registro de borrado). Solo el autor."""
+    _exigir_autor(db, "SELECT id_usuario_subio FROM sinb.avisos WHERE id = :id", id, user)
+    service.delete_aviso(db, id, user["id_usuario"])
     return {"message": "Aviso eliminado correctamente"}
 
 
@@ -972,28 +1146,37 @@ def eliminar_aviso(id: UUID, db: Session = Depends(get_db)):
 def listar_observadores_indice(
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     id_usuario: int | None = Query(None, description="Filtrar por usuario"),
-    tipo: str | None = Query(None, description="CORTO o LARGO"),
+    tipo: Literal["ESTACIONAL", "TEMPORAL"] | None = Query(
+        None, description="Tipo de pronóstico: ESTACIONAL (largo plazo) o TEMPORAL (corto plazo)"),
     db: Session = Depends(get_db)
 ):
     """
     Listar observador_indice: mide aciertos de cada observador.
     
-    - **tipo CORTO**: viene de avisos (§6A)
-    - **tipo LARGO**: viene de pronósticos estacionales (§6.4)
+    - **tipo TEMPORAL**: índice del pronóstico de corto plazo (avisos, §6A)
+    - **tipo ESTACIONAL**: índice del pronóstico de largo plazo (§6.4)
+    - `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
     """
-    params = {"limit": limit, "skip": skip}
-    where = ["estado = 'ACTIVO'"]
-    
+    params = {}
+    # sinb.observador_indice no tiene columna `estado`: no se filtra por ella
+    where = ["1 = 1"]
+
     if id_usuario:
         where.append("oi.id_usuario = :id_usuario")
         params["id_usuario"] = id_usuario
     if tipo:
-        where.append("oi.tipo = :tipo::sinb.tipo_pronostico")
+        where.append("oi.tipo = CAST(:tipo AS sinb.tipo_pronostico)")
         params["tipo"] = tipo
     
     where_clause = " AND ".join(where)
     
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    if not todos:
+        params.update({"limit": limit, "skip": skip})
+
     data = service._rows(db, f"""
         SELECT oi.*, u.nombre as usuario_nombre, i.nombre_cientifico as indicador_nombre
         FROM sinb.observador_indice oi
@@ -1001,49 +1184,75 @@ def listar_observadores_indice(
         LEFT JOIN sinb.indicador_natural i ON i.id = oi.id_indicador_natural
         WHERE {where_clause}
         ORDER BY oi.fecha_calculo DESC
-        LIMIT :limit OFFSET :skip
+        {page}
     """, params)
     
     return SuccessResponse(message="Índices listados", data=data)
 
 
-@router.post("/observador-indice", tags=[TAGS_OBSERVADORES], status_code=201,
-             dependencies=[Depends(require_rol(*ROLES_SINB_LOCAL))])
-def crear_observador_indice(data: ObservadorIndiceCreate, db: Session = Depends(get_db)):
-    """Crear registro de observador índice."""
+@router.get("/observador-indice/{id}", tags=[TAGS_OBSERVADORES],
+            response_model=DataItemResponse[ObservadorIndiceResponse],
+            summary="Obtener índice de un observador por ID")
+def obtener_observador_indice(id: UUID, db: Session = Depends(get_db)):
+    """Obtener un registro de observador índice por su ID."""
+    result = service.get_observador_indice(db, id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Índice no encontrado")
+    return SuccessResponse(message="Índice obtenido correctamente", data=result)
+
+
+@router.post("/observador-indice", tags=[TAGS_OBSERVADORES], status_code=201)
+def crear_observador_indice(data: ObservadorIndiceCreate, db: Session = Depends(get_db),
+                            user=Depends(get_current_user)):
+    """Crear registro de observador índice. Cualquier usuario autenticado.
+
+    **id_usuario siempre se fuerza al usuario actual**: nadie puede registrar
+    un índice en nombre de otra persona.
+    """
+    payload = data.model_dump()
+    payload["id_usuario"] = user["id_usuario"]
     result = service._row(db, """
         INSERT INTO sinb.observador_indice 
         (id_usuario, id_indicador_natural, tipo, valor, fecha_calculo)
-        VALUES (:id_usuario, :id_indicador_natural, :tipo::sinb.tipo_pronostico,
+        VALUES (:id_usuario, :id_indicador_natural, CAST(:tipo AS sinb.tipo_pronostico),
                 :valor, :fecha_calculo)
         ON CONFLICT (id_usuario, id_indicador_natural, tipo)
         DO UPDATE SET valor = :valor, fecha_calculo = :fecha_calculo
         RETURNING *
-    """, data.model_dump())
+    """, payload)
     db.commit()
-    return SuccessResponse(message="Índice creado correctamente", data=result)
+    return SuccessResponse(message="Índice creado correctamente",
+                           data=service.get_observador_indice(db, result["id"]))
+
+
+@router.put("/observador-indice/{id}", tags=[TAGS_OBSERVADORES],
+            response_model=DataItemResponse[ObservadorIndiceResponse],
+            summary="Actualizar índice de un observador")
+def actualizar_observador_indice(id: UUID, data: ObservadorIndiceUpdate,
+                                 db: Session = Depends(get_db),
+                                 user=Depends(get_current_user)):
+    """Actualizar valor/fecha de un índice. Solo el dueño del índice."""
+    _exigir_autor(db, "SELECT id_usuario FROM sinb.observador_indice WHERE id = :id",
+                  id, user, campo="id_usuario")
+    result = service.update_observador_indice(db, id, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="Índice no encontrado")
+    return SuccessResponse(message="Índice actualizado correctamente", data=result)
+
+
+@router.delete("/observador-indice/{id}", tags=[TAGS_OBSERVADORES])
+def eliminar_observador_indice(id: UUID, db: Session = Depends(get_db),
+                               user=Depends(get_current_user)):
+    """Eliminar un índice. Solo el dueño del índice."""
+    _exigir_autor(db, "SELECT id_usuario FROM sinb.observador_indice WHERE id = :id",
+                  id, user, campo="id_usuario")
+    service.delete_observador_indice(db, id, user["id_usuario"])
+    return {"message": "Índice eliminado correctamente"}
 
 
 # ============================================================================
 # REPORTES ENRIQUECIDOS
 # ============================================================================
-
-@router.get("/reporte/observaciones", tags=[TAGS_REPORTES],
-            summary="Reporte enriquecido de observaciones")
-def reporte_observaciones(
-    id_municipio: int | None = Query(None, description="Filtrar por municipio"),
-    db: Session = Depends(get_db)
-):
-    """
-    Reporte enriquecido de observaciones:
-    - Totales
-    - Por comunidad (top 20)
-    - Por indicador (top 20)
-    - Por estado de validación
-    """
-    filters = {"id_municipio": id_municipio} if id_municipio else {}
-    data = service.get_reporte_observaciones_resumen(db, filters)
-    return SuccessResponse(message="Reporte generado", data=data)
 
 
 @router.get("/reporte/pronosticos", tags=[TAGS_REPORTES],
@@ -1059,99 +1268,9 @@ def reporte_pronosticos(db: Session = Depends(get_db)):
     return SuccessResponse(message="Reporte generado", data=data)
 
 
-@router.get("/reporte/calendario-siembra", tags=[TAGS_REPORTES],
-            summary="Calendario de siembra por municipio")
-def reporte_calendario_siembra(
-    id_municipio: int | None = Query(None, description="Filtrar por municipio"),
-    fecha_desde: date | None = Query(None, description="Fecha desde"),
-    fecha_hasta: date | None = Query(None, description="Fecha hasta"),
-    db: Session = Depends(get_db)
-):
-    """
-    Obtener calendario de siembra consolidado por municipio.
-    Muestra épocas de siembra recomendadas por cultivo.
-    """
-    data = service.get_calendario_siembra(db, id_municipio, fecha_desde, fecha_hasta)
-    return SuccessResponse(message="Calendario obtenido", data=data)
-
-
 # ============================================================================
 # MAPAS GEOJSON
 # ============================================================================
-
-@router.get("/mapa/observaciones/geojson", tags=[TAGS_MAPAS],
-            summary="GeoJSON de observaciones por filtros geográficos")
-def mapa_observaciones_geojson(
-    id_departamento: int | None = Query(None, description="Filtrar por departamento"),
-    id_provincia: int | None = Query(None, description="Filtrar por provincia"),
-    id_municipio: int | None = Query(None, description="Filtrar por municipio"),
-    codigo_comunidad: str | None = Query(None, description="Filtrar por comunidad"),
-    fecha_inicio: date | None = Query(None, description="Fecha inicio"),
-    fecha_fin: date | None = Query(None, description="Fecha fin"),
-    db: Session = Depends(get_db)
-):
-    """
-    **Mapa de observaciones en GeoJSON** para Leaflet/Mapbox.
-    
-    **Filtros geográficos:** departamento, provincia, municipio, comunidad
-    **Propiedades:** comunidad, municipio, provincia, departamento, total_observaciones, indicadores
-    
-    Retorna FeatureCollection RFC 7946, EPSG:4326.
-    """
-    params = {}
-    where = ["o.estado = 'ACTIVO'"]
-    
-    if id_departamento:
-        where.append("d.id = :id_departamento")
-        params["id_departamento"] = id_departamento
-    if id_provincia:
-        where.append("p.id = :id_provincia")
-        params["id_provincia"] = id_provincia
-    if id_municipio:
-        where.append("m.id = :id_municipio")
-        params["id_municipio"] = id_municipio
-    if codigo_comunidad:
-        where.append("o.codigo_comunidad = :codigo_comunidad")
-        params["codigo_comunidad"] = codigo_comunidad
-    if fecha_inicio:
-        where.append("o.fecha_inicio >= :fecha_inicio")
-        params["fecha_inicio"] = fecha_inicio
-    if fecha_fin:
-        where.append("o.fecha_inicio <= :fecha_fin")
-        params["fecha_fin"] = fecha_fin
-    
-    where_clause = " AND ".join(where)
-    
-    features = service._rows(db, f"""
-        SELECT 
-            jsonb_build_object(
-                'type', 'Feature',
-                'id', o.codigo_comunidad,
-                'geometry', ST_AsGeoJSON(c.geom)::jsonb,
-                'properties', jsonb_build_object(
-                    'codigo_comunidad', o.codigo_comunidad,
-                    'comunidad', c.nombre,
-                    'municipio', m.nombre,
-                    'provincia', p.nombre,
-                    'departamento', d.nombre,
-                    'total_observaciones', COUNT(o.id),
-                    'ultimo_registro', MAX(o.fecha_inicio)
-                )
-            ) as feature
-        FROM sinb.observacion o
-        JOIN shared.comunidades c ON c.codigo_ine = o.codigo_comunidad
-        JOIN shared.municipio m ON m.id = c.id_municipio
-        JOIN shared.provincia p ON p.id = m.id_provincia
-        JOIN shared.departamento d ON d.id = p.id_departamento
-        WHERE {where_clause}
-        GROUP BY o.codigo_comunidad, c.geom, c.nombre, m.nombre, p.nombre, d.nombre
-    """, params)
-    
-    return {
-        "type": "FeatureCollection",
-        "features": [f["feature"] for f in features]
-    }
-
 
 @router.get("/mapa/comunidades/geojson", tags=[TAGS_MAPAS],
             summary="GeoJSON de comunidades por municipio/departamento")
@@ -1320,16 +1439,17 @@ def mapa_pronosticos_geojson(
                 'geometry', ST_AsGeoJSON(m.geom)::jsonb,
                 'properties', jsonb_build_object(
                     'municipio', m.nombre,
-                    'total_pronosticos', COUNT(pe.id),
+                    'total_pronosticos', COUNT(DISTINCT pe.id),
                     'ultima_emision', MAX(pe.fecha_emision),
                     'campos', ARRAY_AGG(DISTINCT cp.nombre)
                 )
             ) as feature
-        FROM sinb.pronostico_estacional pe
+        FROM sinb.pronostico_largo pe
+        JOIN sinb.pronostico_largo_item pei ON pei.id_pronostico_largo = pe.id
         JOIN shared.municipio m ON m.id = pe.id_municipio
         JOIN shared.provincia p ON p.id = m.id_provincia
         JOIN shared.departamento d ON d.id = p.id_departamento
-        JOIN sinb.campo_pronostico cp ON cp.id = pe.id_campo_pronostico
+        JOIN sinb.categoria_pronostico cp ON cp.id = pei.id_categoria
         WHERE {where_clause}
         GROUP BY m.id, m.nombre, m.geom
     """, params)
@@ -1355,6 +1475,7 @@ def get_pronosticos_diarios(
     fecha_hasta: date = Query(None, description="Fecha hasta"),
     skip: int = Query(0, ge=0, description="Saltar registros para paginación"),
     limit: int = Query(100, ge=1, le=500, description="Límite de registros (default: 100, max: 500)"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -1374,10 +1495,10 @@ def get_pronosticos_diarios(
     - `id_municipio`: Filtrar por municipio específico
     
     **Notas:**
-    - Los datos se actualizan automáticamente 2 veces al día (06:00 y 18:00)
-    - Horizonte: 7 días
+    - Los datos se actualizan automáticamente 2 veces al día (06:00 y 18:00 hora de Bolivia)
+    - Horizonte: 16 días (hoy inclusive); sin `fecha_hasta` se devuelve exactamente ese tramo
     - Filtros se aplican según el rol del usuario (scope geográfico)
-    - Paginación: skip/limit (default 100 registros)
+    - Paginación: skip/limit (default 100 registros); `todos=true` devuelve todo
     """
     # Aplicar scope geográfico según rol del usuario
     from .utils import scope_geografico
@@ -1397,7 +1518,8 @@ def get_pronosticos_diarios(
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
         skip=skip,
-        limit=limit
+        limit=limit,
+        todos=todos
     )
     
     return SuccessResponse(
@@ -1408,8 +1530,8 @@ def get_pronosticos_diarios(
 
 
 @router.get("/pronostico-digital/diario/{id_municipio}", 
-            tags=[TAGS_PREDICCIONES_DIGITALES],
-            summary="Obtener pronóstico diario por municipio específico")
+             tags=[TAGS_PREDICCIONES_DIGITALES],
+             summary="Obtener pronóstico diario por municipio específico")
 def get_pronostico_diario_municipio(
     id_municipio: int = Path(..., description="ID del municipio"),
     fecha_desde: date = Query(None, description="Fecha desde"),
@@ -1419,70 +1541,375 @@ def get_pronostico_diario_municipio(
     """
     Obtener pronóstico diario almacenado para un municipio específico.
     
-    Datos actualizados automáticamente 2 veces al día (06:00 y 18:00).
-    Horizonte: 7 días.
+    **Variables disponibles:**
+    - Temperatura: máx, mín
+    - Precipitación: suma, probabilidad máx
+    - Humedad relativa: máx, mín
+    - Evapotranspiración FAO ET₀
+    - Viento: velocidad máx, dirección dominante
+    - Radiación solar
+    - Índice UV máx
+    - Amanecer/atardecer
+    
+    **Actualización:** 2 veces al día (06:00 y 18:00) desde Open-Meteo.
+    **Horizonte:** 16 días desde hoy.
     """
-    data = service.get_pronostico_diario_municipal(db, id_municipio, fecha_desde, fecha_hasta)
-    return SuccessResponse(message="Pronóstico diario obtenido", data=data)
+    # Usar el método de histórico con filtros
+    filtros = {"id_municipio": id_municipio}
+    if fecha_desde:
+        filtros["fecha_desde"] = fecha_desde
+    if fecha_hasta:
+        filtros["fecha_hasta"] = fecha_hasta
+    if not fecha_desde and not fecha_hasta:
+        # Sin fechas: ventana exacta de pronóstico (hoy..hoy+15). Para ver la
+        # evidencia de días pasados usar /pronostico-diario/historico con fechas.
+        hoy = service._hoy_bolivia()
+        filtros["fecha_desde"] = hoy
+        filtros["fecha_hasta"] = hoy + timedelta(days=service.HORIZONTE_DIAS - 1)
+    
+    data, total = service.get_pronostico_diario_historico(db, filtros, pagina=1, por_pagina=100)
+    
+    return SuccessResponse(
+        message=f"Pronóstico obtenido ({len(data)} registros)",
+        data=data
+    )
+
+
+@router.get("/pronostico-diario/historico",
+             tags=[TAGS_PREDICCIONES_DIGITALES],
+             summary="Consultar histórico de pronóstico diario con filtros")
+def get_pronostico_diario_historico(
+    id_municipio: int = Query(None, description="Filtrar por municipio"),
+    codigo_comunidad: str = Query(None, description="Filtrar por código de comunidad"),
+    fecha_desde: date = Query(None, description="Fecha desde"),
+    fecha_hasta: date = Query(None, description="Fecha hasta"),
+    temp_max_min: float = Query(None, ge=-50, le=50, description="Temperatura máxima mínima"),
+    temp_max_max: float = Query(None, ge=-50, le=50, description="Temperatura máxima máxima"),
+    precipitacion_min: float = Query(None, ge=0, description="Precipitación mínima"),
+    precipitacion_max: float = Query(None, ge=0, description="Precipitación máxima"),
+    pagina: int = Query(1, ge=1, description="Número de página"),
+    por_pagina: int = Query(50, ge=1, le=500, description="Registros por página"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    Consultar histórico de pronóstico diario almacenado en BD.
+    
+    **Filtros disponibles:**
+    - Geográficos: municipio, comunidad
+    - Fecha: fecha_desde, fecha_hasta
+    - Datos meteorológicos: temp_max, precipitación
+    
+    **Paginación:**
+    - pagina: Número de página (default 1)
+    - por_pagina: Registros por página (default 50, max 500)
+    
+    **Sin filtros:** Retorna últimos 16 días de todos los municipios.
+    
+    **Nota:** Datos actualizados 2 veces al día (06:00 y 18:00) desde Open-Meteo.
+    """
+    filtros = {
+        "id_municipio": id_municipio,
+        "codigo_comunidad": codigo_comunidad,
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta,
+        "temp_max_min": temp_max_min,
+        "temp_max_max": temp_max_max,
+        "precipitacion_min": precipitacion_min,
+        "precipitacion_max": precipitacion_max
+    }
+    
+    # Filtrar campos None
+    filtros = {k: v for k, v in filtros.items() if v is not None}
+    
+    data, total = service.get_pronostico_diario_historico(
+        db, filtros, pagina, por_pagina
+    )
+    
+    total_paginas = (total + por_pagina - 1) // por_pagina if total > 0 else 0
+    
+    return SuccessResponse(
+        message=f"Histórico obtenido ({len(data)} de {total} registros)",
+        data=data,
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina,
+        total_paginas=total_paginas
+    )
 
 
 @router.get("/pronostico-digital/consultar",
-            tags=[TAGS_PREDICCIONES_DIGITALES],
-            summary="Consultar pronóstico digital en tiempo real (Open-Meteo)")
-def consultar_pronostico(
-    latitud: float = Query(..., ge=-90, le=90, description="Latitud"),
-    longitud: float = Query(..., ge=-180, le=180, description="Longitud"),
-    tipo: Literal["daily", "hourly", "minutely_15"] = Query("daily", description="Tipo de pronóstico"),
-    variables: str = Query(None, description="Variables (separadas por coma)"),
-    horizonte_dias: int = Query(7, ge=1, le=16, description="Días de horizonte (1-16)"),
-    guardar_cache: bool = Query(False, description="¿Guardar en caché? (24h hourly, 1h minutely)"),
+             tags=[TAGS_PREDICCIONES_DIGITALES],
+             summary="Consultar pronóstico digital (1 municipio × 16 días o TODOS × 16 días)")
+def consultar_pronostico_digital(
+    id_municipio: int | None = Query(None, description="ID del municipio (omitir para TODOS)"),
+    tipo: Literal["daily", "hourly"] = Query("daily", description="Tipo de pronóstico"),
+    todos_los_dias: bool = Query(True, description="¿Traer 16 días o solo hoy? (default: True)"),
     db: Session = Depends(get_db)
 ):
     """
-    Consultar directamente a Open-Meteo (sin autenticación requerida).
+    Consultar pronóstico digital almacenado en BD.
     
-    **Tipos de pronóstico:**
+    **Tres modos de uso:**
     
-    1. **daily** (7-16 días, 1 valor/día):
-       - Datos del día COMPLETO (0:00-23:59 hora local)
-       - Variables: temp_max (~12:00-15:00), temp_min (~03:00-06:00), precipitación
-       - sunrise/sunset incluidos
+    1. **UN municipio × 16 días:** `?id_municipio=41503`
+       - Retorna 16 días desde hoy para ese municipio
+       - Ideal para vista de detalle
     
-    2. **hourly** (24-168 horas, 1 valor/hora):
-       - Datos hora por hora
-       - Variables: temperatura, humedad, prob. precipitación, viento
-       - Ideal para eventos específicos
+    2. **TODOS × 16 días:** (omitir id_municipio, todos_los_dias=True)
+       - Retorna 343 municipios × 16 días = 5,488 registros
+       - Ideal para mapas con línea de tiempo
+       - Incluye coordenadas para geolocalización
     
-    3. **minutely_15** (48 horas, 1 valor/15min):
-       - Nowcast de muy corto plazo
-       - Variables: precipitación, temperatura
-       - Ideal para alertas inmediatas
+    3. **TODOS × solo hoy:** `?todos_los_dias=False`
+       - Retorna 343 municipios × 1 día (hoy)
+       - Ideal para mapa estático rápido
     
-    **Horarios de referencia:**
-    - Open-Meteo usa hora local (America/La_Paz, UTC-4)
-    - daily: día completo 0:00-23:59
-    - hourly: cada hora desde el momento actual
-    - minutely_15: cada 15 minutos desde el momento actual
-    
-    **Opcional:** Guardar en caché (24h para hourly, 1h para minutely)
+    **Importante:**
+    - Datos actualizados 2 veces/día (06:00 y 18:00)
+    - Fuente: Open-Meteo (almacenado en BD local)
     """
-    vars_list = variables.split(",") if variables else None
+    from datetime import date as date_type
     
-    # Consultar Open-Meteo
-    datos = service.consultar_open_meteo(latitud, longitud, tipo, vars_list, horizonte_dias)
-    
-    # Guardar en caché si se solicita
-    if guardar_cache and tipo == "hourly":
-        # Obtener municipio por coordenadas (aproximado)
-        municipio_result = _row(db, """
-            SELECT id FROM shared.municipio 
-            WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
-        """, {"lon": longitud, "lat": latitud})
+    if id_municipio is None:
+        # Modo TODOS LOS MUNICIPIOS
+        if todos_los_dias:
+            # TODOS × 16 DÍAS
+            data = service.get_pronostico_todos_municipios_16dias(db)
+            return SuccessResponse(
+                message=f"Pronóstico completo obtenido ({len(data)} registros = 343 municipios × 16 días)",
+                data=data,
+                total_registros=len(data),
+                total_municipios=343,
+                dias_por_municipio=16,
+                tipo="mapa_completo"
+            )
+        else:
+            # TODOS × SOLO HOY
+            fecha_consulta = service._hoy_bolivia()
+            data = service.get_pronostico_todos_municipios(db, fecha_consulta)
+            
+            return SuccessResponse(
+                message=f"Pronóstico de mapa obtenido ({len(data)} municipios)",
+                data=data,
+                total_municipios=len(data),
+                fecha_consulta=fecha_consulta,
+                tipo="mapa_hoy"
+            )
+    else:
+        # Modo UN MUNICIPIO × 16 DÍAS
+        data, municipio_nombre, fecha_hoy = service.get_pronostico_diario_consultar(
+            db, id_municipio, tipo
+        )
         
-        id_municipio = municipio_result["id"] if municipio_result else None
-        service.guardar_pronostico_hourly_cache(db, latitud, longitud, datos, id_municipio)
+        if not data:
+            return SuccessResponse(
+                message="No hay datos disponibles para este municipio",
+                data=[],
+                id_municipio=id_municipio,
+                tipo=tipo,
+                fecha_consulta=fecha_hoy,
+                dias_disponibles=0
+            )
+        
+        return SuccessResponse(
+            message=f"Pronóstico obtenido ({len(data)} días desde {fecha_hoy})",
+            data=data,
+            id_municipio=id_municipio,
+            municipio=municipio_nombre,
+            tipo=tipo,
+            fecha_consulta=fecha_hoy,
+            dias_disponibles=len(data)
+        )
+
+@router.get("/pronostico-comunidad/{codigo_ine}",
+             tags=[TAGS_PREDICCIONES_DIGITALES],
+             summary="Consultar pronóstico para una comunidad por su código INE")
+def get_pronostico_comunidad(
+    codigo_ine: str = Path(..., description="Código INE de la comunidad"),
+    db: Session = Depends(get_db)
+):
+    """
+    Consultar pronóstico para una comunidad específica.
     
-    return SuccessResponse(message="Pronóstico consultado", data=datos)
+    **Parámetros:**
+    - `codigo_ine`: Código INE de la comunidad (ej: '02417371843-M')
+    
+    **Retorna:**
+    - 16 días de pronóstico desde hoy
+    - Mismo formato que endpoint de municipio
+    - Incluye coordenadas y nombre de la comunidad
+    
+    **Flujo:**
+    1. Validar que el código INE existe en `shared.comunidades`
+    2. Obtener lat/lon y id_municipio de la comunidad
+    3. Consultar pronóstico usando las coordenadas
+    4. Retornar 16 días con todas las variables agrícolas
+    """
+    from datetime import date as date_type
+    
+    # 1. Validar que la comunidad existe
+    comunidad = _row(db, """
+        SELECT codigo_ine, nombre, lat, lon, id_municipio
+        FROM shared.comunidades
+        WHERE codigo_ine = :codigo_ine
+    """, {"codigo_ine": codigo_ine})
+    
+    if not comunidad:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Comunidad con código INE '{codigo_ine}' no encontrada"
+        )
+    
+    # 2. Obtener datos de la comunidad
+    cod_ine = comunidad['codigo_ine']
+    nombre_comunidad = comunidad['nombre']
+    lat_comunidad = comunidad['lat']
+    lon_comunidad = comunidad['lon']
+    id_municipio = comunidad['id_municipio']
+    
+    # 3. Consultar pronóstico DIRECTO de Open-Meteo (NO guarda en BD)
+    # Las comunidades no están en el cron, así que consultamos directamente
+    data, municipio_nombre, fecha_hoy = service.get_pronostico_comunidad_directo(
+        db, lat_comunidad, lon_comunidad, id_municipio
+    )
+    
+    # Agregar metadatos de comunidad a cada registro (misma estructura que municipio)
+    for item in data:
+        item["comunidad_nombre"] = nombre_comunidad
+        item["codigo_ine"] = cod_ine
+    
+    return SuccessResponse(
+        message=f"Pronóstico para comunidad '{nombre_comunidad}' (16 días desde {fecha_hoy})",
+        data=data
+    )
+
+
+@router.get("/pronostico-comunidad",
+             tags=[TAGS_PREDICCIONES_DIGITALES],
+             summary="Consultar pronóstico para comunidad por coordenadas")
+def get_pronostico_comunidad_coordenadas(
+    latitud: float = Query(..., ge=-90, le=90, description="Latitud de la comunidad"),
+    longitud: float = Query(..., ge=-180, le=180, description="Longitud de la comunidad"),
+    db: Session = Depends(get_db)
+):
+    """
+    Consultar pronóstico para una comunidad usando coordenadas geográficas.
+    
+    **Parámetros:**
+    - `latitud`: Latitud decimal (ej: -18.5)
+    - `longitud`: Longitud decimal (ej: -68.5)
+    
+    **Flujo:**
+    1. Validar que las coordenadas están en Bolivia
+    2. Buscar comunidad más cercana en `shared.comunidades`
+    3. Obtener id_municipio de la comunidad más cercana
+    4. Consultar pronóstico usando las coordenadas
+    5. Retornar 16 días con todas las variables
+    """
+    from datetime import date as date_type
+    from sqlalchemy import text
+    
+    # 1. Buscar comunidad más cercana a las coordenadas
+    comunidad = _row(db, """
+        SELECT codigo_ine, nombre, lat, lon, id_municipio,
+               ST_Distance(
+                   ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+                   geom
+               ) as distancia
+        FROM shared.comunidades
+        ORDER BY distancia
+        LIMIT 1
+    """, {"lon": longitud, "lat": latitud})
+    
+    if not comunidad:
+        raise HTTPException(
+            status_code=404,
+            detail="No se encontró comunidad cercana a las coordenadas proporcionadas"
+        )
+    
+    # 2. Obtener datos de la comunidad
+    cod_ine = comunidad['codigo_ine']
+    nombre_comunidad = comunidad['nombre']
+    lat_comunidad = comunidad['lat']
+    lon_comunidad = comunidad['lon']
+    id_municipio = comunidad['id_municipio']
+    
+    # 3. Consultar pronóstico DIRECTO de Open-Meteo (NO guarda en BD)
+    data, municipio_nombre, fecha_hoy = service.get_pronostico_comunidad_directo(
+        db, latitud, longitud, id_municipio
+    )
+    
+    # Agregar metadatos de comunidad a cada registro (misma estructura que municipio)
+    for item in data:
+        item["comunidad_nombre"] = nombre_comunidad
+        item["codigo_ine"] = cod_ine
+    
+    return SuccessResponse(
+        message=f"Pronóstico para comunidad '{nombre_comunidad}' (16 días desde {fecha_hoy})",
+        data=data
+    )
+
+
+# ============================================================================
+# MAPA DE PRONÓSTICOS (TODOS LOS MUNICIPIOS)
+# ============================================================================
+
+@router.get("/pronostico-digital/mapa",
+             tags=[TAGS_PREDICCIONES_DIGITALES],
+             summary="Obtener pronóstico de TODOS los municipios para mapa (16 días)")
+def get_pronostico_mapa(
+    fecha: date = Query(None, description="Fecha inicial (hoy por defecto)"),
+    todos_los_dias: bool = Query(True, description="¿Traer 16 días o solo 1 día?"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener pronóstico de TODOS los 343 municipios para visualizar en mapa.
+    
+    **Dos modos:**
+    
+    1. **16 días:** `?todos_los_dias=true` (default)
+       - 343 municipios × 16 días = 5,488 registros
+       - Ideal para mapa con línea de tiempo
+    
+    2. **Solo 1 día:** `?todos_los_dias=false&fecha=2026-10-05`
+       - 343 municipios × 1 día = 343 registros
+       - Ideal para mapa estático rápido
+    
+    **Variables incluidas:**
+    - Temperatura máx/mín
+    - Precipitación
+    - Humedad (máx/mín)
+    - Evapotranspiración
+    - Viento (velocidad y dirección)
+    - Radiación solar
+    - UV index
+    - Coordenadas (latitud, longitud)
+    """
+    from datetime import date as date_type
+    
+    if todos_los_dias:
+        data = service.get_pronostico_todos_municipios_16dias(db)
+        
+        return SuccessResponse(
+            message=f"Pronóstico de mapa completo ({len(data)} registros)",
+            data=data,
+            total_registros=len(data),
+            total_municipios=343,
+            dias_por_municipio=16,
+            tipo="mapa_completo"
+        )
+    else:
+        fecha_consulta = fecha if fecha else service._hoy_bolivia()
+        data = service.get_pronostico_todos_municipios(db, fecha_consulta)
+        
+        return SuccessResponse(
+            message=f"Pronóstico de mapa ({len(data)} municipios)",
+            data=data,
+            total_municipios=len(data),
+            fecha_consulta=fecha_consulta,
+            tipo="mapa_hoy"
+        )
 
 
 @router.get("/pronostico-digital/hourly/{lat}/{lon}",
@@ -1512,7 +1939,6 @@ def get_pronostico_hourly(
 
 @router.post("/pronostico-digital/actualizar-municipio/{id_municipio}",
              tags=[TAGS_PREDICCIONES_DIGITALES],
-             dependencies=[Depends(require_rol(*ROLES_SINB_ADMIN))],
              summary="Actualizar pronóstico diario de municipio (uso cron)")
 def actualizar_pronostico_municipio(
     id_municipio: int = Path(..., description="ID del municipio"),
@@ -1521,177 +1947,119 @@ def actualizar_pronostico_municipio(
     db: Session = Depends(get_db)
 ):
     """
-    Actualizar pronóstico diario para un municipio.
+    Actualizar pronóstico diario para un municipio (16 días).
     
-    Usado por tarea cron (06:00 y 18:00).
-    Requiere rol admin.
+    **Endpoint sin autenticación para uso desde cron** (06:00 y 18:00 hora de Bolivia).
+    
+    **Reintentos:** 3 intentos con espera exponencial (2/4/8 s) sobre la consulta a
+    Open-Meteo, dentro de `guardar_pronostico_diario_municipal`.
     """
-    from datetime import date
-    resultado = service.guardar_pronostico_diario_municipal(
-        db, id_municipio, latitud, longitud, date.today()
+    try:
+        resultado = service.guardar_pronostico_diario_municipal(
+            db, id_municipio, latitud, longitud, service._hoy_bolivia()
+        )
+    except HTTPException as e:
+        if e.status_code == 503:
+            raise HTTPException(status_code=503,
+                                detail=f"Error después de 3 reintentos: {e.detail}")
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Error después de 3 reintentos: {str(e)}")
+
+    return SuccessResponse(
+        message=f"Pronóstico actualizado ({resultado['registros_guardados']} días)",
+        data=resultado
     )
-    return SuccessResponse(message="Pronóstico actualizado", data=resultado)
 
 
-    db: Session = Depends(get_db)
+
 # ============================================================================
-# GALERÍA DE EVIDENCIAS (Fotos/Audio de Bioindicadores)
+# FOTOS DE INDICADOR NATURAL (1:N con sinb.indicador_natural)
 # ============================================================================
 
-@router.get("/galeria/evidencias", 
-            tags=["SINB > Galería de Evidencias"],
-            summary="Obtener galería de evidencias con filtros")
-def get_galeria_evidencias(
-    id_indicador_natural: UUID = Query(None, description="Filtrar por indicador natural"),
-    id_grupo: UUID = Query(None, description="Filtrar por grupo biocultural"),
-    id_municipio: int = Query(None, description="Filtrar por municipio"),
-    codigo_comunidad: str = Query(None, description="Filtrar por comunidad"),
-    id_usuario_subio: int = Query(None, description="Filtrar por usuario que subió"),
-    formato: str = Query(None, description="Filtrar por formato (JPG, PNG, MP3)"),
-    fecha_desde: date = Query(None, description="Fecha desde"),
-    fecha_hasta: date = Query(None, description="Fecha hasta"),
-    con_gps: bool = Query(None, description="Solo evidencias con coordenadas GPS"),
-    skip: int = Query(0, ge=0, description="Saltar registros"),
-    limit: int = Query(100, ge=1, le=500, description="Límite de registros"),
+def _autorizar_foto(foto: dict, user: dict):
+    """Estricto: solo el autor de la foto puede modificarla o eliminarla."""
+    autorizar_propietario(foto, user, "id_usuario_subio")
+
+
+@router.get("/indicador-natural/{id}/fotos", tags=[TAGS_CATALOGOS],
+            response_model=DataListResponse[IndicadorFotoResponse],
+            summary="Listar fotos de un indicador natural")
+def listar_fotos_indicador(
+    id: UUID,
+    limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+    skip: int = Query(0, ge=0, description="Registros a saltar"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
 ):
-    """
-    **Galería de evidencias** con filtros completos y anidados JSON.
-    
-    **Filtros disponibles:**
-    - `id_indicador_natural`: Filtrar por bioindicador específico
-    - `id_grupo`: Filtrar por grupo biocultural (Animales, Plantas, etc.)
-    - `id_municipio`: Filtrar por municipio
-    - `codigo_comunidad`: Filtrar por comunidad
-    - `id_usuario_subio`: Filtrar por usuario que subió la evidencia
-    - `formato`: Filtrar por formato (JPG, PNG, MP3, WAV)
-    - `fecha_desde`: Fecha mínima de carga
-    - `fecha_hasta`: Fecha máxima de carga
-    - `con_gps`: Solo evidencias con coordenadas GPS
-    
-    **Respuesta incluye:**
-    - Indicador natural anidado (con grupo)
-    - Observación registro anidada
-    - Usuario que subió anidado
-    - Metadata (tamaño, formato, GPS si disponible)
-    - Paginación: skip/limit
-    """
-    filtros = {
-        "id_indicador_natural": id_indicador_natural,
-        "id_grupo": id_grupo,
-        "id_municipio": id_municipio,
-        "codigo_comunidad": codigo_comunidad,
-        "id_usuario_subio": id_usuario_subio,
-        "formato": formato,
-        "fecha_desde": fecha_desde,
-        "fecha_hasta": fecha_hasta,
-        "con_gps": con_gps
-    }
-    
-    # Filtrar campos None
-    filtros = {k: v for k, v in filtros.items() if v is not None}
-    
-    data, total = service.get_evidencias_galeria(db, filtros, skip, limit)
-    
-    return SuccessResponse(
-        message=f"Galería obtenida ({len(data)} de {total} evidencias)",
-        data=data,
-        total=total,
-        skip=skip,
-        limit=limit
-    )
+    """Fotos del indicador natural, más recientes primero."""
+    if not service.get_indicador_natural(db, id):
+        raise HTTPException(status_code=404, detail="Indicador no encontrado")
+    data, total = service.get_fotos_indicador(db, id, limit=limit, skip=skip, todos=todos)
+    return SuccessResponse(message="Fotos listadas correctamente", data=data, total=total)
 
 
-@router.get("/galeria/indicadores-destacados",
-            tags=["SINB > Galería de Evidencias"],
-            summary="Obtener indicadores con más evidencias (top fotos)")
-def get_indicadores_destacados(
-    id_grupo: UUID = Query(None, description="Filtrar por grupo biocultural"),
-    limit: int = Query(10, ge=1, le=50, description="Cantidad de indicadores a retornar"),
-    db: Session = Depends(get_db)
+@router.post("/indicador-natural/{id}/fotos", tags=[TAGS_CATALOGOS],
+             status_code=201,
+             response_model=DataItemResponse[IndicadorFotoResponse],
+             summary="Subir foto a un indicador natural")
+async def crear_foto_indicador(
+    id: UUID,
+    file: UploadFile = File(..., description="Imagen JPG, PNG, WEBP, GIF, BMP, TIFF o HEIC (máx. 10 MB)"),
+    descripcion: str = Form(..., max_length=500, description="Descripción de la foto"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
-    """
-    **Ranking de indicadores** con más evidencias (fotos) en la galería.
-    
-    **Útil para:**
-    - Ver qué bioindicadores tienen más documentación fotográfica
-    - Identificar indicadores populares o bien documentados
-    - Explorar la galería por indicador más fotografiado
-    
-    **Respuesta incluye:**
-    - Información completa del indicador
-    - Grupo biocultural anidado
-    - Cantidad total de evidencias
-    - Últimas fotos subidas (URLs, descripciones)
-    """
-    data = service.get_indicadores_destacados_galeria(db, id_grupo, limit)
-    return SuccessResponse(
-        message=f"Indicadores destacados obtenidos ({len(data)} indicadores)",
-        data=data
-    )
+    """Sube una foto y la asocia al indicador. Cualquier usuario autenticado."""
+    if not service.get_indicador_natural(db, id):
+        raise HTTPException(status_code=404, detail="Indicador no encontrado")
+
+    path = await save_upload_file(file, db, user.get("id_municipio"), user.get("id_usuario"))
+    try:
+        foto = service.create_foto_indicador(db, id, path, descripcion, user["id_usuario"])
+    except Exception:
+        delete_file_from_server(path)
+        raise
+
+    return SuccessResponse(message="Foto subida correctamente",
+                           data=service.get_foto_indicador(db, foto["id"]))
 
 
-@router.get("/galeria/municipio/{id_municipio}",
-            tags=["SINB > Galería de Evidencias"],
-            summary="Obtener galería de evidencias por municipio")
-def get_galeria_municipal(
-    id_municipio: int = Path(..., description="ID del municipio"),
-    limit: int = Query(50, ge=1, le=500, description="Límite de evidencias"),
-    db: Session = Depends(get_db)
+@router.put("/indicador-natural/{id}/fotos/{id_foto}", tags=[TAGS_CATALOGOS],
+            response_model=DataItemResponse[IndicadorFotoResponse],
+            summary="Actualizar descripción de una foto")
+def actualizar_foto_indicador(
+    id: UUID,
+    id_foto: UUID,
+    data: IndicadorFotoUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
-    """
-    **Galería de evidencias filtrada por municipio**.
-    
-    Muestra todas las fotos/evidencias de bioindicadores documentadas en ese municipio.
-    
-    **Respuesta incluye:**
-    - Evidencias con indicador anidado
-    - Municipio y comunidad anidados
-    - Total de evidencias en el municipio
-    - Ordenadas por fecha de carga (más recientes primero)
-    """
-    data = service.get_galeria_por_municipio(db, id_municipio, limit)
-    total_comunal = data[0]["total_comunal"] if data else 0
-    
-    return SuccessResponse(
-        message=f"Galería municipal obtenida ({len(data)} de {total_comunal} evidencias)",
-        data=data
-    )
+    """Solo el autor de la foto puede editarla."""
+    foto = service.get_foto_indicador(db, id_foto)
+    if not foto or foto["id_indicador_natural"] != id:
+        raise HTTPException(status_code=404, detail="Foto no encontrada")
+    _autorizar_foto(foto, user)
+
+    service.update_foto_indicador(db, id_foto, data.descripcion)
+    return SuccessResponse(message="Foto actualizada correctamente",
+                           data=service.get_foto_indicador(db, id_foto))
 
 
-@router.get("/galeria/indicator/{id_indicador}",
-            tags=["SINB > Galería de Evidencias"],
-            summary="Obtener galería de un bioindicador específico")
-def get_galeria_indicador(
-    id_indicador: UUID = Path(..., description="ID del indicador natural"),
-    skip: int = Query(0, ge=0, description="Saltar registros"),
-    limit: int = Query(100, ge=1, le=500, description="Límite de evidencias"),
-    db: Session = Depends(get_db)
+@router.delete("/indicador-natural/{id}/fotos/{id_foto}", tags=[TAGS_CATALOGOS],
+               summary="Eliminar una foto (fila y archivo físico)")
+def eliminar_foto_indicador(
+    id: UUID,
+    id_foto: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
-    """
-    **Galería completa de un bioindicador específico**.
-    
-    Muestra todas las fotos/evidencias documentadas para ese indicador.
-    
-    **Útil para:**
-    - Ver toda la documentación fotográfica de un indicador
-    - Explorar variaciones geográficas del mismo indicador
-    - Validar identificación del bioindicador
-    
-    **Respuesta incluye:**
-    - Todas las evidencias del indicador
-    - Usuario que subió cada evidencia
-    - Ubicación (municipio, comunidad) de cada foto
-    - Metadata de cada archivo
-    """
-    filtros = {"id_indicador_natural": id_indicador}
-    data, total = service.get_evidencias_galeria(db, filtros, skip, limit)
-    
-    return SuccessResponse(
-        message=f"Galería del indicador obtenida ({len(data)} de {total} evidencias)",
-        data=data,
-        total=total,
-        skip=skip,
-        limit=limit
-    )
+    """Solo el autor de la foto puede eliminarla."""
+    foto = service.get_foto_indicador(db, id_foto)
+    if not foto or foto["id_indicador_natural"] != id:
+        raise HTTPException(status_code=404, detail="Foto no encontrada")
+    _autorizar_foto(foto, user)
+
+    service.delete_foto_indicador(db, id_foto, user["id_usuario"])
+    delete_file_from_server(foto["path_foto"])
+    return SuccessResponse(message="Foto eliminada correctamente")

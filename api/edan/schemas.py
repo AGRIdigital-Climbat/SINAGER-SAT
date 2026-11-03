@@ -1089,6 +1089,11 @@ class PorTipoEventoItem(BaseModel):
     cantidad: int = 0
 
 
+class PorGrupoItem(BaseModel):
+    grupo: str
+    cantidad: int = 0
+
+
 class TotalesResumen(BaseModel):
     total_localidades: int = 0
     total_huerfanas: int = 0
@@ -1102,6 +1107,7 @@ class ResumenReporteData(BaseModel):
     totales: TotalesResumen
     por_estado: list[PorEstadoLocalidadItem] = []
     por_tipo_evento: list[PorTipoEventoItem] = []
+    por_grupo: list[PorGrupoItem] = []
 
 
 class ReporteGeografiaItem(BaseModel):
@@ -1160,6 +1166,7 @@ class MisResumenData(BaseModel):
     total_localidades: int = 0
     por_estado: list[PorEstadoEdanItem] = []
     por_tipo_evento: list[PorTipoEventoItem] = []
+    por_grupo: list[PorGrupoItem] = []
 
 
 class ResumenReporteResponse(SuccessResponse):

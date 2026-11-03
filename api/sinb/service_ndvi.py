@@ -1,3 +1,4 @@
+import json
 """
 Servicio NDVI Satelital - Funciones para consultas y procesamiento de NDVI desde Sentinel-2
 """
@@ -6,6 +7,50 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import HTTPException
 import random
+
+
+def _row(db, query, params=None):
+    """Helper para obtener una fila."""
+    result = db.execute(text(query), params or {})
+    return result.mappings().first()
+
+
+def _rows(db, query, params=None):
+    """Helper para obtener múltiples filas."""
+    result = db.execute(text(query), params or {})
+    return result.mappings().all()
+
+
+def _execute(db, query, params=None):
+    """Helper para ejecutar query sin retorno."""
+    result = db.execute(text(query), params or {})
+    return result.rowcount
+
+
+def _serialize(obj):
+    """Serializar tipos especiales a JSON-compatible."""
+    from uuid import UUID
+    from datetime import datetime, date
+    from sqlalchemy.engine.row import RowMapping
+    from decimal import Decimal
+    
+    if obj is None:
+        return None
+    if isinstance(obj, RowMapping):
+        return dict(obj)
+    if isinstance(obj, dict):
+        return {k: _serialize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_serialize(item) for item in obj]
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj)
+    return obj
+
+
 
 def get_ultimo_ndvi_comunidad(db: Session, codigo_comunidad: str | None = None):
     """
@@ -158,7 +203,8 @@ def get_escenas_satelitales(
     fecha_hasta: date | None = None,
     cobertura_nubes_max: float | None = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    todos: bool = False
 ):
     """
     Obtener escenas satelitales procesadas.
@@ -170,11 +216,14 @@ def get_escenas_satelitales(
         cobertura_nubes_max: Máxima cobertura de nubes (%)
         skip: Registros a saltar
         limit: Límite de resultados
+        todos: True = conjunto completo sin LIMIT/OFFSET
     
     Returns:
         Lista de escenas satelitales
     """
-    params = {"skip": skip, "limit": limit}
+    params = {}
+    if not todos:
+        params = {"skip": skip, "limit": limit}
     where = ["1=1"]
     
     if fecha_desde:
@@ -191,6 +240,9 @@ def get_escenas_satelitales(
     
     where_clause = " AND ".join(where)
     
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+
     rows = _rows(db, f"""
         SELECT 
             id,
@@ -204,7 +256,7 @@ def get_escenas_satelitales(
         FROM sinb.escena_satelital
         WHERE {where_clause}
         ORDER BY fecha_adquisicion DESC
-        LIMIT :limit OFFSET :skip
+        {page}
     """, params)
     
     # Convertir geometría de GeoJSON string a dict
@@ -356,9 +408,9 @@ def procesar_escena_ndvi(
     import random
     
     props = escena_feature.get("properties", {})
-    escena_id = props.get("id")
-    fecha_adquisicion = props.get("properties", {}).get("datetime", "")[:10]
-    cobertura_nubes = props.get("properties", {}).get("eo:cloud_cover", 0)
+    escena_id = escena_feature.get("id", props.get("id"))
+    fecha_adquisicion = props.get("datetime", "")[:10]
+    cobertura_nubes = props.get("eo:cloud_cover", 0)
     
     # Registrar escena
     escena_row = _row(db, """
@@ -372,7 +424,7 @@ def procesar_escena_ndvi(
         "escena_id": escena_id,
         "fecha": fecha_adquisicion,
         "nubes": cobertura_nubes,
-        "metadata": props
+        "metadata": json.dumps(props)
     })
     
     if not escena_row:
@@ -474,7 +526,7 @@ def ingestar_ndvi_comunidades(
         resultados["escenas_consultadas"] = len(features)
         
         # Procesar cada escena para cada comunidad
-        for comunidad_codigo in codigos[:10]:  # Limitar a 10 para demo
+        for comunidad_codigo in codigos:  # TODAS las comunidades
             # Obtener bbox de comunidad
             com_row = _row(db, """
                 SELECT lat, lon FROM shared.comunidades
@@ -492,7 +544,7 @@ def ingestar_ndvi_comunidades(
             )
             
             # Procesar escenas para esta comunidad
-            for feature in features[:3]:  # Máximo 3 escenas por comunidad
+            for feature in features:  # TODAS las escenas
                 try:
                     resultado = procesar_escena_ndvi(
                         db, feature, comunidad_codigo, bbox_comunidad

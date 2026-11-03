@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Literal, Optional
 from datetime import date, datetime
 from uuid import UUID
@@ -27,6 +27,7 @@ class GrupoUpdate(SinbBaseResponse):
     codigo: str | None = Field(None, max_length=20)
     nombre: str | None = None
     descripcion: str | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class GrupoResponse(SinbBaseResponse):
@@ -45,7 +46,7 @@ class IndicadorNaturalCreate(SinbBaseResponse):
     codigo: str = Field(..., max_length=20, description="Código único del indicador")
     nombre_cientifico: str = Field(..., description="Nombre científico")
     nombre_comun: str | None = Field(None, description="Nombre común")
-    id_grupo: UUID | None = Field(None, description="FK a grupo")
+    id_grupo: UUID = Field(..., description="FK a grupo (NOT NULL en BD)")
     descripcion: str | None = None
     requiere_consentimiento: bool = Field(False, description="¿Requiere consentimiento de comunidad?")
 
@@ -57,6 +58,7 @@ class IndicadorNaturalUpdate(SinbBaseResponse):
     id_grupo: UUID | None = None
     descripcion: str | None = None
     requiere_consentimiento: bool | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class IndicadorNaturalResponse(SinbBaseResponse):
@@ -69,6 +71,7 @@ class IndicadorNaturalResponse(SinbBaseResponse):
     descripcion: str | None
     requiere_consentimiento: bool
     estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
+    fotos: list[dict] | None = None
     creado_en: datetime
     actualizado_en: datetime
 
@@ -83,6 +86,7 @@ class CaracteristicaCreate(SinbBaseResponse):
 class CaracteristicaUpdate(SinbBaseResponse):
     id_indicador_natural: UUID | None = None
     caracteristica: str | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class CaracteristicaResponse(SinbBaseResponse):
@@ -105,6 +109,7 @@ class ComportamientoUpdate(SinbBaseResponse):
     id_grupo: UUID | None = None
     id_caracteristica: UUID | None = None
     comportamiento: str | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class ComportamientoResponse(SinbBaseResponse):
@@ -130,6 +135,7 @@ class SignificadoUpdate(SinbBaseResponse):
     id_comportamiento: UUID | None = None
     significado: str | None = None
     categoria: str | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class SignificadoResponse(SinbBaseResponse):
@@ -156,6 +162,7 @@ class ZonaGeograficaUpdate(SinbBaseResponse):
     codigo: str | None = Field(None, max_length=10)
     nombre: str | None = None
     descripcion: str | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class ZonaGeograficaResponse(SinbBaseResponse):
@@ -170,30 +177,28 @@ class ZonaGeograficaResponse(SinbBaseResponse):
 # PRONÓSTICOS - CAMPOS Y ESCENARIOS
 # ============================================================================
 
-class CampoPronosticoCreate(SinbBaseResponse):
-    nombre: str = Field(..., max_length=100, description="Nombre del campo")
-    unidad: str | None = Field(None, description="Unidad de medida")
-    tipo: str = Field(..., description="Tipo: numerico, categorico, texto")
+class CategoriaPronosticoCreate(SinbBaseResponse):
+    nombre: str = Field(..., max_length=100, description="Nombre de la categoría")
+    descripcion: str | None = Field(None, description="Descripción opcional")
 
 
-class CampoPronosticoUpdate(SinbBaseResponse):
+class CategoriaPronosticoUpdate(SinbBaseResponse):
     nombre: str | None = Field(None, max_length=100)
-    unidad: str | None = None
-    tipo: str | None = None
+    descripcion: str | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
-class CampoPronosticoResponse(SinbBaseResponse):
+class CategoriaPronosticoResponse(SinbBaseResponse):
     id: UUID
     nombre: str
-    unidad: str | None
-    tipo: str
+    descripcion: str | None
     estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
 
 
 # --- Escenario ---
 
 class EscenarioCreate(SinbBaseResponse):
-    id_campo_pronostico: UUID = Field(..., description="FK a campo pronóstico")
+    id_categoria: UUID = Field(..., description="FK a categoría de pronóstico")
     nombre: str = Field(..., max_length=100, description="Nombre del escenario")
     descripcion: str | None = None
     valor_min: float | None = Field(None, description="Valor mínimo del rango")
@@ -201,16 +206,17 @@ class EscenarioCreate(SinbBaseResponse):
 
 
 class EscenarioUpdate(SinbBaseResponse):
-    id_campo_pronostico: UUID | None = None
+    id_categoria: UUID | None = None
     nombre: str | None = Field(None, max_length=100)
     descripcion: str | None = None
     valor_min: float | None = None
     valor_max: float | None = None
+    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = Field(None, description="Estado del registro (INACTIVO = retirado, sigue en BD)")
 
 
 class EscenarioResponse(SinbBaseResponse):
     id: UUID
-    id_campo_pronostico: UUID
+    id_categoria: UUID
     nombre: str
     descripcion: str | None
     valor_min: float | None
@@ -218,231 +224,189 @@ class EscenarioResponse(SinbBaseResponse):
     estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
 
 
-# --- Categoría Pronóstico Temporal ---
-
-class CategoriaPronosticoTemporalCreate(SinbBaseResponse):
-    nombre: str = Field(..., max_length=100, description="Nombre de la categoría")
-    descripcion: str | None = None
-
-
-class CategoriaPronosticoTemporalUpdate(SinbBaseResponse):
-    nombre: str | None = Field(None, max_length=100)
-    descripcion: str | None = None
-
-
-class CategoriaPronosticoTemporalResponse(SinbBaseResponse):
-    id: UUID
-    nombre: str
-    descripcion: str | None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-
-
-# ============================================================================
-# DIMENSIONES Y CATEGORÍAS DE RECOMENDACIÓN
-# ============================================================================
-
-class DimensionRecomendacionCreate(SinbBaseResponse):
-    codigo: str = Field(..., max_length=20, description="Código único")
-    nombre: str = Field(..., max_length=100, description="Nombre de la dimensión")
-    descripcion: str | None = None
-
-
-class DimensionRecomendacionUpdate(SinbBaseResponse):
-    codigo: str | None = Field(None, max_length=20)
-    nombre: str | None = None
-    descripcion: str | None = None
-
-
-class DimensionRecomendacionResponse(SinbBaseResponse):
-    id: UUID
-    codigo: str
-    nombre: str
-    descripcion: str | None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-
-
-class CategoriaComportamientoCreate(SinbBaseResponse):
-    id_dimension: UUID = Field(..., description="FK a dimensión recomendación")
-    nombre: str = Field(..., max_length=100, description="Nombre de la categoría")
-    descripcion: str | None = None
-
-
-class CategoriaComportamientoUpdate(SinbBaseResponse):
-    id_dimension: UUID | None = None
-    nombre: str | None = Field(None, max_length=100)
-    descripcion: str | None = None
-
-
-class CategoriaComportamientoResponse(SinbBaseResponse):
-    id: UUID
-    id_dimension: UUID
-    nombre: str
-    descripcion: str | None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-
-
-# ============================================================================
-# OBSERVACIONES
-# ============================================================================
-
-class ObservacionRegistroCreate(SinbBaseResponse):
-    """Registro individual dentro de una observación."""
-    id_reg_off: str | None = Field(None, max_length=36, description="ID offline generado por dispositivo")
-    id_caracteristica: UUID | None = Field(None, description="FK a característica")
-    id_comportamiento: UUID | None = Field(None, description="FK a comportamiento")
-    id_significado: UUID | None = Field(None, description="FK a significado")
-    id_indicador_natural: UUID | None = Field(None, description="FK a indicador natural")
-    valor_observado: str | None = Field(None, description="Valor observado")
-    unidad: str | None = Field(None, description="Unidad de medida")
-
-
-class ObservacionRegistroResponse(SinbBaseResponse):
-    id: UUID
-    id_reg_off: str | None
-    id_observacion: UUID
-    id_caracteristica: UUID | None
-    id_comportamiento: UUID | None
-    id_significado: UUID | None
-    id_indicador_natural: UUID | None
-    valor_observado: str | None
-    unidad: str | None
-    creado_en: datetime
-
-
-class ObservacionCreate(SinbBaseResponse):
-    id_obs_off: str | None = Field(None, max_length=36, description="ID offline generado por dispositivo")
-    codigo_comunidad: str = Field(..., description="Código INE de comunidad")
-    id_municipio: int = Field(..., description="FK a municipio")
-    id_usuario_responsable: int | None = Field(None, description="Usuario responsable (se asigna auto si None)")
-    fecha_inicio: date = Field(..., description="Fecha de inicio de observación")
-    fecha_fin: date = Field(..., description="Fecha de fin de observación")
-    hora_inicio: str | None = Field(None, description="Hora inicio (HH:MM)")
-    hora_fin: str | None = Field(None, description="Hora fin (HH:MM)")
-    fecha_registro: date = Field(..., description="Fecha de registro")
-    clima_observado: str | None = Field(None, description="Descripción del clima")
-    observacion_registro: list[ObservacionRegistroCreate] | None = Field(None, description="Registros anidados")
-
-
-class ObservacionUpdate(SinbBaseResponse):
-    codigo_comunidad: str | None = None
-    id_municipio: int | None = None
-    fecha_inicio: date | None = None
-    fecha_fin: date | None = None
-    hora_inicio: str | None = None
-    hora_fin: str | None = None
-    fecha_registro: date | None = None
-    clima_observado: str | None = None
-    es_validada: bool | None = None
-    observacion_rechazada_motivo: str | None = None
-
-
-class ObservacionResponse(SinbBaseResponse):
-    id: UUID
-    id_obs_off: str | None
-    codigo_corto: str
-    codigo_comunidad: str
-    id_municipio: int
-    id_usuario_responsable: int
-    usuario_responsable: dict | None = None
-    fecha_inicio: date
-    fecha_fin: date
-    hora_inicio: str | None
-    hora_fin: str | None
-    fecha_registro: date
-    clima_observado: str | None
-    es_validada: bool
-    validada_por: int | None
-    validada_en: datetime | None
-    observacion_rechazada_motivo: str | None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-    creado_en: datetime
-    actualizado_en: datetime
-    version_registro: int
-    observacion_registro: list[ObservacionRegistroResponse] | None = None
-
-
 # ============================================================================
 # PRONÓSTICOS
 # ============================================================================
 
 class EscenarioEstacionalCreate(SinbBaseResponse):
+    id_escenario_off: str | None = Field(None, max_length=36, description="ID offline del escenario (generado por dispositivo)")
     id_escenario: UUID = Field(..., description="FK a escenario")
-    probabilidad: float = Field(..., ge=0, le=100, description="Probabilidad 0-100%")
+    confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = Field(
+        None, description="Confianza inicial del escenario: ALTA | MEDIA | BAJA (opcional, igual que pronóstico de corto plazo)"
+    )
 
 
-class PronosticoEstacionalCreate(SinbBaseResponse):
+class CadenaBioculturalCreate(SinbBaseResponse):
+    """Cadena obligatoria: grupo → indicador → característica → comportamiento."""
+    id_grupo: UUID = Field(..., description="FK a sinb.grupo")
+    id_indicador_natural: UUID = Field(..., description="FK a sinb.indicador_natural (debe pertenecer al grupo)")
+    id_caracteristica: UUID = Field(..., description="FK a sinb.caracteristica (debe pertenecer al indicador)")
+    id_comportamiento: UUID = Field(..., description="FK a sinb.comportamiento (debe pertenecer a la característica)")
+
+
+class PeriodoCreate(SinbBaseResponse):
+    """Período del pronóstico: fin debe ser >= inicio."""
+    inicio: date = Field(..., description="Inicio del período")
+    fin: date = Field(..., description="Fin del período")
+
+
+class ContextoCreate(SinbBaseResponse):
+    """Contexto geográfico/notas del registro (todo opcional)."""
+    latitud: float | None = Field(None, ge=-90, le=90, description="Latitud -90..90")
+    longitud: float | None = Field(None, ge=-180, le=180, description="Longitud -180..180")
+    altitud: float | None = Field(None, description="Altitud en metros")
+    notas: str | None = Field(None, description="Notas de contexto")
+
+
+class PronosticoLargoItemCreate(SinbBaseResponse):
+    """Un bloque de pronóstico: una categoría (campo) con sus escenarios."""
+    id_item_off: str | None = Field(None, max_length=36, description="ID offline del item (generado por dispositivo)")
+    id_categoria: UUID = Field(..., description="FK a sinb.categoria_pronostico")
+    metodo_validacion: str | None = Field(None, max_length=50, description="Método de validación (texto libre, sin FK)")
+    id_regla_pronostica: int | None = Field(None, description="Regla pronóstica aplicada (sin FK)")
+    ejecutar_en: datetime | None = Field(None, description="Momento de aplicación de la validación")
+    fuente: str | None = Field(None, max_length=200, description="Fuente del dato")
+    orden: int = Field(0, ge=0, description="Orden de presentación")
+    id_escenarios: list[UUID | EscenarioEstacionalCreate] = Field(
+        default_factory=list,
+        description="Escenarios: acepta uuid plano o {id_escenario, confianza}"
+    )
+
+    @field_validator("id_escenarios", mode="before")
+    @classmethod
+    def _normalizar_escenarios(cls, v):
+        return [{"id_escenario": e} if not isinstance(e, dict) else e for e in (v or [])]
+
+
+class RecomendacionLargoCreate(SinbBaseResponse):
+    """Recomendación en texto libre: lo que el productor recomienda hacer."""
+    id_recomendacion: UUID | None = Field(
+        None, description="ID de la recomendación (lo fija el servidor si no viene; los dispositivos offline lo generan)"
+    )
+    id_recomendacion_off: str | None = Field(
+        None, max_length=36, description="ID offline de la recomendación (generado por dispositivo)"
+    )
+    nombre: str = Field(
+        ..., min_length=1,
+        description="Texto libre de la recomendación (lo que el productor nos recomienda hacer)"
+    )
+
+    @field_validator("nombre")
+    @classmethod
+    def _nombre_no_vacio(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("La recomendación no puede estar vacía")
+        return v
+
+
+class ObservadorLargoCreate(SinbBaseResponse):
+    id_observador_off: str | None = Field(None, max_length=36, description="ID offline del observador (generado por dispositivo)")
+    id_usuario: int = Field(..., description="FK a usuarios.usuario")
+
+
+class PronosticoLargoCreate(SinbBaseResponse):
+    """POST /pronostico-largo — contrato anidado (MD 15)."""
+    fecha_emision: date | None = Field(None, description="Fecha de emisión (default: hoy)")
+    texto_observador: str | None = Field(None, description="Texto literal del observador")
+    id_municipio: int = Field(..., description="FK a shared.municipio")
+    codigo_comunidad: str = Field(..., description="Código INE de comunidad")
     id_pe_off: str | None = Field(None, max_length=36, description="ID offline generado por dispositivo")
-    id_campo_pronostico: UUID = Field(..., description="FK a campo pronóstico")
-    fecha_emision: date = Field(..., description="Fecha de emisión")
-    periodo_inicio: date = Field(..., description="Inicio del período")
-    periodo_fin: date = Field(..., description="Fin del período")
-    id_usuario_elabora: int | None = Field(None, description="Usuario que elabora")
-    notas: str | None = None
-    escenarios: list[EscenarioEstacionalCreate] | None = Field(None, description="Escenarios anidados")
+    cadena_biocultural: CadenaBioculturalCreate = Field(..., description="Cadena de 4 niveles obligatoria")
+    periodo: PeriodoCreate = Field(..., description="Período del pronóstico")
+    contexto: ContextoCreate | None = Field(None, description="Coordenadas y notas")
+    pronosticos: list[PronosticoLargoItemCreate] = Field(
+        ..., min_length=1, description="Al menos un bloque de pronóstico"
+    )
+    recomendaciones: list[RecomendacionLargoCreate] | None = Field(
+        None, description="Recomendaciones en texto libre (lo que el productor recomienda hacer), con su id y su id offline"
+    )
+    observadores: list[ObservadorLargoCreate] = Field(
+        ..., min_length=1,
+        description="1..N observadores obligatorios: auto-registro (el observador sube) "
+                    "o en representación (el recolector menciona a uno o más observadores)"
+    )
 
 
-class PronosticoEstacionalUpdate(SinbBaseResponse):
-    id_campo_pronostico: UUID | None = None
+class PronosticoLargoUpdate(SinbBaseResponse):
+    """PUT /pronostico-largo/{id} — campos opcionales; si vienen pronosticos/recomendaciones reemplazan a los hijos."""
     fecha_emision: date | None = None
-    periodo_inicio: date | None = None
-    periodo_fin: date | None = None
+    texto_observador: str | None = None
+    id_municipio: int | None = None
+    codigo_comunidad: str | None = None
     estado: Literal["EMITIDO", "ACEPTADO", "RECHAZADO", "EN_REVISION"] | None = None
-    id_usuario_elabora: int | None = None
-    notas: str | None = None
+    cadena_biocultural: CadenaBioculturalCreate | None = None
+    periodo: PeriodoCreate | None = None
+    contexto: ContextoCreate | None = None
+    pronosticos: list[PronosticoLargoItemCreate] | None = Field(
+        None, description="Si se envía, reemplaza todos los bloques hijos"
+    )
+    recomendaciones: list[RecomendacionLargoCreate] | None = Field(
+        None, description="Si se envía, reemplaza todas las recomendaciones hijas (texto libre)"
+    )
 
 
-class PronosticoEstacionalResponse(SinbBaseResponse):
+class PronosticoLargoResponse(SinbBaseResponse):
     id: UUID
-    id_pe_off: str | None
     codigo: str
-    id_campo_pronostico: UUID
-    campo_pronostico: dict | None = None
     fecha_emision: date
     periodo_inicio: date
     periodo_fin: date
-    estado: Literal["EMITIDO", "ACEPTADO", "RECHAZADO", "EN_REVISION"]
-    id_usuario_elabora: int | None
-    notas: str | None
+    estado: str
+    id_usuario_subio: int | None = None
+    id_municipio: int | None = None
+    codigo_comunidad: str | None = None
+    texto_observador: str | None = None
+    cadena_biocultural: dict | None = None
+    contexto: dict | None = None
+    pronosticos: list[dict] = Field(default_factory=list, description="Bloques con sus escenarios")
+    recomendaciones: list[dict] = Field(default_factory=list, description="Recomendaciones en texto libre (id, id_recomendacion_off, nombre)")
+    observadores: list[dict] = Field(default_factory=list)
+    tipo_registro: Literal["INDIVIDUAL", "COLECTIVO"] | None = Field(
+        None, description="Derivado: INDIVIDUAL con 1 observador, COLECTIVO con 2+ (07 §4.5)"
+    )
     creado_en: datetime
-    escenarios: list[dict] | None = None
+    actualizado_en: datetime | None = None
 
 
-class PronosticoTemporalCreate(SinbBaseResponse):
+class PronosticoCortoCreate(SinbBaseResponse):
     id_pt_off: str | None = Field(None, max_length=36, description="ID offline generado por dispositivo")
-    id_categoria: UUID = Field(..., description="FK a categoría pronóstico temporal")
-    id_campo_pronostico: UUID = Field(..., description="FK a campo pronóstico")
+    id_categoria: UUID = Field(..., description="FK a categoría de pronóstico")
     fecha_emision: date = Field(..., description="Fecha de emisión")
     fecha_inicio: date = Field(..., description="Inicio de vigencia")
     fecha_fin: date = Field(..., description="Fin de vigencia")
-    valor_esperado: str | None = Field(None, description="Valor esperado")
+    texto_observador: str | None = Field(None, description="Texto literal del observador")
     confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = Field(None, description="Nivel de confianza")
+    id_usuario_subio: int | None = Field(None, description="Usuario que subió")
+    id_municipio: int | None = Field(None, description="FK a municipio (opcional, se infiere desde coordenadas si no viene)")
+    codigo_comunidad: str | None = Field(None, description="Código INE de comunidad (opcional, se infiere desde coordenadas si no viene)")
+    contexto: dict | None = Field(None, description="Coordenadas GPS: {latitud, longitud} (opcional, para inferir municipio/comunidad)")
 
 
-class PronosticoTemporalUpdate(SinbBaseResponse):
+class PronosticoCortoUpdate(SinbBaseResponse):
     id_categoria: UUID | None = None
-    id_campo_pronostico: UUID | None = None
     fecha_emision: date | None = None
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
-    valor_esperado: str | None = None
+    texto_observador: str | None = None
     confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = None
-    estado: Literal["EMITIDO", "ACEPTADO", "RECHAZADO", "EN_REVISION"] | None = None
+    codigo_comunidad: str | None = None
 
 
-class PronosticoTemporalResponse(SinbBaseResponse):
+class PronosticoCortoResponse(SinbBaseResponse):
     id: UUID
-    id_pt_off: str | None
+    id_pt_off: str | None = None
     codigo: str
     id_categoria: UUID
     categoria: dict | None = None
-    id_campo_pronostico: UUID
-    campo_pronostico: dict | None = None
+    codigo_comunidad: str | None = None
+    id_municipio: int | None = None
     fecha_emision: date
     fecha_inicio: date
     fecha_fin: date
-    valor_esperado: str | None
-    confianza: Literal["ALTA", "MEDIA", "BAJA"] | None
-    estado: Literal["EMITIDO", "ACEPTADO", "RECHAZADO", "EN_REVISION"]
+    texto_observador: str | None = None
+    confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = None
+    id_usuario_subio: int | None = None
     creado_en: datetime
 
 
@@ -452,30 +416,31 @@ class PronosticoTemporalResponse(SinbBaseResponse):
 
 class VerificacionPronosticoCreate(SinbBaseResponse):
     """Validación MANUAL de pronóstico."""
-    id_pronostico_estacional: UUID | None = Field(None, description="FK a pronóstico estacional")
-    id_pronostico_temporal: UUID | None = Field(None, description="FK a pronóstico temporal")
-    id_variable_climatica: UUID | None = Field(None, description="FK a variable climática")
-    codigo_comunidad: str | None = Field(None, description="Código INE de comunidad")
+    id_pronostico_largo: UUID | None = Field(None, description="FK a pronóstico estacional")
+    id_pronostico_corto: UUID | None = Field(None, description="FK a pronóstico temporal")
     id_municipio: int | None = Field(None, description="FK a municipio")
     estado: Literal["COINCIDE", "NO_COINCIDE"] = Field(..., description="Resultado de validación")
-    calificacion: float | None = Field(None, ge=0, le=100, description="Calificación 0-100")
-    observacion: str | None = Field(None, description="Observación cualitativa")
+    notas: str | None = Field(None, description="Observación cualitativa")
+    acierto_categoria: bool | None = Field(None, description="¿Coincidió la categoría?")
 
 
 class VerificacionPronosticoResponse(SinbBaseResponse):
     id: UUID
-    id_pronostico_estacional: UUID | None
-    id_pronostico_temporal: UUID | None
+    id_pronostico_largo: UUID | None
+    id_pronostico_corto: UUID | None
     id_variable_climatica: UUID | None
     codigo_comunidad: str | None
     id_municipio: int | None
-    estado: Literal["COINCIDE", "NO_COINCIDE"]
-    calificacion: float | None
-    observacion: str | None
-    es_automatico: bool
-    id_usuario_verifica: int | None
-    usuario_verifica: dict | None = None
-    fecha_verificacion: datetime
+    acierto_categoria: bool | None
+    error_absoluto: float | None
+    sesgo: float | None
+    estado: Literal["COINCIDE", "NO_COINCIDE", "PENDIENTE", "EN_VERIFICACION", "SIN_DATOS", "NO_VERIFICABLE"]
+    notas: str | None
+    es_autoevaluada: bool
+    verificado_por: int | None
+    verificador: dict | None = None
+    fecha_verificacion: datetime | None
+    creado_en: datetime
 
 
 class CalculoVerificacionRequest(SinbBaseResponse):
@@ -494,71 +459,17 @@ class CalculoVerificacionResponse(SinbBaseResponse):
 
 
 # ============================================================================
-# RECOMENDACIONES
-# ============================================================================
-
-class RecomendacionLocalCreate(SinbBaseResponse):
-    id_rec_off: str | None = Field(None, max_length=36, description="ID offline generado por dispositivo")
-    texto: str = Field(..., description="Texto de la recomendación")
-    id_dimension: UUID = Field(..., description="FK a dimensión")
-    id_categoria: UUID = Field(..., description="FK a categoría")
-    codigo_comunidad: str | None = Field(None, description="Código INE de comunidad (opcional)")
-    id_municipio: int | None = Field(None, description="FK a municipio (opcional)")
-    id_usuario_elabora: int | None = Field(None, description="Usuario que elabora")
-
-
-class RecomendacionLocalUpdate(SinbBaseResponse):
-    texto: str | None = None
-    id_dimension: UUID | None = None
-    id_categoria: UUID | None = None
-    codigo_comunidad: str | None = None
-    id_municipio: int | None = None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"] | None = None
-
-
-class RecomendacionLocalResponse(SinbBaseResponse):
-    id: UUID
-    id_rec_off: str | None
-    texto: str
-    id_dimension: UUID
-    dimension: dict | None = None
-    id_categoria: UUID
-    categoria: dict | None = None
-    codigo_comunidad: str | None
-    id_municipio: int | None
-    id_usuario_elabora: int | None
-    usuario_elabora: dict | None = None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-    creado_en: datetime
-
-
-class VarianteLocalCreate(SinbBaseResponse):
-    id_recomendacion: UUID = Field(..., description="FK a recomendación")
-    variante: str = Field(..., description="Texto de la variante")
-    ambito: str | None = Field(None, description="Ámbito de aplicación")
-
-
-class VarianteLocalResponse(SinbBaseResponse):
-    id: UUID
-    id_recomendacion: UUID
-    variante: str
-    ambito: str | None
-    estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-    creado_en: datetime
-
-
-# ============================================================================
 # AVISOS
 # ============================================================================
 
 class AvisoCreate(SinbBaseResponse):
     id_aviso_off: str | None = Field(None, max_length=36, description="ID offline generado por dispositivo")
-    id_campo_pronostico: UUID = Field(..., description="FK a campo pronóstico")
+    id_categoria: UUID = Field(..., description="FK a categoría de pronóstico")
     codigo_comunidad: str = Field(..., description="Código INE de comunidad")
     id_municipio: int = Field(..., description="FK a municipio")
     mensaje: str = Field(..., description="Mensaje del aviso")
     vigencia_horas: int = Field(24, ge=1, le=168, description="Vigencia en horas (1-168)")
-    id_usuario_emite: int | None = Field(None, description="Usuario que emite")
+    id_usuario_subio: int | None = Field(None, description="Usuario que subió (recolector u observador)")
 
 
 class AvisoUpdate(SinbBaseResponse):
@@ -571,8 +482,8 @@ class AvisoResponse(SinbBaseResponse):
     id: UUID
     id_aviso_off: str | None
     codigo: str
-    id_campo_pronostico: UUID
-    campo_pronostico: dict | None = None
+    id_categoria: UUID
+    categoria: dict | None = None
     codigo_comunidad: str
     id_municipio: int
     mensaje: str
@@ -580,7 +491,7 @@ class AvisoResponse(SinbBaseResponse):
     vigencia_horas: int
     fecha_vencimiento: datetime
     estado: Literal["ACTIVO", "INACTIVO", "ELIMINADO"]
-    id_usuario_emite: int | None
+    id_usuario_subio: int | None
     usuario_emite: dict | None = None
 
 
@@ -596,6 +507,11 @@ class ObservadorIndiceCreate(SinbBaseResponse):
     fecha_calculo: date | None = None
 
 
+class ObservadorIndiceUpdate(SinbBaseResponse):
+    valor: float | None = Field(None, description="Valor calculado del índice")
+    fecha_calculo: date | None = Field(None, description="Fecha de cálculo del índice")
+
+
 class ObservadorIndiceResponse(SinbBaseResponse):
     id: UUID
     id_usuario: int
@@ -605,7 +521,7 @@ class ObservadorIndiceResponse(SinbBaseResponse):
     tipo: Literal["ESTACIONAL", "TEMPORAL"]
     valor: float | None
     fecha_calculo: date
-    creado_en: datetime
+    creado_en: datetime | None = None
 
 
 # ============================================================================
@@ -614,7 +530,6 @@ class ObservadorIndiceResponse(SinbBaseResponse):
 
 class PronosticoObservadorCreate(SinbBaseResponse):
     """Asignar observador(es) a un pronóstico (recolector → observadores del mismo municipio)."""
-    id_pronostico: UUID = Field(..., description="ID del pronóstico (estacional o temporal)")
     tipo_pronostico: Literal["estacional", "temporal"] = Field(..., description="Tipo de pronóstico")
     id_observadores: list[int] = Field(..., description="Lista de IDs de usuarios observadores (mismo municipio)")
     confianza: Literal["ALTA", "MEDIA", "BAJA"] | None = Field(None, description="Nivel de confianza asignado")
@@ -647,17 +562,8 @@ class MapaFiltros(SinbBaseResponse):
 
 
 # ============================================================================
-# REPORTES ENRIQUECIDOS
+# REPORTES
 # ============================================================================
-
-class ReporteObservacionesResumen(SinbBaseResponse):
-    """Resumen de observaciones por período."""
-    total_observaciones: int
-    total_registros: int
-    por_comunidad: list[dict]
-    por_indicador: list[dict]
-    por_estado_validacion: list[dict]
-
 
 class ReportePronosticosResumen(SinbBaseResponse):
     """Resumen de pronósticos con estado de verificación."""
@@ -727,18 +633,12 @@ class PronosticoMinutelyCacheResponse(SinbBaseResponse):
 
 
 class PronosticoDigitalConsultaRequest(SinbBaseResponse):
-    """Solicitud de consulta de pronóstico digital."""
-    latitud: float = Field(..., ge=-90, le=90, description="Latitud del punto")
-    longitud: float = Field(..., ge=-180, le=180, description="Longitud del punto")
-    tipo: Literal["daily", "hourly", "minutely_15"] = Field(
+    """Solicitud de consulta de pronóstico digital (16 días desde hoy)."""
+    id_municipio: int = Field(..., description="ID del municipio")
+    tipo: Literal["daily", "hourly"] = Field(
         "daily", 
-        description="Tipo de pronóstico: daily (7-16 días), hourly (24-168h), minutely_15 (48h)"
+        description="Tipo de pronóstico: daily (16 días), hourly (168 horas)"
     )
-    variables: str = Field(
-        "temperature_2m_max,temperature_2m_min,precipitation_sum",
-        description="Variables separadas por coma"
-    )
-    horizonte_dias: int = Field(7, ge=1, le=16, description="Días de horizonte (1-16)")
 
 
 class OpenMeteoResponse(SinbBaseResponse):
@@ -753,63 +653,93 @@ class OpenMeteoResponse(SinbBaseResponse):
 
 
 # ============================================================================
-# GALERÍA DE EVIDENCIAS (Fotos/Audio de Bioindicadores)
+# PRONÓSTICO DIARIO (HISTÓRICO Y CONSULTA)
 # ============================================================================
 
-class EvidenciaCreate(SinbBaseResponse):
-    """Crear evidencia (foto/audio) de bioindicador."""
-    id_indicador_natural: UUID | None = Field(None, description="FK a indicador natural (galería)")
-    id_observacion_registro: UUID | None = Field(None, description="FK a registro de observación")
-    descripcion: str = Field(..., max_length=500, description="Descripción de la evidencia")
-    formato: str = Field(..., max_length=20, description="Formato del archivo (JPG, PNG, MP3, etc)")
-    tamano_bytes: int | None = Field(None, description="Tamaño del archivo en bytes")
-    hash_sha256: str | None = Field(None, max_length=64, description="Hash SHA256 del archivo")
-    latitud: float | None = Field(None, ge=-90, le=90, description="Coordenada GPS (latitud)")
-    longitud: float | None = Field(None, ge=-180, le=180, description="Coordenada GPS (longitud)")
-
-
-class EvidenciaResponse(SinbBaseResponse):
-    """Respuesta de evidencia con anidados completos."""
-    id: UUID
-    id_indicador_natural: UUID | None
-    indicador: dict | None = None  # Anidado: indicador completo
-    id_observacion_registro: UUID | None
-    observacion_registro: dict | None = None  # Anidado: registro completo
-    id_usuario_subio: int
-    usuario: dict | None = None  # Anidado: usuario completo
-    path_archivo: str
-    url_descarga: str | None = None  # URL temporal de descarga
-    descripcion: str
-    formato: str
-    tamano_bytes: int | None
-    hash_sha256: str | None
-    fecha_carga: datetime
-    activo: bool
-    metadata: dict | None = None  # GPS, cámara, etc.
-
-
-class GaleriaFiltros(SinbBaseResponse):
-    """Filtros para galería de evidencias."""
-    id_indicador_natural: UUID | None = Field(None, description="Filtrar por indicador")
-    id_grupo: UUID | None = Field(None, description="Filtrar por grupo biocultural")
+class PronosticoDiarioHistoricoRequest(SinbBaseResponse):
+    """Filtros para consultar histórico de pronóstico diario."""
     id_municipio: int | None = Field(None, description="Filtrar por municipio")
-    codigo_comunidad: str | None = Field(None, description="Filtrar por comunidad")
-    id_usuario_subio: int | None = Field(None, description="Filtrar por usuario que subió")
-    formato: str | None = Field(None, description="Filtrar por formato (JPG, PNG, MP3)")
+    codigo_comunidad: str | None = Field(None, description="Filtrar por código de comunidad")
     fecha_desde: date | None = Field(None, description="Fecha desde")
     fecha_hasta: date | None = Field(None, description="Fecha hasta")
-    con_gps: bool | None = Field(None, description="Solo evidencias con coordenadas GPS")
+    temp_max_min: float | None = Field(None, ge=-50, le=50, description="Temperatura máxima mínima")
+    temp_max_max: float | None = Field(None, ge=-50, le=50, description="Temperatura máxima máxima")
+    precipitacion_min: float | None = Field(None, ge=0, description="Precipitación mínima")
+    precipitacion_max: float | None = Field(None, ge=0, description="Precipitación máxima")
+    pagina: int = Field(1, ge=1, description="Número de página")
+    por_pagina: int = Field(50, ge=1, le=500, description="Registros por página")
 
 
-class GaleriaResponse(SinbBaseResponse):
-    """Respuesta de galería con paginación."""
+class PronosticoDiarioResponse(SinbBaseResponse):
+    """Respuesta de pronóstico diario individual."""
+    id: UUID
+    id_municipio: int
+    municipio: str | None = None
+    fecha: date
+    temp_max: float | None = None
+    temp_min: float | None = None
+    precipitacion_suma: float | None = None
+    precipitacion_prob_max: int | None = None
+    humedad_relativa_max: int | None = None
+    humedad_relativa_min: int | None = None
+    evapotranspiracion: float | None = None
+    viento_velocidad_max: float | None = None
+    viento_direccion: int | None = None
+    radiacion_solar: float | None = None
+    uv_index_max: float | None = None
+    sunrise: datetime | None = None
+    sunset: datetime | None = None
+    fuente: str | None = None
+
+
+class PronosticoDiarioHistoricoResponse(SinbBaseResponse):
+    """Respuesta paginada de histórico de pronóstico diario."""
+    data: list[PronosticoDiarioResponse]
     total: int
-    skip: int
-    limit: int
-    filtros_aplicados: dict
-    evidencias: list[EvidenciaResponse]
-    grupos_disponibles: list[dict] | None = None  # Para filtros
-    indicadores_destacados: list[dict] | None = None  # Más fotos
+    pagina: int
+    por_pagina: int
+    total_paginas: int
+
+
+class PronosticoDigitalConsultarRequest(SinbBaseResponse):
+    """Solicitud para consultar pronóstico digital almacenado (16 días)."""
+    id_municipio: int = Field(..., description="ID del municipio")
+    tipo: Literal["daily", "hourly"] = Field(
+        "daily", 
+        description="Tipo de pronóstico: daily (16 días desde hoy), hourly (168 horas)"
+    )
+
+
+class PronosticoDigitalConsultarResponse(SinbBaseResponse):
+    """Respuesta de pronóstico digital (16 días desde hoy)."""
+    id_municipio: int
+    municipio: str | None = None
+    tipo: str
+    registros: list[PronosticoDiarioResponse]
+    fecha_consulta: date
+    dias_disponibles: int
+
+
+# ============================================================================
+# FOTOS DE INDICADOR NATURAL
+# ============================================================================
+
+class IndicadorFotoUpdate(SinbBaseResponse):
+    """Actualizar datos de una foto de indicador natural (autor o admin)."""
+    descripcion: str = Field(..., max_length=500, description="Descripción de la foto")
+
+
+class IndicadorFotoResponse(SinbBaseResponse):
+    """Foto de un indicador natural."""
+    id: UUID
+    id_indicador_natural: UUID
+    path_foto: str
+    url_descarga: str | None = None
+    descripcion: str
+    id_usuario_subio: int
+    usuario: dict | None = None
+    creado_en: datetime
+    actualizado_en: datetime
 
 
 # ============================================================================
@@ -894,3 +824,100 @@ class NDVIIngestarResponse(SinbBaseResponse):
     escenas_procesadas: int
     comunidades_procesadas: int
     errores: list[str]
+
+
+# ============================================================================
+# SCHEMAS DE RESPUESTA PARA ENDPOINTS GET (2026-10-03)
+# ============================================================================
+
+class PronosticoLargoListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de pronósticos estacionales."""
+    id: UUID
+    codigo: str
+    fecha_emision: date
+    periodo_inicio: date
+    periodo_fin: date
+    estado: str
+    id_usuario_subio: int | None
+    id_municipio: int | None
+    cadena_biocultural: dict | None = None
+    creado_en: datetime
+
+
+class PronosticoCortoListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de pronósticos temporales."""
+    id: UUID
+    codigo: str
+    fecha_emision: date
+    periodo_inicio: date
+    periodo_fin: date
+    estado: str
+    categoria: str | None
+    confianza: int | None
+    id_usuario_subio: int | None = None
+    creado_en: datetime
+
+
+class AvisoListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de avisos."""
+    id: UUID
+    codigo: str
+    fecha_emision: date
+    vigencia_horas: int
+    mensaje: str
+    estado: str
+    verificado: bool | None
+    creado_en: datetime
+
+
+class IndicadorNaturalListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de indicadores."""
+    id: UUID
+    codigo: str
+    nombre_cientifico: str
+    nombre_comun: str | None
+    id_grupo: UUID | None
+    grupo: dict | None
+    estado: str
+
+
+class CaracteristicaListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de características."""
+    id: UUID
+    id_indicador_natural: UUID
+    caracteristica: str
+    estado: str
+    indicador: dict | None
+
+
+class ComportamientoListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de comportamientos."""
+    id: UUID
+    id_grupo: UUID | None
+    id_caracteristica: UUID
+    comportamiento: str
+    estado: str
+    grupo: dict | None
+    caracteristica: dict | None
+
+
+class SignificadoListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de significados."""
+    id: UUID
+    id_grupo: UUID | None
+    id_comportamiento: UUID
+    significado: str
+    estado: str
+    grupo: dict | None
+    comportamiento: dict | None
+
+
+class EscenarioListItemResponse(SinbBaseResponse):
+    """Respuesta simplificada para lista de escenarios."""
+    id: UUID
+    id_categoria: UUID
+    id_municipio: int | None
+    nombre_escenario: str
+    confianza: str | None
+    categoria: dict | None
+    estado: str

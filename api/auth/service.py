@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from .jwt import hash_password, verify_password, create_access_token
+from .jwt import hash_password, verify_password, create_access_token, verify_token
 from .schemas import LoginRequest, RegisterRequest, VerificarIdentidadRequest, CambiarContrasenaRequest
 from ..shared.service import validar_geografia
 
@@ -76,14 +76,22 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
     if user["id_rol"] in (6, 7):
         # Roles 6/7: token de larga duración - reutilizar sesión activa si existe
         sesion = db.execute(
-            text("SELECT token, fecha_expiracion FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW() AT TIME ZONE 'UTC'"),
+            text("SELECT id_sesion, token, fecha_expiracion FROM usuarios.sesion WHERE id_usuario = :uid AND activo = true AND fecha_expiracion > NOW() AT TIME ZONE 'UTC'"),
             {"uid": user["id_usuario"]}
         ).mappings().first()
 
-        if sesion:
+        # Sólo se reutiliza si el JWT guardado sigue siendo válido; si no lo es
+        # (p. ej. cambió la clave secreta al redesplegar) se emite un token nuevo
+        # para no devolver un token muerto que el servidor rechazaría en cada llamada.
+        if sesion and verify_token(sesion["token"]) is not None:
             token = sesion["token"]
             fecha_exp = sesion["fecha_expiracion"]
         else:
+            if sesion:
+                db.execute(
+                    text("UPDATE usuarios.sesion SET activo = false WHERE id_sesion = :sid"),
+                    {"sid": sesion["id_sesion"]},
+                )
             token = create_access_token(
                 {"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]},
                 expires_delta=delta,
@@ -94,14 +102,13 @@ def authenticate_user(db: Session, data: LoginRequest) -> dict | None:
             )
             db.commit()
     else:
-        # Resto de roles: cada login emite un token nuevo tras verificar credenciales
+        # Resto de roles: cada login emite un token nuevo de 3 días tras verificar
+        # credenciales. Las sesiones de los demás dispositivos NO se desactivan:
+        # cada inicio de sesión registra un dispositivo independiente y ninguno
+        # queda sin efecto por iniciar sesión en otro.
         token = create_access_token(
             {"sub": str(user["id_usuario"]), "usuario": user["usuario"], "id_rol": user["id_rol"]},
             expires_delta=delta,
-        )
-        db.execute(
-            text("UPDATE usuarios.sesion SET activo = false WHERE id_usuario = :uid AND activo = true"),
-            {"uid": user["id_usuario"]},
         )
         db.execute(
             text("INSERT INTO usuarios.sesion (id_usuario, token, activo, fecha_inicio, fecha_expiracion) VALUES (:uid, :token, true, :inicio, :fecha_exp)"),

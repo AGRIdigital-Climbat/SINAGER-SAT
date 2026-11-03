@@ -3,7 +3,21 @@
 *.gpkg
 
 # Backups de base de datos
+backups/
 database/backup*.sql
+database/*_backup.sql
+database/*.dump
+SINB/sinb_*.sql
+
+# Configuracion local con credenciales
+database/servers.json
+database/dbeaver-data-sources.xml
+
+# MotorIA: claves, modelos y documentos
+.keys/
+modelos/
+*.gguf
+uploads/motor_ia/
 
 # Archivos temporales
 *.tmp

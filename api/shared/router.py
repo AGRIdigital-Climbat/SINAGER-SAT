@@ -357,8 +357,16 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
             area_oficial: str | None = Query(None, description="Urbana | Rural | Mixto"),
             limit: int | None = Query(None, ge=1, le=100000, description="Máx. de filas"),
             offset: int | None = Query(None, ge=0, description="Desplazamiento"),
+            skip: int | None = Query(None, ge=0, description="Saltar registros (alias de offset)"),
+            todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
             db: Session = Depends(get_db),
         ):
+            """Listado completo por defecto (`limit` vacío); `limit`/`skip`/`offset` paginan."""
+            if skip is not None:
+                offset = skip
+            if todos:
+                limit = None
+                offset = None
             items = service.get_unidades_censo(db, tabla, id_municipio, codigo_ine, q,
                                                area_oficial, limit, offset)
             return SuccessResponse(message="Operación exitosa", data=items, total=len(items))

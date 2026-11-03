@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..auth.jwt import hash_password
 from ..shared.service import validar_geografia
+from ..pagination import pagina_limit_offset
 
 GEOGRAFIA_COLS = ("id_departamento", "id_provincia", "id_municipio")
 
@@ -56,7 +57,7 @@ def _build_usuario(row):
 
 def get_usuarios(db: Session, id_departamento: int | None = None, id_provincia: int | None = None,
                  id_municipio: int | None = None, id_rol: int | None = None,
-                 skip: int = 0, limit: int = 50):
+                 skip: int = 0, limit: int = 50, todos: bool = False):
     conditions = []
     params = {}
     if id_departamento is not None:
@@ -76,9 +77,12 @@ def get_usuarios(db: Session, id_departamento: int | None = None, id_provincia: 
         text(f"SELECT COUNT(*) FROM usuarios.usuario u{where}"),
         params,
     ).scalar()
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    query_params = dict(params) if todos else {**params, "limit": limit, "skip": skip}
     rows = db.execute(
-        text(f"{SELECT_USUARIO}{where} ORDER BY u.id_usuario LIMIT :limit OFFSET :skip"),
-        {**params, "limit": limit, "skip": skip},
+        text(f"{SELECT_USUARIO}{where} ORDER BY u.id_usuario{page}"),
+        query_params,
     ).mappings().all()
     return [_build_usuario(r) for r in rows], total
 
@@ -409,16 +413,51 @@ def assign_permisos_batch(db: Session, id_rol: int, permisos: dict[str, list[str
 
 # ── SESIONES ──
 
-def get_sesiones(db: Session, id_usuario: int | None = None):
+def _fila_sesion(r) -> dict:
+    d = dict(r)
+    # activo real: la sesión sigue viva si no fue cerrada y su JWT sigue vigente
+    # (cada dispositivo conserva su propia sesión; iniciar sesión en otro no la apaga)
+    if d.get("activo") and d.get("fecha_expiracion") is not None:
+        from datetime import datetime as _dt, timezone as _tz
+        fe = d["fecha_expiracion"]
+        if isinstance(fe, _dt):
+            d["activo"] = fe.replace(tzinfo=_tz.utc) > _dt.now(_tz.utc)
+    for k in ("fecha_inicio", "fecha_expiracion"):
+        if d.get(k) is not None and not isinstance(d[k], str):
+            d[k] = d[k].isoformat()
+    return d
+
+
+def get_sesiones(db: Session, id_usuario: int | None = None,
+                 limit: int | None = None, skip: int = 0, todos: bool = False):
     cols = "id_sesion, id_usuario, fecha_inicio, fecha_expiracion, ip_origen, activo"
+
+    # Comportamiento histórico: SIN filtro de usuario se devolvían las 100 sesiones
+    # más recientes; CON filtro, todas las del usuario. Ese tope se conserva como
+    # límite por defecto únicamente en el caso sin filtro, para no cambiar lo que
+    # hoy se recibe. `limit` lo cambia y `todos=true` fuerza el conjunto completo.
+    if todos:
+        efectivo = None
+    elif limit is not None:
+        efectivo = limit
+    elif id_usuario is None:
+        efectivo = 100
+    else:
+        efectivo = None
+    page, page_params = pagina_limit_offset(efectivo, skip, todos)
+
     if id_usuario:
         rows = db.execute(
-            text(f"SELECT {cols} FROM usuarios.sesion WHERE id_usuario = :id ORDER BY fecha_inicio DESC"),
-            {"id": id_usuario},
+            text(f"SELECT {cols} FROM usuarios.sesion WHERE id_usuario = :id "
+                 f"ORDER BY fecha_inicio DESC {page}"),
+            {"id": id_usuario, **page_params},
         ).mappings().all()
-        return [dict(r) for r in rows]
-    rows = db.execute(text(f"SELECT {cols} FROM usuarios.sesion ORDER BY fecha_inicio DESC LIMIT 100")).mappings().all()
-    return [dict(r) for r in rows]
+        return [_fila_sesion(r) for r in rows]
+    rows = db.execute(
+        text(f"SELECT {cols} FROM usuarios.sesion ORDER BY fecha_inicio DESC {page}"),
+        page_params,
+    ).mappings().all()
+    return [_fila_sesion(r) for r in rows]
 
 
 # ── AUDITORIA ──

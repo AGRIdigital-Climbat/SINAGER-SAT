@@ -175,6 +175,7 @@ def get_escenas(
     cobertura_nubes_max: Optional[float] = Query(20.0, ge=0, le=100, description="Máx nubes (%)"),
     skip: int = Query(0, ge=0, description="Saltar registros"),
     limit: int = Query(100, ge=1, le=500, description="Límite de resultados"),
+    todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -191,7 +192,7 @@ def get_escenas(
     - Metadatos completos
     """
     resultado = service.get_escenas_satelitales(
-        db, fecha_desde, fecha_hasta, cobertura_nubes_max, skip, limit
+        db, fecha_desde, fecha_hasta, cobertura_nubes_max, skip, limit, todos=todos
     )
     
     return SuccessResponse(

@@ -5,7 +5,7 @@ formulario_rida, familia, integrante, ubicacion_familia y catálogos asociados.
 Sigue el mismo estilo que api/edan/service.py (SQL crudo con text()).
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -89,9 +89,9 @@ def listar_edan_aprobados(db: Session, user: dict, f: dict | None = None,
                    p.nombre as provincia_nombre,
                    m.nombre as municipio_nombre,
                    te.nombre as tipo_evento_nombre,
-                   ev.id_evento_rida,
-                   (ev.id_evento_rida IS NOT NULL AND ev.anulado = false) AS rida_habilitado,
-                   (ev.id_evento_rida IS NULL OR ev.anulado = true) AS puede_habilitar,
+                    ev.id_evento_rida,
+                    (ev.id_evento_rida IS NOT NULL) AS rida_habilitado,
+                    (ev.id_evento_rida IS NULL) AS puede_habilitar,
                    ce.codigo AS evento_estado_codigo,
                    ce.nombre AS evento_estado_nombre,
                    ev.fecha_habilitacion, ev.fecha_cierre
@@ -103,7 +103,7 @@ def listar_edan_aprobados(db: Session, user: dict, f: dict | None = None,
             LEFT JOIN rida.evento_rida ev ON ev.id_edan = e.id_edan
             LEFT JOIN rida.cat_estado_evento ce ON ce.id_estado_evento = ev.id_estado
             WHERE {where}
-            ORDER BY (ev.id_evento_rida IS NOT NULL AND ev.anulado = false) DESC,
+            ORDER BY (ev.id_evento_rida IS NOT NULL) DESC,
                      e.fecha_creacion DESC, e.id_edan DESC
             {page_sql}""",
         params,
@@ -141,6 +141,7 @@ def _page_clause(skip: int = 0, limit: int = 50, todos: bool = False) -> tuple[s
 FORMULARIO_FROM = """
 FROM rida.formulario_rida f
 LEFT JOIN edan.edan_localidades el ON el.id_edan_localidad = f.id_edan_localidad
+LEFT JOIN edan.tipo_localidad tl ON tl.id_tipo_localidad = el.id_tipo_localidad
 LEFT JOIN shared.municipio m ON m.id = el.id_municipio
 LEFT JOIN shared.departamento d ON d.id = el.id_departamento
 LEFT JOIN edan.edan e ON e.id_edan = f.id_edan
@@ -151,9 +152,12 @@ SQL_FORMULARIO = """
 SELECT f.id_formulario, f.id_edan_localidad, f.id_edan, f.id_usuario,
        f.id_estado, f.id_evento_rida, f.fecha_creacion, f.fecha_modificacion,
        el.localidad AS localidad_nombre, el.id_municipio, el.id_departamento,
-       el.imp_poblacion, el.imp_salud, el.imp_infraestructura, el.imp_servicios,
-       el.imp_educacion, el.imp_vivienda, el.imp_agropecuario, el.imp_proteccion,
-       el.imp_necesidades, el.imp_impacto_poblacion, el.imp_salud_establecimientos,
+       el.id_tipo_localidad, tl.nombre AS tipo_localidad_nombre,
+       el.grup_poblacion AS imp_poblacion, el.grup_salud AS imp_salud,
+       el.grup_infraestructura AS imp_infraestructura, el.grup_servicios AS imp_servicios,
+       el.grup_educacion AS imp_educacion, el.grup_vivienda AS imp_vivienda,
+       el.grup_agropecuario AS imp_agropecuario, el.grup_proteccion AS imp_proteccion,
+       el.grup_necesidades AS imp_necesidades, el.imp_impacto_poblacion, el.imp_salud_establecimientos,
        el.imp_danos_viales, el.imp_danos_infra_publica, el.imp_servicios_basicos,
        el.imp_unidades_educativas, el.imp_danos_vivienda, el.imp_danos_agricultura,
        el.imp_danos_pecuarios, el.imp_infra_productiva, el.imp_primera_respuesta,
@@ -169,7 +173,8 @@ SELECT f.id_formulario, f.id_edan_localidad, f.id_edan, f.id_usuario,
           JOIN rida.integrante i ON i.id_familia = fa.id_familia
          WHERE fa.id_formulario = f.id_formulario) AS n_integrantes,
        (SELECT COUNT(*) FROM rida.necesidad n
-         WHERE n.id_formulario = f.id_formulario) AS n_necesidades
+         JOIN rida.familia fn ON fn.id_familia = n.id_familia
+        WHERE fn.id_formulario = f.id_formulario) AS n_necesidades
 """ + FORMULARIO_FROM + """
 LEFT JOIN rida.evento_rida ev ON ev.id_evento_rida = f.id_evento_rida
 LEFT JOIN rida.cat_estado_evento ce ON ce.id_estado_evento = ev.id_estado
@@ -458,16 +463,18 @@ SELECT fa.id_familia, fa.id_familia_off, fa.id_formulario, fa.id_edan_localidad,
        fa.id_ubicacion_familia, fa.id_necesidad, fa.observacion,
        fa.fecha_creacion, fa.fecha_modificacion,
        el.localidad AS localidad_nombre,
+       el.id_tipo_localidad, tl.nombre AS tipo_localidad_nombre,
        el.id_municipio, el.id_departamento
 FROM rida.familia fa
 LEFT JOIN edan.edan_localidades el ON el.id_edan_localidad = fa.id_edan_localidad
+LEFT JOIN edan.tipo_localidad tl ON tl.id_tipo_localidad = el.id_tipo_localidad
 """
 
 
 def list_familias(db: Session, id_formulario: int) -> list:
     rows = _rows(
         db,
-        SQL_FAMILIA + " WHERE fa.id_formulario = :id_formulario ORDER BY fa.id_familia",
+        SQL_FAMILIA + " WHERE fa.id_formulario = :id_formulario ORDER BY fa.id_familia DESC",
         {"id_formulario": id_formulario},
     )
     return [_familia_compuesta(db, dict(r)) for r in rows]
@@ -494,7 +501,7 @@ def list_familias_paginado(db: Session, id_formulario: int,
     where = " AND ".join(conds)
     
     total = db.execute(
-        text(f"SELECT COUNT(*) FROM rida.familia fa JOIN edan.edan_localidades el ON el.id_edan_localidad = fa.id_edan_localidad WHERE {where}"),
+        text(f"SELECT COUNT(*) FROM rida.familia fa WHERE {where}"),
         params,
     ).scalar() or 0
     
@@ -503,7 +510,7 @@ def list_familias_paginado(db: Session, id_formulario: int,
     
     rows = _rows(
         db,
-        SQL_FAMILIA + " JOIN edan.edan_localidades el ON el.id_edan_localidad = fa.id_edan_localidad WHERE " + where + " ORDER BY fa.id_familia" + page_sql,
+        SQL_FAMILIA + " WHERE " + where + " ORDER BY fa.id_familia DESC" + page_sql,
         params,
     )
     return [_familia_compuesta(db, dict(r)) for r in rows], total
@@ -537,11 +544,38 @@ def _validar_familia_data(db: Session, data: dict) -> None:
             raise HTTPException(status_code=400, detail="La necesidad no existe")
 
 
+def _pasar_a_en_proceso_si_habilitado(db: Session, id_formulario: int | None) -> None:
+    """Ciclo de vida del evento RIDA: al primer registro de empadronamiento
+    (familia, integrante o ubicación) un evento HABILITADO pasa a EN PROCESO.
+    Es el ÚNICO cambio de estado automático; ATENDIDO y CERRADO solo los
+    cambian sus APIs explícitas."""
+    if not id_formulario:
+        return
+    db.execute(text("""
+        UPDATE rida.evento_rida ev
+           SET id_estado = (SELECT id_estado_evento FROM rida.cat_estado_evento
+                             WHERE codigo = 'EN PROCESO'),
+               fecha_modificacion = (NOW() AT TIME ZONE 'America/La_Paz')
+         WHERE ev.id_evento_rida = (SELECT id_evento_rida FROM rida.formulario_rida
+                                     WHERE id_formulario = :f)
+           AND ev.id_estado = (SELECT id_estado_evento FROM rida.cat_estado_evento
+                                WHERE codigo = 'HABILITADO')
+    """), {"f": id_formulario})
+
+
 def crear_familia(db: Session, data: dict, uid: int) -> dict:
     """Crea una familia (UPSERT por id_familia_off si llega una existente)."""
     if not data.get("id_formulario"):
         raise HTTPException(status_code=422, detail="id_formulario es obligatorio")
     _validar_familia_data(db, data)
+
+    # Rastreo: si no viene la localidad, se hereda del formulario para que
+    # toda familia quede siempre ligada a su id_edan_localidad.
+    if data.get("id_edan_localidad") is None:
+        frm = _row(db, "SELECT id_edan_localidad FROM rida.formulario_rida WHERE id_formulario = :id",
+                   {"id": data["id_formulario"]})
+        if frm and frm["id_edan_localidad"] is not None:
+            data["id_edan_localidad"] = frm["id_edan_localidad"]
 
     off = data.get("id_familia_off")
     if off:
@@ -562,6 +596,7 @@ def crear_familia(db: Session, data: dict, uid: int) -> dict:
         {k: data[k] for k in present},
     )
     id_familia = result["id_familia"]
+    _pasar_a_en_proceso_si_habilitado(db, data["id_formulario"])
     db.commit()
 
     if off:
@@ -751,6 +786,9 @@ def crear_integrante(db: Session, data: dict) -> dict:
     id_integrante = result["id_integrante"]
     if data.get("es_jefe"):
         _unico_jefe(db, data["id_familia"], id_integrante)
+    fam = _row(db, "SELECT id_formulario FROM rida.familia WHERE id_familia = :id",
+               {"id": data["id_familia"]})
+    _pasar_a_en_proceso_si_habilitado(db, fam["id_formulario"] if fam else None)
     db.commit()
     return get_integrante(db, id_integrante)
 
@@ -809,7 +847,7 @@ LEFT JOIN rida.cat_tipo_albergue ta
 
 
 def list_ubicaciones(db: Session, id_familia: int) -> list:
-    rows = _rows(db, SQL_UBICACION + " WHERE u.id_familia = :id_familia ORDER BY u.id_ubicacion_familia",
+    rows = _rows(db, SQL_UBICACION + " WHERE u.id_familia = :id_familia ORDER BY u.id_ubicacion_familia DESC",
                  {"id_familia": id_familia})
     return [dict(r) for r in rows]
 
@@ -823,7 +861,7 @@ def list_ubicaciones_paginado(db: Session, id_familia: int,
     params = {"id_familia": id_familia} | page_params
     rows = _rows(
         db,
-        SQL_UBICACION + " WHERE u.id_familia = :id_familia ORDER BY u.id_ubicacion_familia" + page_sql,
+        SQL_UBICACION + " WHERE u.id_familia = :id_familia ORDER BY u.id_ubicacion_familia DESC" + page_sql,
         params,
     )
     return [dict(r) for r in rows], total
@@ -879,6 +917,9 @@ def crear_ubicacion(db: Session, data: dict) -> dict:
              "WHERE id_familia = :id_familia AND id_ubicacion_familia IS NULL"),
         {"id_ubicacion": id_ubicacion, "id_familia": data["id_familia"]},
     )
+    fam = _row(db, "SELECT id_formulario FROM rida.familia WHERE id_familia = :id",
+               {"id": data["id_familia"]})
+    _pasar_a_en_proceso_si_habilitado(db, fam["id_formulario"] if fam else None)
     db.commit()
     return get_ubicacion(db, id_ubicacion)
 
@@ -1065,7 +1106,7 @@ def sync_empadronamiento(db: Session, payload: dict, uid: int) -> dict:
 # ============================================================================
 
 SQL_EVENTO = """
-SELECT ev.id_evento_rida, ev.id_edan, ev.id_estado,
+SELECT ev.id_evento_rida, ev.id_edan, ev.id_estado, ev.codigo,
        ev.id_usuario_habilito, ev.fecha_habilitacion,
        ev.id_usuario_cierro, ev.fecha_cierre,
        ev.fecha_creacion, ev.fecha_modificacion,
@@ -1092,6 +1133,7 @@ SQL_LOCALIDAD_EVENTO = """
 SELECT f.id_formulario, f.id_edan_localidad, f.id_edan, f.id_usuario,
        f.id_estado, f.id_evento_rida, f.fecha_creacion, f.fecha_modificacion,
        el.localidad AS localidad, el.id_departamento, el.id_municipio,
+       el.id_tipo_localidad, tl.nombre AS tipo_localidad_nombre,
        d.nombre AS departamento_nombre, m.nombre AS municipio_nombre,
        ef.codigo AS estado_codigo, ef.nombre AS estado_nombre,
        fa.count AS n_familias,
@@ -1099,10 +1141,12 @@ SELECT f.id_formulario, f.id_edan_localidad, f.id_edan, f.id_usuario,
           JOIN rida.familia f2 ON f2.id_familia = i.id_familia
          WHERE f2.id_formulario = f.id_formulario) AS n_integrantes,
        (SELECT COUNT(*) FROM rida.necesidad n
-         WHERE n.id_formulario = f.id_formulario) AS n_necesidades
+         JOIN rida.familia fn ON fn.id_familia = n.id_familia
+        WHERE fn.id_formulario = f.id_formulario) AS n_necesidades
 FROM rida.evento_rida ev
 JOIN edan.edan_localidades el ON el.id_edan = ev.id_edan
 LEFT JOIN rida.formulario_rida f ON f.id_edan_localidad = el.id_edan_localidad
+LEFT JOIN edan.tipo_localidad tl ON tl.id_tipo_localidad = el.id_tipo_localidad
 LEFT JOIN shared.departamento d ON d.id = el.id_departamento
 LEFT JOIN shared.municipio m ON m.id = el.id_municipio
 LEFT JOIN rida.cat_estado_formulario ef ON ef.id_estado_formulario = f.id_estado
@@ -1210,6 +1254,9 @@ def listar_eventos(db: Session, user: dict, f: dict | None = None,
     if f.get("id_edan"):
         conds.append("ev.id_edan = :id_edan")
         params["id_edan"] = f["id_edan"]
+    if f.get("codigo"):
+        conds.append("UPPER(ev.codigo) = UPPER(:codigo)")
+        params["codigo"] = f["codigo"]
     if f.get("id_estado"):
         conds.append("ev.id_estado = :id_estado")
         params["id_estado"] = f["id_estado"]
@@ -1248,7 +1295,9 @@ def listar_eventos(db: Session, user: dict, f: dict | None = None,
 
     where = " WHERE " + " AND ".join(conds) if conds else ""
 
-    total = db.execute(text("SELECT COUNT(*)" + SQL_EVENTO + where), params).scalar()
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM ({SQL_EVENTO}{where}) _cnt"), params
+    ).scalar()
     page_sql, page_params = _page_clause(skip, limit, todos)
     params |= page_params
     rows = _rows(
@@ -1272,19 +1321,590 @@ def get_evento(db: Session, id_evento_rida: int) -> dict | None:
     return _build_evento(dict(row), localidades_evento(db, id_evento_rida))
 
 
+# ============================================================================
+#  REPORTE DE EVENTO (empadronamiento consolidado)
+#  GET /rida/evento/{identificador}/reporte — resumen total + cada formulario
+#  con sus 3 secciones: poblacion por grupo etario, capacidades especiales por
+#  grupo etario y necesidades por familia. Edades al momento del
+#  empadronamiento (fecha_creacion del integrante, fallback la del formulario).
+# ============================================================================
+
+# Rangos de edan.grupo_etario (codigo, nombre, orden, min, max). 'sin_fecha' es
+# el bucket de fecha_nacimiento NULL o edad invalida (nacimiento futuro).
+GRUPOS_ETARIOS_REPORTE = [
+    ("ninas_ninos_0_5", "Niño (a) 0-5 años", 1, 0, 5),
+    ("escolar_6_18", "Escolar de 6-18 años", 2, 6, 18),
+    ("adulto_19_60", "Adulto de 19-60 años", 3, 19, 60),
+    ("adulto_mayor_60", "Adulto mayor de 60 años adelante", 4, 61, 150),
+    ("sin_fecha", "Sin fecha de nacimiento", 5, None, None),
+]
+
+_SQL_LOCALIDADES_REPORTE = """
+SELECT el.id_edan_localidad, el.localidad,
+       el.id_tipo_localidad,
+       tl.nombre AS tipo_localidad_nombre,
+       ele.nombre AS estado_localidad_nombre,
+       f.id_formulario, f.id_estado, f.fecha_creacion, f.id_usuario,
+       ef.codigo AS estado_codigo, ef.nombre AS estado_nombre,
+       u.nombre AS usuario_nombre, u.usuario AS usuario_login
+FROM rida.evento_rida ev
+JOIN edan.edan_localidades el ON el.id_edan = ev.id_edan
+LEFT JOIN edan.tipo_localidad tl ON tl.id_tipo_localidad = el.id_tipo_localidad
+LEFT JOIN edan.edan_localidades_estado ele
+       ON ele.id_edan_localidad_estado = el.id_edan_localidad_estado
+LEFT JOIN rida.formulario_rida f ON f.id_edan_localidad = el.id_edan_localidad
+LEFT JOIN rida.cat_estado_formulario ef ON ef.id_estado_formulario = f.id_estado
+LEFT JOIN usuarios.usuario u ON u.id_usuario = f.id_usuario
+WHERE ev.id_evento_rida = :id
+ORDER BY el.id_edan_localidad
+"""
+
+
+def resolver_evento(db: Session, identificador) -> int | None:
+    """Resuelve un evento por id numerico o por codigo RIDA (exacto, sin
+    distinguir mayusculas). Sin coincidencia -> None (404 en el router)."""
+    ident = str(identificador or "").strip()
+    if not ident:
+        return None
+    if ident.isdigit():
+        row = _row(db, "SELECT id_evento_rida FROM rida.evento_rida "
+                       "WHERE id_evento_rida = :i", {"i": int(ident)})
+    else:
+        row = _row(db, "SELECT id_evento_rida FROM rida.evento_rida "
+                       "WHERE UPPER(codigo) = UPPER(:c)", {"c": ident})
+    return row["id_evento_rida"] if row else None
+
+
+def _edad_en(fecha_nac: date | None, ref) -> int | None:
+    """Edad completada en la fecha del empadronamiento (`ref`: fecha_creacion
+    del integrante/formulario). None si falta la fecha o la edad es negativa."""
+    if not fecha_nac:
+        return None
+    if isinstance(ref, datetime):
+        ref = ref.date()
+    elif not ref:
+        ref = datetime.now(timezone.utc).date()
+    edad = ref.year - fecha_nac.year - ((ref.month, ref.day) < (fecha_nac.month, fecha_nac.day))
+    return edad if edad >= 0 else None
+
+
+def _grupo_de(edad: int | None) -> str:
+    if edad is None:
+        return "sin_fecha"
+    for codigo, _n, _o, vmin, vmax in GRUPOS_ETARIOS_REPORTE:
+        if vmin is not None and vmin <= edad <= vmax:
+            return codigo
+    return "sin_fecha"
+
+
+def _seccion_reporte(integrantes: list, familias: list, necesidades: list,
+                     cats: dict) -> dict:
+    """Construye las 3 secciones sobre un subconjunto (total evento o un
+    formulario). `cats` trae los catalogos ya leidos (discapacidad sin NINGUNA,
+    enfermedad y categorias de ayuda)."""
+    ints_por_fam: dict[int, int] = {}
+    for i in integrantes:
+        ints_por_fam[i["id_familia"]] = ints_por_fam.get(i["id_familia"], 0) + 1
+
+    counts = [ints_por_fam.get(f["id_familia"], 0) for f in familias]
+    prom = round(sum(counts) / len(counts), 2) if counts else 0.0
+
+    pobl = {c: {"total": 0, "m": 0, "f": 0} for c, *_ in GRUPOS_ETARIOS_REPORTE}
+    cap = {c: {"gestantes": 0, "lactantes": 0, "disc": {}, "enf": {}}
+           for c, *_ in GRUPOS_ETARIOS_REPORTE}
+
+    for i in integrantes:
+        edad = _edad_en(i["fecha_nacimiento"], i["fecha_empadronamiento"])
+        g = _grupo_de(edad)
+        pobl[g]["total"] += 1
+        if i["sexo"] == "M":
+            pobl[g]["m"] += 1
+        elif i["sexo"] == "F":
+            pobl[g]["f"] += 1
+        if i.get("gestante_semanas") is not None:
+            cap[g]["gestantes"] += 1
+        if i.get("lactante_meses") is not None:
+            cap[g]["lactantes"] += 1
+        if i.get("id_discapacidad") and i["id_discapacidad"] != cats["id_discapacidad_ninguna"]:
+            cap[g]["disc"][i["id_discapacidad"]] = cap[g]["disc"].get(i["id_discapacidad"], 0) + 1
+        if i.get("id_enfermedad"):
+            cap[g]["enf"][i["id_enfermedad"]] = cap[g]["enf"].get(i["id_enfermedad"], 0) + 1
+
+    poblacion = [
+        {"grupo": c, "nombre": n, "orden": o, **pobl[c]}
+        for c, n, o, *_ in GRUPOS_ETARIOS_REPORTE
+    ]
+
+    def _por_tipo(clave_map, catalogo):
+        out = []
+        for item in catalogo:
+            total = clave_map.get(item["id"], 0)
+            if total:
+                out.append({"id": item["id"], "codigo": item["codigo"],
+                            "nombre": item["nombre"], "total": total})
+        return out
+
+    capacidades = []
+    for c, n, o, *_ in GRUPOS_ETARIOS_REPORTE:
+        disc = cap[c]["disc"]
+        enf = cap[c]["enf"]
+        capacidades.append({
+            "grupo": c, "nombre": n, "orden": o,
+            "gestantes": cap[c]["gestantes"],
+            "lactantes": cap[c]["lactantes"],
+            "discapacidad": {"total": sum(disc.values()),
+                             "por_tipo": _por_tipo(disc, cats["discapacidad"])},
+            "enfermedad": {"total": sum(enf.values()),
+                           "por_tipo": _por_tipo(enf, cats["enfermedad"])},
+        })
+
+    # Necesidades por familia (solo familias con al menos una) agrupadas por
+    # categoria de ayuda — sin costos ni detalle de articulo (regla del reporte).
+    por_familia: dict[int, dict] = {}
+    for n in necesidades:
+        fid = n["id_familia"]
+        if fid is None:
+            continue
+        fam = por_familia.setdefault(fid, {
+            "id_familia": fid,
+            "id_formulario": n["id_formulario_resuelto"],
+            "cats": {},
+            "n": 0,
+        })
+        fam["n"] += 1
+        c = fam["cats"].setdefault(n["id_categoria_ayuda"], {"n": 0, "completadas": 0})
+        c["n"] += 1
+        if n["estado"]:
+            c["completadas"] += 1
+
+    cat_by_id = {c["id"]: c for c in cats["categoria"]}
+    necesidad_familia = []
+    for fid in sorted(por_familia):
+        fam = por_familia[fid]
+        necesidad_familia.append({
+            "id_familia": fid,
+            "id_formulario": fam["id_formulario"],
+            "integrantes": ints_por_fam.get(fid, 0),
+            "n_necesidades": fam["n"],
+            "por_categoria": [
+                {"id_categoria": cid,
+                 "codigo": (cat_by_id.get(cid) or {}).get("codigo"),
+                 "nombre": (cat_by_id.get(cid) or {}).get("nombre"),
+                 "n_necesidades": v["n"],
+                 "completadas": v["completadas"]}
+                for cid, v in sorted(fam["cats"].items())
+            ],
+        })
+
+    total_nec = len(necesidades)
+    completadas = sum(1 for n in necesidades if n["estado"])
+
+    return {
+        "familias": len(familias),
+        "integrantes": len(integrantes),
+        "integrantes_por_familia": {
+            "promedio": prom,
+            "minimo": min(counts) if counts else 0,
+            "maximo": max(counts) if counts else 0,
+        },
+        "poblacion_por_grupo_etario": poblacion,
+        "capacidades_especiales_por_grupo_etario": capacidades,
+        "necesidades_por_familia": necesidad_familia,
+        "necesidades": {
+            "total": total_nec,
+            "completadas": completadas,
+            "pendientes": total_nec - completadas,
+        },
+    }
+
+
+def _cabecera_reporte(db: Session, id_evento: int):
+    """Bloques `evento` y `edan` del JSON de los reportes del evento
+    (compartidos por el reporte de secciones y el listado de integrantes).
+    `edan.n_localidades` queda en 0: lo completa cada llamador con su propio
+    conteo. Devuelve None si el evento no existe. El scope geografico lo
+    aplica cada endpoint aparte."""
+    ev = _row(db, SQL_EVENTO + " WHERE ev.id_evento_rida = :id_evento_rida",
+              {"id_evento_rida": id_evento})
+    if not ev:
+        return None
+    # _build_evento arma estado/tipo_evento/geografia/usuarios como dicts.
+    ev = _build_evento(dict(ev))
+
+    ed = _row(db, """
+        SELECT procedencia, fecha_llenado,
+               total_poblacion_afectada, total_familias_afectadas,
+               total_familias_damnificadas, id_importacion
+        FROM edan.edan WHERE id_edan = :id
+    """, {"id": ev["id_edan"]}) or {}
+
+    # Quienes levantaron la informacion: creadores de las localidades del EDAN
+    # (distinct) + el usuario del log de importacion si el EDAN es importado.
+    levantaron: list[dict] = []
+    if ev.get("id_edan"):
+        for r in _rows(db, """
+            SELECT DISTINCT l.id_usuario, u.nombre, u.usuario
+            FROM edan.edan_localidades l
+            LEFT JOIN usuarios.usuario u ON u.id_usuario = l.id_usuario
+            WHERE l.id_edan = :id AND l.id_usuario IS NOT NULL
+            ORDER BY l.id_usuario
+        """, {"id": ev["id_edan"]}):
+            levantaron.append(dict(r))
+        if ed.get("id_importacion"):
+            imp = _row(db, """
+                SELECT il.id_usuario, u.nombre, u.usuario
+                FROM edan.edan_importacion_log il
+                LEFT JOIN usuarios.usuario u ON u.id_usuario = il.id_usuario
+                WHERE il.id_importacion = :imp AND il.id_usuario IS NOT NULL
+            """, {"imp": ed["id_importacion"]})
+            if imp and imp["id_usuario"] not in {x["id_usuario"] for x in levantaron}:
+                levantaron.insert(0, dict(imp))
+
+    def _login(uid):
+        if not uid:
+            return None
+        r = _row(db, "SELECT usuario FROM usuarios.usuario WHERE id_usuario = :i", {"i": uid})
+        return r["usuario"] if r else None
+
+    for _k in ("usuario_ugr", "usuario_alcalde"):
+        _u = ev.get(_k)
+        if _u:
+            _u["usuario"] = _login(_u.get("id_usuario"))
+
+    evento_block = {
+        "id_evento_rida": ev["id_evento_rida"],
+        "codigo": ev["codigo"],
+        "estado": ev["estado"],
+        "fecha_habilitacion": ev["fecha_habilitacion"],
+        "fecha_cierre": ev["fecha_cierre"],
+        "fecha_creacion": ev["fecha_creacion"],
+    }
+    edan_block = {
+        "id_edan": ev["id_edan"],
+        "codigo_edan": ev["codigo_edan"],
+        "procedencia": ed.get("procedencia"),
+        "fecha_evento": ev["fecha_evento"],
+        "hora_evento": ev["hora_evento"],
+        "fecha_llenado": ed.get("fecha_llenado"),
+        "tipo_evento": ev["tipo_evento"],
+        "departamento": ev["departamento"],
+        "provincia": ev["provincia"],
+        "municipio": ev["municipio"],
+        "levantaron": levantaron,
+        "ugr": ev.get("usuario_ugr"),
+        "alcalde": ev.get("usuario_alcalde"),
+        "poblacion_declarada": {
+            "poblacion_afectada": ed.get("total_poblacion_afectada"),
+            "familias_afectadas": ed.get("total_familias_afectadas"),
+            "familias_damnificadas": ed.get("total_familias_damnificadas"),
+        },
+        "n_localidades": 0,
+    }
+    return evento_block, edan_block
+
+
+def _localidades_reporte(db: Session, id_evento: int) -> list[dict]:
+    """Todas las localidades del evento, en orden estable por
+    id_edan_localidad: las ligadas al EDAN + los formularios que cuelgan del
+    evento sin localidad asociada (caso legado)."""
+    localidades = [dict(r) for r in _rows(db, _SQL_LOCALIDADES_REPORTE,
+                                          {"id": id_evento})]
+    listados = {l["id_formulario"] for l in localidades if l["id_formulario"]}
+    evento_forms = {r["id_formulario"] for r in _rows(
+        db, "SELECT id_formulario FROM rida.formulario_rida "
+            "WHERE id_evento_rida = :id", {"id": id_evento})}
+    faltantes = sorted(evento_forms - listados)
+    if faltantes:
+        in_falt = ",".join(str(int(x)) for x in faltantes)
+        localidades += [dict(r) for r in _rows(db, f"""
+            SELECT f.id_edan_localidad, NULL AS localidad,
+                   NULL AS id_tipo_localidad,
+                   NULL AS tipo_localidad_nombre, NULL AS estado_localidad_nombre,
+                   f.id_formulario, f.id_estado, f.fecha_creacion, f.id_usuario,
+                   ef.codigo AS estado_codigo, ef.nombre AS estado_nombre,
+                   u.nombre AS usuario_nombre, u.usuario AS usuario_login
+            FROM rida.formulario_rida f
+            LEFT JOIN rida.cat_estado_formulario ef
+                   ON ef.id_estado_formulario = f.id_estado
+            LEFT JOIN usuarios.usuario u ON u.id_usuario = f.id_usuario
+            WHERE f.id_formulario IN ({in_falt})
+            ORDER BY f.id_formulario
+        """, {})]
+    return localidades
+
+
+def get_evento_reporte(db: Session, identificador, user: dict | None = None) -> dict | None:
+    """Reporte consolidado del evento: evento + EDAN (con quienes levantaron la
+    informacion, UGR y alcalde) + `resumen` total + cada formulario con sus 3
+    secciones. `identificador` es id numerico o codigo RIDA; si no existe
+    devuelve None. Aplica scope geografico del usuario si se pasa `user`."""
+    id_evento = resolver_evento(db, identificador)
+    if not id_evento:
+        return None
+    if user is not None:
+        _validar_scope_evento(db, user, id_evento)
+
+    cab = _cabecera_reporte(db, id_evento)
+    if not cab:
+        return None
+    evento_block, edan_block = cab
+
+    # Catalogos (una sola vez para resumen y formularios).
+    disc = _rows(db, "SELECT id_discapacidad AS id, codigo, nombre "
+                     "FROM rida.cat_tipo_discapacidad WHERE activo ORDER BY id_discapacidad", {})
+    disc_ninguna = next((d["id"] for d in disc if d["codigo"] == "NINGUNA"), None)
+    cats = {
+        "discapacidad": [d for d in disc if d["codigo"] != "NINGUNA"],
+        "id_discapacidad_ninguna": disc_ninguna,
+        "enfermedad": _rows(db, "SELECT id_enfermedad AS id, codigo, nombre "
+                                "FROM rida.cat_enfermedad_cronica WHERE activo "
+                                "ORDER BY id_enfermedad", {}),
+        "categoria": _rows(db, "SELECT id_categoria_ayuda AS id, codigo, nombre "
+                               "FROM rida.cat_categoria_ayuda ORDER BY id_categoria_ayuda", {}),
+    }
+
+    # Localidades del EDAN UNION formularios colgando del evento (legado):
+    # así suma(formularios) == resumen siempre.
+    localidades = _localidades_reporte(db, id_evento)
+    form_ids = sorted({l["id_formulario"] for l in localidades if l["id_formulario"]})
+    edan_block["n_localidades"] = len(localidades)
+
+    if form_ids:
+        in_sql = ",".join(str(int(x)) for x in form_ids)
+        integrantes = [dict(r) for r in _rows(db, f"""
+            SELECT i.id_integrante, i.id_familia, i.sexo, i.fecha_nacimiento,
+                   i.gestante_semanas, i.lactante_meses,
+                   i.id_discapacidad, i.id_enfermedad,
+                   fa.id_formulario,
+                   COALESCE(i.fecha_creacion, fo.fecha_creacion) AS fecha_empadronamiento
+            FROM rida.integrante i
+            JOIN rida.familia fa ON fa.id_familia = i.id_familia
+            JOIN rida.formulario_rida fo ON fo.id_formulario = fa.id_formulario
+            WHERE fa.id_formulario IN ({in_sql})
+        """, {})]
+        familias = [dict(r) for r in _rows(db, f"""
+            SELECT fa.id_familia, fa.id_formulario
+            FROM rida.familia fa
+            WHERE fa.id_formulario IN ({in_sql})
+            ORDER BY fa.id_familia
+        """, {})]
+        necesidades = [dict(r) for r in _rows(db, f"""
+            SELECT n.id_familia, n.id_categoria_ayuda, n.estado,
+                   fa.id_formulario AS id_formulario_resuelto
+            FROM rida.necesidad n
+            JOIN rida.familia fa ON fa.id_familia = n.id_familia
+            WHERE fa.id_formulario IN ({in_sql})
+        """, {})]
+    else:
+        integrantes, familias, necesidades = [], [], []
+
+    resumen = _seccion_reporte(integrantes, familias, necesidades, cats)
+
+    formularios = []
+    for loc in localidades:
+        fid = loc["id_formulario"]
+        seccion = _seccion_reporte(
+            [i for i in integrantes if fid and i["id_formulario"] == fid],
+            [f for f in familias if fid and f["id_formulario"] == fid],
+            [n for n in necesidades if fid and n["id_formulario_resuelto"] == fid],
+            cats,
+        )
+        formularios.append({
+            "id_edan_localidad": loc["id_edan_localidad"],
+            "id_tipo_localidad": loc["id_tipo_localidad"],
+            "localidad": {
+                "id_edan_localidad": loc["id_edan_localidad"],
+                "id_tipo_localidad": loc["id_tipo_localidad"],
+                "tipo_localidad": loc["tipo_localidad_nombre"],
+                "localidad": loc["localidad"],
+                "estado_localidad": loc["estado_localidad_nombre"],
+            },
+            "id_formulario": fid,
+            "estado_formulario": (
+                {"id_estado": loc["id_estado"],
+                 "codigo": loc["estado_codigo"], "nombre": loc["estado_nombre"]}
+                if fid else None
+            ),
+            "fecha_creacion": loc["fecha_creacion"],
+            "levantado_por": (
+                {"id_usuario": loc["id_usuario"], "nombre": loc["usuario_nombre"],
+                 "usuario": loc["usuario_login"]}
+                if loc["id_usuario"] else None
+            ),
+            **seccion,
+        })
+
+    return {
+        "evento": evento_block,
+        "edan": edan_block,
+        "resumen": resumen,
+        "formularios": formularios,
+    }
+
+
+# Integrantes de todos los formularios del evento, con nombres de los
+# catalogos de apoyo y la fecha de empadronamiento para calcular la edad.
+# Orden por apellido: `lower()` evita mayusculas; tambien entra nombre y id
+# como desempate (estable si hay homonimos).
+_SQL_INTEGRANTES_POR_EVENTO = """
+SELECT i.id_integrante, i.id_familia, i.numero_documento, i.tipo_documento,
+       i.nombre, i.apellido, i.sexo, i.fecha_nacimiento, i.es_jefe,
+       i.id_parentesco, p.nombre AS parentesco_nombre,
+       i.id_discapacidad, d.nombre AS discapacidad_nombre,
+       d.codigo AS discapacidad_codigo,
+       i.id_enfermedad, e.nombre AS enfermedad_nombre,
+       i.gestante_semanas, i.lactante_meses,
+       fa.id_formulario,
+       COALESCE(i.fecha_creacion, fo.fecha_creacion) AS fecha_empadronamiento
+FROM rida.integrante i
+JOIN rida.familia fa ON fa.id_familia = i.id_familia
+JOIN rida.formulario_rida fo ON fo.id_formulario = fa.id_formulario
+LEFT JOIN rida.cat_parentesco p ON p.id_parentesco = i.id_parentesco
+LEFT JOIN rida.cat_tipo_discapacidad d ON d.id_discapacidad = i.id_discapacidad
+LEFT JOIN rida.cat_enfermedad_cronica e ON e.id_enfermedad = i.id_enfermedad
+WHERE fa.id_formulario IN ({in_sql})
+ORDER BY lower(i.apellido), lower(i.nombre), i.id_integrante
+"""
+
+_SEXO_NOMBRE = {"M": "Masculino", "F": "Femenino"}
+
+
+def get_evento_integrantes(db: Session, identificador, user: dict | None = None) -> dict | None:
+    """Listado de TODOS los integrantes del evento agrupados por lugar
+    (localidad), sin paginar. `identificador` es id numerico o codigo RIDA;
+    None si no existe. Aplica scope geografico del usuario si se pasa `user`.
+
+    Cada bloque de localidad trae los ids de rastreo al inicio y sus
+    `personas` ordenadas por apellido. Edades y grupo etario calculados a la
+    fecha del empadronamiento (mismos criterios que el reporte de secciones).
+    """
+    id_evento = resolver_evento(db, identificador)
+    if not id_evento:
+        return None
+    if user is not None:
+        _validar_scope_evento(db, user, id_evento)
+
+    cab = _cabecera_reporte(db, id_evento)
+    if not cab:
+        return None
+    evento_block, edan_block = cab
+
+    localidades = _localidades_reporte(db, id_evento)
+    edan_block["n_localidades"] = len(localidades)
+
+    form_ids = sorted({l["id_formulario"] for l in localidades if l["id_formulario"]})
+    ints_por_form: dict[int, list[dict]] = {}
+    fams_por_form: dict[int, int] = {}
+    if form_ids:
+        in_sql = ",".join(str(int(x)) for x in form_ids)
+        for r in _rows(db, _SQL_INTEGRANTES_POR_EVENTO.format(in_sql=in_sql), {}):
+            ints_por_form.setdefault(r["id_formulario"], []).append(dict(r))
+        for r in _rows(db, f"""
+            SELECT fa.id_formulario, COUNT(*) AS n
+            FROM rida.familia fa
+            WHERE fa.id_formulario IN ({in_sql})
+            GROUP BY fa.id_formulario
+        """, {}):
+            fams_por_form[r["id_formulario"]] = r["n"]
+
+    grupos = {c: {"total": 0, "m": 0, "f": 0} for c, *_ in GRUPOS_ETARIOS_REPORTE}
+    nombre_grupo = {c: n for c, n, *_ in GRUPOS_ETARIOS_REPORTE}
+    resumen = {"n_localidades": len(localidades), "familias": 0, "integrantes": 0,
+               "masculino": 0, "femenino": 0, "sin_sexo": 0,
+               "por_grupo_etario": [], "con_discapacidad": 0, "con_enfermedad": 0,
+               "gestantes": 0, "lactantes": 0}
+
+    localidades_out: list[dict] = []
+    for loc in localidades:
+        fid = loc.get("id_formulario")
+        filas = ints_por_form.get(fid, []) if fid else []
+        personas: list[dict] = []
+        for i in filas:
+            edad = _edad_en(i["fecha_nacimiento"], i["fecha_empadronamiento"])
+            g = _grupo_de(edad)
+            sexo = i["sexo"] if i["sexo"] in ("M", "F") else None
+            completa = " ".join(p.strip() for p in (i.get("apellido"), i.get("nombre"))
+                                if p and p.strip()) or None
+            personas.append({
+                "numero_documento": i["numero_documento"],
+                "tipo_documento": i["tipo_documento"],
+                "nombre": i["nombre"],
+                "apellido": i["apellido"],
+                "nombre_completo": completa,
+                "sexo": sexo,
+                "sexo_nombre": _SEXO_NOMBRE.get(sexo),
+                "fecha_nacimiento": i["fecha_nacimiento"],
+                "edad": edad,
+                "grupo_etario": g,
+                "grupo_etario_nombre": nombre_grupo.get(g),
+                "id_parentesco": i["id_parentesco"],
+                "parentesco_nombre": i["parentesco_nombre"],
+                "es_jefe": i["es_jefe"],
+                "id_discapacidad": i["id_discapacidad"],
+                "discapacidad_nombre": i["discapacidad_nombre"],
+                "id_enfermedad": i["id_enfermedad"],
+                "enfermedad_nombre": i["enfermedad_nombre"],
+                "gestante_semanas": i["gestante_semanas"],
+                "lactante_meses": i["lactante_meses"],
+            })
+            grupos[g]["total"] += 1
+            if sexo == "M":
+                grupos[g]["m"] += 1
+                resumen["masculino"] += 1
+            elif sexo == "F":
+                grupos[g]["f"] += 1
+                resumen["femenino"] += 1
+            else:
+                resumen["sin_sexo"] += 1
+            # NINGUNA no es discapacidad (mismo criterio del reporte).
+            if i["id_discapacidad"] and i.get("discapacidad_codigo") != "NINGUNA":
+                resumen["con_discapacidad"] += 1
+            if i["id_enfermedad"]:
+                resumen["con_enfermedad"] += 1
+            if i["gestante_semanas"] is not None:
+                resumen["gestantes"] += 1
+            if i["lactante_meses"] is not None:
+                resumen["lactantes"] += 1
+            resumen["integrantes"] += 1
+
+        n_fams = fams_por_form.get(fid, 0) if fid else 0
+        resumen["familias"] += n_fams
+        localidades_out.append({
+            "id_edan_localidad": loc.get("id_edan_localidad"),
+            "id_tipo_localidad": loc.get("id_tipo_localidad"),
+            "tipo_localidad": loc.get("tipo_localidad_nombre"),
+            "localidad": loc.get("localidad"),
+            "estado_localidad": loc.get("estado_localidad_nombre"),
+            "id_formulario": fid,
+            "familias": n_fams,
+            "integrantes": len(personas),
+            "personas": personas,
+        })
+
+    resumen["por_grupo_etario"] = [
+        {"grupo": c, "nombre": n, "orden": o, **grupos[c]}
+        for c, n, o, *_ in GRUPOS_ETARIOS_REPORTE
+    ]
+
+    return {
+        "evento": evento_block,
+        "edan": edan_block,
+        "resumen": resumen,
+        "localidades": localidades_out,
+    }
+
+
 def localidades_evento(db: Session, id_evento_rida: int) -> list:
     """HIJO del evento: formularios por localidad del EDAN (desglose de ids)."""
     rows = _rows(
         db,
-        SQL_LOCALIDAD_EVENTO,
+        SQL_LOCALIDAD_EVENTO + " WHERE " + _LOCALIDAD_EVENTO_WHERE + " ORDER BY el.localidad",
         {"id_evento_rida": id_evento_rida},
     )
     return [dict(r) for r in rows]
 
 
-_LOCALIDAD_EVENTO_WHERE = """
-WHERE ev.id_evento_rida = :id_evento_rida
-"""
+_LOCALIDAD_EVENTO_WHERE = "ev.id_evento_rida = :id_evento_rida"
 
 
 def localidades_evento_paginado(db: Session, id_evento_rida: int,
@@ -1311,10 +1931,10 @@ def localidades_evento_paginado(db: Session, id_evento_rida: int,
         text("SELECT COUNT(*) FROM rida.evento_rida ev JOIN edan.edan_localidades el ON el.id_edan = ev.id_edan WHERE " + where),
         params,
     ).scalar() or 0
-    
+
     page_sql, page_params = _page_clause(skip, limit, todos)
     params |= page_params
-    
+
     rows = _rows(
         db,
         SQL_LOCALIDAD_EVENTO + " WHERE " + where + " ORDER BY el.localidad" + page_sql,
@@ -1323,13 +1943,37 @@ def localidades_evento_paginado(db: Session, id_evento_rida: int,
     return [dict(r) for r in rows], total
 
 
+def _next_codigo_evento(db: Session, codigo_edan: str) -> str:
+    """Codigo propio del evento RIDA: `codigo_edan` + '-R' (v2.46.0).
+
+    edan.codigo_edan NO tiene UNIQUE (dos EDAN heredados pueden compartir
+    codigo), asi que si '-R' ya existe se ensancha: '-R2', '-R3', ...
+    """
+    base = f"{codigo_edan}-R"
+    filas = _rows(db,
+                  "SELECT codigo FROM rida.evento_rida WHERE codigo LIKE :pref",
+                  {"pref": base + "%"})
+    seq = 0
+    for f in filas:
+        suf = str(f["codigo"] or "")[len(base):]
+        if suf == "":
+            seq = max(seq, 1)
+        elif suf.isdigit():
+            seq = max(seq, int(suf))
+    return base if seq == 0 else f"{base}{seq + 1}"
+
+
 def habilitar_evento(db: Session, id_edan: int, uid: int) -> dict:
     """Habilita el RIDA (PADRE) desde un EDAN aprobado y auto-crea los HIJO:
     un formulario por localidad del EDAN (si no existía), quedando listos.
-    Solo guarda ids; ninguna copia de datos del EDAN."""
+    Solo guarda ids; ninguna copia de datos del EDAN.
+
+    Genera `codigo` = codigo_edan + '-R'. Regla: un EDAN sin codigo_edan no
+    puede habilitar RIDA (400) — sin codigo no hay RIDA ni consulta por codigo.
+    """
     if not id_edan:
         raise HTTPException(status_code=422, detail="id_edan es obligatorio")
-    edan = _row(db, "SELECT id_edan, id_estado FROM edan.edan WHERE id_edan = :id",
+    edan = _row(db, "SELECT id_edan, id_estado, codigo_edan FROM edan.edan WHERE id_edan = :id",
                 {"id": int(id_edan)})
     if not edan:
         raise HTTPException(status_code=400, detail="El EDAN no existe")
@@ -1338,6 +1982,12 @@ def habilitar_evento(db: Session, id_edan: int, uid: int) -> dict:
             status_code=400,
             detail=f"El EDAN no está aprobado (estado {edan['id_estado']}). "
                    "El RIDA solo nace del EDAN aprobado.",
+        )
+    if not edan.get("codigo_edan"):
+        raise HTTPException(
+            status_code=400,
+            detail="El EDAN no tiene código (codigo_edan); consolídelo primero. "
+                   "Sin código no se habilita RIDA.",
         )
 
     existe = _row(db, "SELECT 1 FROM rida.evento_rida WHERE id_edan = :id_edan",
@@ -1351,12 +2001,14 @@ def habilitar_evento(db: Session, id_edan: int, uid: int) -> dict:
     if not estado_habilitado:
         raise HTTPException(status_code=500, detail="Catálogo estado evento sin HABILITADO")
 
+    codigo = _next_codigo_evento(db, edan["codigo_edan"])
     result = _row(
         db,
-        """INSERT INTO rida.evento_rida (id_edan, id_estado, id_usuario_habilito)
-           VALUES (:id_edan, :id_estado, :uid)
+        """INSERT INTO rida.evento_rida (id_edan, id_estado, id_usuario_habilito, codigo)
+           VALUES (:id_edan, :id_estado, :uid, :codigo)
            RETURNING id_evento_rida""",
-        {"id_edan": int(id_edan), "id_estado": estado_habilitado["id_estado_evento"], "uid": uid},
+        {"id_edan": int(id_edan), "id_estado": estado_habilitado["id_estado_evento"],
+         "uid": uid, "codigo": codigo},
     )
     id_evento = result["id_evento_rida"]
 
@@ -1387,12 +2039,57 @@ def habilitar_evento(db: Session, id_edan: int, uid: int) -> dict:
     return get_evento(db, id_evento)
 
 
-def cerrar_evento(db: Session, id_evento_rida: int, uid: int) -> dict:
-    """Cierra el evento RIDA (PADRE): marca CERRADO con auditoría quién/cuándo."""
-    row = _row(db, "SELECT 1 FROM rida.evento_rida WHERE id_evento_rida = :id",
+def atender_evento(db: Session, id_evento_rida: int, uid: int) -> dict:
+    """Marca el evento RIDA como ATENDIDO (4). Solo desde EN PROCESO (3):
+    HABILITADO(1) significa aún sin registros y CERRADO(5) es terminal."""
+    row = _row(db, """SELECT ce.codigo AS estado_codigo
+                      FROM rida.evento_rida ev
+                      JOIN rida.cat_estado_evento ce ON ce.id_estado_evento = ev.id_estado
+                      WHERE ev.id_evento_rida = :id""",
                {"id": id_evento_rida})
     if not row:
         raise HTTPException(status_code=404, detail="Evento RIDA no encontrado")
+    if row["estado_codigo"] == "CERRADO":
+        raise HTTPException(status_code=400, detail="Un evento CERRADO no se puede modificar (cerrar es terminal)")
+    if row["estado_codigo"] != "EN PROCESO":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Solo un evento EN PROCESO puede pasar a ATENDIDO (estado actual: {row['estado_codigo']})")
+
+    estado_atendido = _row(
+        db, "SELECT id_estado_evento FROM rida.cat_estado_evento WHERE codigo = 'ATENDIDO'", {}
+    )
+    db.execute(
+        text("""UPDATE rida.evento_rida
+                SET id_estado = :id_estado,
+                    fecha_modificacion = (NOW() AT TIME ZONE 'America/La_Paz')
+                WHERE id_evento_rida = :id"""),
+        {"id_estado": estado_atendido["id_estado_evento"], "id": id_evento_rida},
+    )
+    db.commit()
+    return get_evento(db, id_evento_rida)
+
+
+def cerrar_evento(db: Session, id_evento_rida: int, uid: int) -> dict:
+    """Cierra el evento RIDA (PADRE): estado CERRADO + id_usuario_cierro +
+    fecha_cierre con la hora automática del sistema de Bolivia (America/La_Paz).
+    Cerrar es terminal: un evento ya cerrado no se re-cierra ni se reabre.
+    Solo desde EN PROCESO o ATENDIDO (un evento HABILITADO sin registros no
+    se cierra: primero debe empadronarse y/o atenderse)."""
+    row = _row(db, """SELECT ce.codigo AS estado_codigo
+                      FROM rida.evento_rida ev
+                      JOIN rida.cat_estado_evento ce ON ce.id_estado_evento = ev.id_estado
+                      WHERE ev.id_evento_rida = :id""",
+               {"id": id_evento_rida})
+    if not row:
+        raise HTTPException(status_code=404, detail="Evento RIDA no encontrado")
+    if row["estado_codigo"] == "CERRADO":
+        raise HTTPException(status_code=400, detail="El evento RIDA ya está cerrado")
+    if row["estado_codigo"] == "HABILITADO":
+        raise HTTPException(
+            status_code=400,
+            detail="Un evento HABILITADO sin registros no se cierra: "
+                   "registre el empadronamiento (pasa a EN PROCESO) y/o atiéndalo primero.")
 
     estado_cerrado = _row(
         db, "SELECT id_estado_evento FROM rida.cat_estado_evento WHERE codigo = 'CERRADO'", {}
@@ -1403,7 +2100,8 @@ def cerrar_evento(db: Session, id_evento_rida: int, uid: int) -> dict:
     db.execute(
         text("""UPDATE rida.evento_rida
                 SET id_estado = :id_estado, id_usuario_cierro = :uid,
-                    fecha_cierre = NOW(), fecha_modificacion = NOW()
+                    fecha_cierre = (NOW() AT TIME ZONE 'America/La_Paz'),
+                    fecha_modificacion = (NOW() AT TIME ZONE 'America/La_Paz')
                 WHERE id_evento_rida = :id"""),
         {"id_estado": estado_cerrado["id_estado_evento"], "uid": uid, "id": id_evento_rida},
     )
@@ -1411,41 +2109,54 @@ def cerrar_evento(db: Session, id_evento_rida: int, uid: int) -> dict:
     return get_evento(db, id_evento_rida)
 
 
-def anular_evento(db: Session, id_evento_rida: int, uid: int) -> dict:
-    """Anula un evento RIDA habilitado por error.
-    Solo permite anular eventos HABILITADOS y que NO tengan registros asociados.
-    """
-    # Verificar que el evento exista y esté habilitado (no anulado, no cerrado)
-    row = _row(db, """SELECT 1 FROM rida.evento_rida 
-                      WHERE id_evento_rida = :id AND anulado = FALSE AND id_estado = 1""",
+def deshabilitar_evento(db: Session, id_evento_rida: int) -> dict:
+    """Lo contrario de habilitar: evento creado por error y SIN datos.
+    Borra físicamente el PADRE y sus HIJOS (los formularios auto-creados al
+    habilitar; documentos caen en cascada) y libera id_edan para poder
+    volver a habilitar. Bloqueado si algún hijo tiene familias, necesidades
+    o solicitudes, o si el evento ya está CERRADO."""
+    row = _row(db, """SELECT ev.id_edan, ce.codigo AS estado_codigo
+                      FROM rida.evento_rida ev
+                      JOIN rida.cat_estado_evento ce ON ce.id_estado_evento = ev.id_estado
+                      WHERE ev.id_evento_rida = :id""",
                {"id": id_evento_rida})
     if not row:
-        raise HTTPException(status_code=400, detail="El evento no puede ser anulado (ya está anulado, cerrado o no existe)")
-    
-    # Verificar que no haya formularios asociados
-    hay_formularios = _row(db, 
-        "SELECT 1 FROM rida.formulario_rida WHERE id_evento_rida = :id LIMIT 1",
-        {"id": id_evento_rida})
-    if hay_formularios:
+        raise HTTPException(status_code=404, detail="Evento RIDA no encontrado")
+    if row["estado_codigo"] == "CERRADO":
+        raise HTTPException(status_code=400, detail="Un evento CERRADO no se puede deshabilitar (cerrar es terminal)")
+
+    con_datos = _row(db, """SELECT COUNT(*) AS n
+                             FROM rida.formulario_rida f
+                             WHERE f.id_evento_rida = :id
+                               AND (EXISTS (SELECT 1 FROM rida.familia fa
+                                            WHERE fa.id_formulario = f.id_formulario)
+                                    OR EXISTS (SELECT 1 FROM rida.necesidad nn
+                                               JOIN rida.familia fnn ON fnn.id_familia = nn.id_familia
+                                               WHERE fnn.id_formulario = f.id_formulario))""",
+                    {"id": id_evento_rida})
+    hay_solicitudes = _row(db, "SELECT COUNT(*) AS n FROM rida.solicitud WHERE id_evento_rida = :id",
+                           {"id": id_evento_rida})
+    if con_datos["n"] > 0 or hay_solicitudes["n"] > 0:
         raise HTTPException(
-            status_code=400, 
-            detail="No se puede anular: el evento tiene formularios de empadronamiento asociados. "
-                   "Primero elimine todos los formularios y sus datos (familias, integrantes, necesidades)."
+            status_code=400,
+            detail="El evento tiene datos cargados (familias, necesidades o solicitudes). "
+                   "Deshabilitar solo revierte habilitaciones por error, sin datos cargados.",
         )
-    
-    # Verificar que no haya localidades del evento con datos (usando la tabla evento_rida directamente)
-    # Los hijos se crean al habilitar, así que si hay formulario_rida con id_evento_rida, no se puede anular
-    
+
+    borrados = db.execute(
+        text("DELETE FROM rida.formulario_rida WHERE id_evento_rida = :id"),
+        {"id": id_evento_rida},
+    ).rowcount
     db.execute(
-        text("""UPDATE rida.evento_rida
-                SET anulado = TRUE, id_usuario_anulo = :uid,
-                    fecha_anulacion = NOW(),
-                    fecha_modificacion = NOW()
-                WHERE id_evento_rida = :id"""),
-        {"uid": uid, "id": id_evento_rida},
+        text("DELETE FROM rida.evento_rida WHERE id_evento_rida = :id"),
+        {"id": id_evento_rida},
     )
     db.commit()
-    return get_evento(db, id_evento_rida)
+    return {
+        "id_evento_rida": id_evento_rida,
+        "id_edan": row["id_edan"],
+        "formularios_eliminados": borrados,
+    }
 
 # ============================================================================
 #  BÚSQUEDA DE PERSONAS (INTEGRANTES) - API POTENTE

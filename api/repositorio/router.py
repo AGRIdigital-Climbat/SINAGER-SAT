@@ -147,11 +147,11 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             raise HTTPException(status_code=400, detail="Tipo de documento no válido o inactivo")
 
         id_edan = destino["id_edan"]
-        id_formulario_rida = destino["id_formulario_rida"]
+        id_evento_rida = destino["id_evento_rida"]
 
         # La carpeta de destino la decide el origen del documento.
-        if id_formulario_rida is not None:
-            subfolder = f"rida/documentos/{id_formulario_rida}"
+        if id_evento_rida is not None:
+            subfolder = f"rida/documentos/{id_evento_rida}"
         else:
             subfolder = f"edan/documentos/{id_edan}"
 
@@ -194,7 +194,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         id_doc = service.upload_documento(
             db=db,
             id_edan=id_edan,
-            id_formulario_rida=id_formulario_rida,
+            id_evento_rida=id_evento_rida,
             id_tipo_documento=id_tipo_documento,
             file_path=file_path,
             nombre_original=file.filename,
@@ -225,7 +225,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                              + _VALIDACIONES_UPLOAD +
                              "- El EDAN debe existir en `edan.edan`\n\n"
                              "Path de almacenamiento: `/uploads/edan/documentos/{id_edan}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`\n\n"
-                             "Para subir un documento de RIDA usar `POST /repositorio/rida/formularios/{id_formulario_rida}/documentos`.")
+                             "Para subir un documento de RIDA usar `POST /repositorio/rida/eventos/{id_evento_rida}/documentos`.")
     async def subir_documento(
         id_edan: int,
         file: UploadFile = File(...),
@@ -253,21 +253,21 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         )
         return SuccessResponse(message="Documento subido correctamente", data=doc)
 
-    @router.post("/rida/formularios/{id_formulario_rida}/documentos", status_code=201, tags=[TAG_DOCS],
-                 summary="Subir PDF al repositorio de un formulario RIDA",
-                 description="Sube un archivo PDF a un formulario RIDA, crea la fila en "
+    @router.post("/rida/eventos/{id_evento_rida}/documentos", status_code=201, tags=[TAG_DOCS],
+                 summary="Subir PDF al repositorio de un evento RIDA",
+                 description="Sube un archivo PDF a un evento RIDA, crea la fila en "
                              "`repositorio.documentos` y **valida la firma digital automáticamente** "
                              "(si el PDF ≤ 20 MB).\n\n"
-                             "La fila se guarda con `id_formulario_rida` y **también con el `id_edan` que el "
-                             "propio formulario ya tiene** (`rida.formulario_rida.id_edan`), para que el "
+                             "La fila se guarda con `id_evento_rida` y **también con el `id_edan` que el "
+                             "propio evento ya tiene** (`rida.evento_rida.id_edan`), para que el "
                              "documento quede vinculado a las dos tablas y se vea también desde la pantalla "
-                             "del EDAN. El cliente solo envía `id_formulario_rida`.\n\n"
+                             "del EDAN. El cliente solo envía `id_evento_rida`.\n\n"
                              "**Multipart**: `file` (PDF, max 50MB) + form fields.\n\n"
                              + _VALIDACIONES_UPLOAD +
-                             "- El formulario debe existir en `rida.formulario_rida`\n\n"
-                             "Path de almacenamiento: `/uploads/rida/documentos/{id_formulario_rida}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`")
+                             "- El evento debe existir en `rida.evento_rida`\n\n"
+                             "Path de almacenamiento: `/uploads/rida/documentos/{id_evento_rida}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`")
     async def subir_documento_rida(
-        id_formulario_rida: int,
+        id_evento_rida: int,
         file: UploadFile = File(...),
         id_tipo_documento: int = Form(...),
         id_departamento: int = Form(...),
@@ -279,12 +279,12 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Sube un nuevo PDF al repositorio del formulario RIDA y valida su firma al vuelo."""
-        destino = service.resolver_destino_documento(db, id_formulario_rida=id_formulario_rida)
+        """Sube un nuevo PDF al repositorio del evento RIDA y valida su firma al vuelo."""
+        destino = service.resolver_destino_documento(db, id_evento_rida=id_evento_rida)
         if destino is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Formulario RIDA {id_formulario_rida} no encontrado",
+                detail=f"Evento RIDA {id_evento_rida} no encontrado",
             )
 
         doc = await _procesar_subida(
@@ -315,10 +315,10 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                 summary="Listar documentos de un EDAN específico",
                 description="Retorna los PDFs del repositorio vinculados a `id_edan`.\n\n"
                             "Cada documento de RIDA guarda también su `id_edan` (heredado de "
-                            "`rida.formulario_rida.id_edan`), así que esta lista incluye los documentos de "
-                            "los formularios RIDA de ese EDAN. Usar `origen` para separarlos.\n\n"
+                            "`rida.evento_rida.id_edan`), así que esta lista incluye los documentos de "
+                            "los eventos RIDA de ese EDAN. Usar `origen` para separarlos.\n\n"
                             "Filtros opcionales: `id_tipo_documento`, `include_inactive` y "
-                            "`origen` (`edan` = solo del EDAN, `rida` = solo de sus formularios RIDA).\n\n"
+                            "`origen` (`edan` = solo del EDAN, `rida` = solo de sus eventos RIDA).\n\n"
                             + _CAMPOS_FIRMA)
     def listar_documentos_edan(
         id_edan: int,
@@ -327,41 +327,49 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         origen: str | None = Query(
             None,
             pattern="^(edan|rida)$",
-            description="Dejar vacío = todos (EDAN + RIDA). `edan` = solo los del EDAN. `rida` = solo los de sus formularios RIDA",
+            description="Dejar vacío = todos (EDAN + RIDA). `edan` = solo los del EDAN. `rida` = solo los de sus eventos RIDA",
         ),
+        limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+        skip: int = Query(0, ge=0, description="Registros a saltar"),
+        todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
         """Lista documentos de un EDAN."""
-        data = service.list_documentos_by_edan(db, id_edan, id_tipo_documento, include_inactive, origen)
-        return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=len(data))
+        data, total = service.list_documentos_by_edan(db, id_edan, id_tipo_documento, include_inactive, origen,
+                                                      limit=limit, skip=skip, todos=todos)
+        return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
-    @router.get("/rida/formularios/{id_formulario_rida}/documentos", tags=[TAG_DOCS],
-                summary="Listar documentos de un formulario RIDA",
-                description="Retorna los PDFs del repositorio vinculados a `id_formulario_rida` "
+    @router.get("/rida/eventos/{id_evento_rida}/documentos", tags=[TAG_DOCS],
+                summary="Listar documentos de un evento RIDA",
+                description="Retorna los PDFs del repositorio vinculados a `id_evento_rida` "
                             "(origen `rida`).\n\n"
                             "Filtros opcionales: `id_tipo_documento` e `include_inactive`.\n\n"
                             + _CAMPOS_FIRMA)
     def listar_documentos_rida(
-        id_formulario_rida: int,
+        id_evento_rida: int,
         id_tipo_documento: int | None = Query(None, description="Filtrar por tipo de catálogo"),
         include_inactive: bool = Query(False, description="Incluir documentos con activo=FALSE"),
+        limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
+        skip: int = Query(0, ge=0, description="Registros a saltar"),
+        todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Lista documentos de un formulario RIDA."""
-        data = service.list_documentos_by_formulario_rida(
-            db, id_formulario_rida, id_tipo_documento, include_inactive
+        """Lista documentos de un evento RIDA."""
+        data, total = service.list_documentos_by_evento_rida(
+            db, id_evento_rida, id_tipo_documento, include_inactive,
+            limit=limit, skip=skip, todos=todos
         )
-        return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=len(data))
+        return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
     @router.get("/documentos/filtrar", tags=[TAG_DOCS],
                 summary="Filtrar documentos por metadata estructurada",
                 description="Filtra documentos del repositorio combinando los parámetros:\n\n"
-                            "- **origen**: `edan` (documentos de EDAN) o `rida` (documentos de formularios RIDA). "
+                            "- **origen**: `edan` (documentos de EDAN) o `rida` (documentos de eventos RIDA). "
                             "Sin este parámetro devuelve ambos\n"
                             "- **id_edan**: documentos de un EDAN específico\n"
-                            "- **id_formulario_rida**: documentos de un formulario RIDA específico\n"
+                            "- **id_evento_rida**: documentos de un evento RIDA específico\n"
                             "- **id_departamento/id_provincia/id_municipio**: por ubicación\n"
                             "- **id_tipo_documento**: por tipo de catálogo\n"
                             "- **fecha_desde/fecha_hasta**: rango sobre `fecha_documento` (YYYY-MM-DD)\n"
@@ -369,18 +377,18 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "`origen` se combina con los demás filtros, p. ej. "
                             "`?origen=rida&id_municipio=1` devuelve solo los documentos RIDA de ese municipio.\n\n"
                             "Cada documento trae el campo derivado `origen` más `id_edan` e "
-                            "`id_formulario_rida`, para que el front no tenga que deducir el tipo.\n\n"
+                            "`id_evento_rida`, para que el front no tenga que deducir el tipo.\n\n"
                             + _CAMPOS_FIRMA +
                             "Retorna `{data: [...], total: N}` con paginación `skip`/`limit`.")
     def filtrar_documentos(
         origen: str | None = Query(
             None,
             pattern="^(edan|rida)$",
-            description="`edan` = solo documentos de EDAN, `rida` = solo de formularios RIDA, vacío = ambos",
+            description="`edan` = solo documentos de EDAN, `rida` = solo de eventos RIDA, vacío = ambos",
         ),
         id_edan: int | None = Query(None, description="FK a edan.edan.id_edan"),
-        id_formulario_rida: int | None = Query(
-            None, description="FK a rida.formulario_rida.id_formulario"
+        id_evento_rida: int | None = Query(
+            None, description="FK a rida.evento_rida.id_evento_rida"
         ),
         id_departamento: int | None = Query(None),
         id_provincia: int | None = Query(None),
@@ -391,15 +399,19 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         nombre_documento_like: str | None = Query(None, description="ILIKE match"),
         skip: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=200),
+        todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Filtra documentos por metadata estructurada (origen, ubicación, tipo, fecha, nombre)."""
+        """Filtra documentos por metadata estructurada (origen, ubicación, tipo, fecha, nombre).
+
+        `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
+        """
         data, total = service.list_documentos_filtrados(
             db,
             origen=origen,
             id_edan=id_edan,
-            id_formulario_rida=id_formulario_rida,
+            id_evento_rida=id_evento_rida,
             id_departamento=id_departamento,
             id_provincia=id_provincia,
             id_municipio=id_municipio,
@@ -409,6 +421,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             nombre_documento_like=nombre_documento_like,
             limit=limit,
             skip=skip,
+            todos=todos,
         )
         return SuccessResponse(
             message="Documentos filtrados correctamente",
@@ -428,11 +441,17 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             None, pattern="^(edan|rida)$", description="Limitar la búsqueda a un origen"
         ),
         limit: int = Query(50, le=200, description="Máximo 200 resultados"),
+        skip: int = Query(0, ge=0, description="Saltar registros (paginación)"),
+        todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Búsqueda por nombre (ILIKE sobre nombre_documento y nombre_original)."""
-        data = service.buscar_documentos(db, q, id_municipio, limit, origen)
+        """Búsqueda por nombre (ILIKE sobre nombre_documento y nombre_original).
+
+        `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
+        """
+        data = service.buscar_documentos(db, q, id_municipio, limit, origen,
+                                         skip=skip, todos=todos)
         return SuccessResponse(
             message=f"Búsqueda: {q}",
             data=[dict(r) for r in data],

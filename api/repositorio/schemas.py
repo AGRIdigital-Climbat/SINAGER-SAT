@@ -68,11 +68,10 @@ class DocumentoUpdate(BaseModel):
 class DocumentoResponse(BaseModel):
     id_documento: int
     # Ambos pueden venir NULL segun el origen: un documento de EDAN no tiene
-    # formulario RIDA, y uno de RIDA puede no tener EDAN si su formulario aun no
-    # seasocio a uno.
+    # evento RIDA, y uno de RIDA siempre hereda su EDAN del evento.
     id_edan: Optional[int] = None
-    id_formulario_rida: Optional[int] = None
-    # Derivado en SQL: 'edan' si id_formulario_rida es NULL, 'rida' si no.
+    id_evento_rida: Optional[int] = None
+    # Derivado en SQL: 'edan' si id_evento_rida es NULL, 'rida' si no.
     origen: Optional[str] = None
     # Derivados de resultado_firma: cuantas firmas tiene y si se pudo validar.
     cantidad_firmas: int = 0

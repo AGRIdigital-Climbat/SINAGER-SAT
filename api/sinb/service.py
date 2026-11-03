@@ -5,12 +5,236 @@ from datetime import date, datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
+from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 
+from ..pagination import pagina_limit_offset
+
+
+# ============================================================================
+# UTILIDADES DE BASE DE DATOS
+# ============================================================================
+
+def _rows(db: Session, query: str, params: dict = None):
+    """Ejecutar query y retornar filas como lista de dicts."""
+    params = params or {}
+    result = db.execute(text(query), params)
+    return [dict(row._mapping) for row in result]
+
+
+def _row(db: Session, query: str, params: dict = None):
+    """Ejecutar query y retornar primera fila como dict."""
+    params = params or {}
+    result = db.execute(text(query), params)
+    row = result.mappings().first()
+    return dict(row) if row else None
+
+
+def _execute(db: Session, query: str, params: dict = None):
+    """Ejecutar query sin retorno."""
+    params = params or {}
+    result = db.execute(text(query), params)
+    db.commit()
+    return result
+
+def _update_params(id_: UUID, data: dict, *keys):
+    """Params de UPDATE: None en los campos que el cliente no envió (los PUT son parciales).
+
+    Sin esto, text() lanza InvalidRequestError porque cada :bind debe venir en el dict.
+    """
+    params = {k: data.get(k) for k in keys}
+    params["id"] = id_
+    return params
+
+
+
+# ============================================================================
+# BORRADO FÍSICO + CONTROL DE BORRADOS (v2.43.0)
+# ============================================================================
+
+# Referencias que impiden borrar una fila: FK RESTRICT reales (grafo de sinb) más
+# los datos propios que no deben desaparecer por arrastre (fotos, índices).
+_USOS_CATALOGO = {
+    "grupo": [
+        ("indicador natural", "SELECT count(*) AS n FROM sinb.indicador_natural WHERE id_grupo = :id"),
+        ("comportamiento", "SELECT count(*) AS n FROM sinb.comportamiento WHERE id_grupo = :id"),
+        ("significado", "SELECT count(*) AS n FROM sinb.significado WHERE id_grupo = :id"),
+        ("pronóstico estacional", "SELECT count(*) AS n FROM sinb.pronostico_largo WHERE id_grupo = :id"),
+    ],
+    "indicador_natural": [
+        ("característica", "SELECT count(*) AS n FROM sinb.caracteristica WHERE id_indicador_natural = :id"),
+        ("foto", "SELECT count(*) AS n FROM sinb.indicador_foto WHERE id_indicador_natural = :id"),
+        ("índice de observador", "SELECT count(*) AS n FROM sinb.observador_indice WHERE id_indicador_natural = :id"),
+        ("pronóstico estacional", "SELECT count(*) AS n FROM sinb.pronostico_largo WHERE id_indicador_natural = :id"),
+    ],
+    "caracteristica": [
+        ("comportamiento", "SELECT count(*) AS n FROM sinb.comportamiento WHERE id_caracteristica = :id"),
+        ("pronóstico estacional", "SELECT count(*) AS n FROM sinb.pronostico_largo WHERE id_caracteristica = :id"),
+    ],
+    "comportamiento": [
+        ("significado", "SELECT count(*) AS n FROM sinb.significado WHERE id_comportamiento = :id"),
+        ("pronóstico estacional", "SELECT count(*) AS n FROM sinb.pronostico_largo WHERE id_comportamiento = :id"),
+    ],
+    "categoria_pronostico": [
+        ("escenario", "SELECT count(*) AS n FROM sinb.escenario WHERE id_categoria = :id"),
+        ("bloque de pronóstico", "SELECT count(*) AS n FROM sinb.pronostico_largo_item WHERE id_categoria = :id"),
+        ("pronóstico temporal", "SELECT count(*) AS n FROM sinb.pronostico_corto WHERE id_categoria = :id"),
+        ("aviso", "SELECT count(*) AS n FROM sinb.avisos WHERE id_categoria = :id"),
+    ],
+    "escenario": [
+        ("escenario asignado a un pronóstico",
+         "SELECT count(*) AS n FROM sinb.escenario_estacional WHERE id_escenario = :id"),
+    ],
+    "significado": [],
+    "zona_geografica": [],
+    "avisos": [],
+    "pronostico_largo": [],
+    "pronostico_corto": [],
+    "indicador_foto": [],
+    "observador_indice": [],
+}
+
+
+def _usos_catalogo(db: Session, tabla: str, id_: UUID) -> dict:
+    """Cuenta los datos que referencian a una fila antes de borrarla físicamente."""
+    usos = {}
+    for etiqueta, sql in _USOS_CATALOGO.get(tabla, []):
+        n = _row(db, sql, {"id": id_})["n"]
+        if n:
+            usos[etiqueta] = n
+    return usos
+
+
+def _registro_borrado_sql():
+    return text("""
+        INSERT INTO sinb.registro_borrado (tabla, id_registro, codigo, id_off, id_usuario)
+        VALUES (:tabla, :id_registro, :codigo, :id_off, :id_usuario)
+        ON CONFLICT (tabla, id_registro) DO UPDATE
+            SET borrado_en = now(), codigo = EXCLUDED.codigo, id_off = EXCLUDED.id_off
+    """)
+
+
+def _etiqueta_borrada(fila: dict):
+    """Identificador legible del tombstone: código, nombre o el texto que lo describa."""
+    for clave in ("codigo", "nombre", "caracteristica", "comportamiento", "significado", "path_foto"):
+        valor = fila.get(clave)
+        if valor:
+            return str(valor)[:80]
+    return None
+
+
+def _registrar_borrado(db: Session, tabla: str, fila: dict, id_usuario: int | None = None):
+    """Escribe el tombstone (sin comitear: va en la misma transacción del DELETE)."""
+    db.execute(_registro_borrado_sql(), {
+        "tabla": tabla,
+        "id_registro": fila["id"],
+        "codigo": _etiqueta_borrada(fila),
+        "id_off": fila.get("id_pe_off") or fila.get("id_pt_off") or fila.get("id_aviso_off"),
+        "id_usuario": id_usuario,
+    })
+
+
+def _borrar_fisico(db: Session, tabla: str, id_: UUID, id_usuario: int | None = None,
+                   etiqueta: str = "el registro"):
+    """
+    Borrado físico de una fila con dos protecciones:
+      - si otros datos la referencian, 409 con el detalle (nada se destruye ni queda huérfano)
+      - deja su tombstone en sinb.registro_borrado para que la app offline la retire
+
+    Un id que no existe no borra nada y no cambia el comportamiento previo (200).
+    Devuelve la fila eliminada o None.
+    """
+    fila = _row(db, f"SELECT * FROM sinb.{tabla} WHERE id = :id", {"id": id_})
+    if not fila:
+        return None
+
+    usos = _usos_catalogo(db, tabla, id_)
+    if usos:
+        detalle = ", ".join(f"{k}: {n}" for k, n in usos.items())
+        raise HTTPException(
+            status_code=409,
+            detail=f"No se puede eliminar {etiqueta} porque está en uso ({detalle}). "
+                   f"Retírelo con estado INACTIVO o elimine primero lo que lo referencia.",
+        )
+
+    _registrar_borrado(db, tabla, fila, id_usuario)
+    db.execute(text(f"DELETE FROM sinb.{tabla} WHERE id = :id"), {"id": id_})
+    db.commit()
+    return fila
+
+
+def get_borrados(db: Session, desde: datetime | None = None, tabla: str | None = None,
+                 limit: int | None = None, skip: int = 0, todos: bool = False):
+    """Borrados físicos registrados desde una fecha, para sincronizar la app offline.
+
+    Devuelve (filas, total). Por defecto devuelve todo (la app offline necesita el
+    conjunto completo); `limit`/`skip` sólo paginan si se piden y `todos=true`
+    fuerza sin paginar. `total` es SIEMPRE el total sin paginar, con los mismos filtros.
+    """
+    where = ["borrado_en >= COALESCE(:desde, borrado_en)"]
+    params: dict = {"desde": desde}
+    if tabla:
+        where.append("tabla = :tabla")
+        params["tabla"] = tabla
+    where_sql = " AND ".join(where)
+
+    total = _row(db, f"""
+        SELECT COUNT(*) AS total FROM sinb.registro_borrado WHERE {where_sql}
+    """, params)["total"]
+
+    page, page_params = pagina_limit_offset(limit, skip, todos)
+    rows = _rows(db, f"""
+        SELECT tabla, id_registro, codigo, id_off, borrado_en, id_usuario
+        FROM sinb.registro_borrado
+        WHERE {where_sql}
+        ORDER BY borrado_en DESC
+        {page}
+    """, {**params, **page_params})
+    return rows, total
+
+
+def _serialize(obj):
+    """Serializar objeto SQLAlchemy a dict, manejando datetime y UUID."""
+    import json
+    def default(o):
+        if isinstance(o, (datetime, date)):
+            return o.isoformat()
+        if isinstance(o, UUID):
+            return str(o)
+        if hasattr(o, '__dict__'):
+            return {k: default(v) for k, v in o.__dict__.items() if not k.startswith('_')}
+        return o
+    
+    if isinstance(obj, list):
+        return [dict(item) if hasattr(item, '_mapping') else default(item) for item in obj]
+    if hasattr(obj, '_mapping'):
+        return dict(obj._mapping)
+    return default(obj)
+
+
+def _now():
+    """Retornar datetime actual."""
+    return datetime.now()
 
 # ============================================================================
 # CATÁLOGOS BIOCURALTURALES
 # ============================================================================
+
+def _crear_unico(db: Session, sql: str, params: dict, etiqueta: str):
+    """
+    Alta de catálogo con clave única (codigo/nombre): un duplicado debe responder
+    409, no 500. Sin esto, el handler global de api/main.py convierte la
+    IntegrityError en "Error interno del servidor".
+    """
+    try:
+        result = db.execute(text(sql), params)
+        fila = dict(result.mappings().first())
+        db.commit()
+        return fila
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"{etiqueta} ya existe")
+
 
 def get_grupos(db: Session):
     """Obtener todos los grupos activos."""
@@ -25,36 +249,34 @@ def get_grupo(db: Session, id: UUID):
 
 
 def create_grupo(db: Session, data: dict):
-    """Crear nuevo grupo."""
-    result = db.execute(text("""
+    """Crear nuevo grupo (codigo único: duplicado -> 409)."""
+    return _crear_unico(db, """
         INSERT INTO sinb.grupo (codigo, nombre, descripcion, estado)
         VALUES (:codigo, :nombre, :descripcion, 'ACTIVO')
         RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first())
+    """, data, f"El código de grupo '{data.get('codigo')}'")
 
 
 def update_grupo(db: Session, id: UUID, data: dict):
     """Actualizar grupo."""
-    data["id"] = id
+    params = _update_params(id, data, "codigo", "nombre", "descripcion", "estado")
     result = db.execute(text("""
         UPDATE sinb.grupo SET
             codigo = COALESCE(:codigo, codigo),
             nombre = COALESCE(:nombre, nombre),
             descripcion = COALESCE(:descripcion, descripcion),
+            estado = COALESCE(:estado, estado),
             actualizado_en = now()
-        WHERE id = :id AND estado = 'ACTIVO'
+        WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_grupo(db: Session, id: UUID):
-    """Eliminar lógico de grupo."""
-    db.execute(text("UPDATE sinb.grupo SET estado = 'ELIMINADO', actualizado_en = now() WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_grupo(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar grupo definitivamente (borrado físico + registro de borrado)."""
+    return _borrar_fisico(db, "grupo", id, id_usuario, "el grupo")
 
 
 def get_indicadores_naturales(db: Session, id_grupo: UUID | None = None,
@@ -89,7 +311,7 @@ def get_indicadores_naturales(db: Session, id_grupo: UUID | None = None,
 
 
 def get_indicador_natural(db: Session, id: UUID):
-    """Obtener indicador por ID con grupo anidado."""
+    """Obtener indicador por ID con grupo y fotos anidadas."""
     row = _row(db, """
         SELECT i.*, 
                jsonb_build_object(
@@ -102,24 +324,26 @@ def get_indicador_natural(db: Session, id: UUID):
         LEFT JOIN sinb.grupo g ON g.id = i.id_grupo
         WHERE i.id = :id AND i.estado = 'ACTIVO'
     """, {"id": id})
-    return _serialize(row) if row else None
+    if not row:
+        return None
+    data = dict(row)
+    data["fotos"] = get_fotos_indicador(db, id)[0]
+    return data
 
 
 def create_indicador_natural(db: Session, data: dict):
-    """Crear indicador natural."""
-    result = db.execute(text("""
+    """Crear indicador natural (codigo único, también dentro del grupo: duplicado -> 409)."""
+    return _crear_unico(db, """
         INSERT INTO sinb.indicador_natural 
         (codigo, nombre_cientifico, nombre_comun, id_grupo, descripcion, requiere_consentimiento, estado)
         VALUES (:codigo, :nombre_cientifico, :nombre_comun, :id_grupo, :descripcion, :requiere_consentimiento, 'ACTIVO')
         RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first())
+    """, data, f"El código de indicador '{data.get('codigo')}'")
 
 
 def update_indicador_natural(db: Session, id: UUID, data: dict):
     """Actualizar indicador."""
-    data["id"] = id
+    params = _update_params(id, data, "codigo", "nombre_cientifico", "nombre_comun", "id_grupo", "descripcion", "requiere_consentimiento", "estado")
     result = db.execute(text("""
         UPDATE sinb.indicador_natural SET
             codigo = COALESCE(:codigo, codigo),
@@ -128,18 +352,18 @@ def update_indicador_natural(db: Session, id: UUID, data: dict):
             id_grupo = COALESCE(:id_grupo, id_grupo),
             descripcion = COALESCE(:descripcion, descripcion),
             requiere_consentimiento = COALESCE(:requiere_consentimiento, requiere_consentimiento),
+            estado = COALESCE(:estado, estado),
             actualizado_en = now()
-        WHERE id = :id AND estado = 'ACTIVO'
+        WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_indicador_natural(db: Session, id: UUID):
-    """Eliminar lógico de indicador."""
-    db.execute(text("UPDATE sinb.indicador_natural SET estado = 'ELIMINADO', actualizado_en = now() WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_indicador_natural(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar indicador natural definitivamente (bloqueado si tiene fotos, índices o pronósticos)."""
+    return _borrar_fisico(db, "indicador_natural", id, id_usuario, "el indicador natural")
 
 
 def get_caracteristicas(db: Session, id_indicador_natural: UUID | None = None):
@@ -180,7 +404,7 @@ def create_caracteristica(db: Session, data: dict):
 
 def update_caracteristica(db: Session, id: UUID, data: dict):
     """Actualizar característica."""
-    data["id"] = id
+    params = _update_params(id, data, "id_indicador_natural", "caracteristica", "estado")
     result = db.execute(text("""
         UPDATE sinb.caracteristica SET
             id_indicador_natural = COALESCE(:id_indicador_natural, id_indicador_natural),
@@ -188,15 +412,14 @@ def update_caracteristica(db: Session, id: UUID, data: dict):
             estado = COALESCE(:estado, estado)
         WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_caracteristica(db: Session, id: UUID):
-    """Eliminar característica."""
-    db.execute(text("UPDATE sinb.caracteristica SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_caracteristica(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar característica definitivamente."""
+    return _borrar_fisico(db, "caracteristica", id, id_usuario, "la característica")
 
 
 def get_comportamientos(db: Session, id_grupo: UUID | None = None,
@@ -246,7 +469,7 @@ def create_comportamiento(db: Session, data: dict):
 
 def update_comportamiento(db: Session, id: UUID, data: dict):
     """Actualizar comportamiento."""
-    data["id"] = id
+    params = _update_params(id, data, "id_grupo", "id_caracteristica", "comportamiento", "estado")
     result = db.execute(text("""
         UPDATE sinb.comportamiento SET
             id_grupo = COALESCE(:id_grupo, id_grupo),
@@ -255,15 +478,14 @@ def update_comportamiento(db: Session, id: UUID, data: dict):
             estado = COALESCE(:estado, estado)
         WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_comportamiento(db: Session, id: UUID):
-    """Eliminar comportamiento."""
-    db.execute(text("UPDATE sinb.comportamiento SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_comportamiento(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar comportamiento definitivamente."""
+    return _borrar_fisico(db, "comportamiento", id, id_usuario, "el comportamiento")
 
 
 def get_significados(db: Session, id_grupo: UUID | None = None,
@@ -317,7 +539,7 @@ def create_significado(db: Session, data: dict):
 
 def update_significado(db: Session, id: UUID, data: dict):
     """Actualizar significado."""
-    data["id"] = id
+    params = _update_params(id, data, "id_grupo", "id_comportamiento", "significado", "categoria", "estado")
     result = db.execute(text("""
         UPDATE sinb.significado SET
             id_grupo = COALESCE(:id_grupo, id_grupo),
@@ -327,15 +549,14 @@ def update_significado(db: Session, id: UUID, data: dict):
             estado = COALESCE(:estado, estado)
         WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_significado(db: Session, id: UUID):
-    """Eliminar significado."""
-    db.execute(text("UPDATE sinb.significado SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_significado(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar significado definitivamente."""
+    return _borrar_fisico(db, "significado", id, id_usuario, "el significado")
 
 
 def get_zonas_geograficas(db: Session):
@@ -345,19 +566,17 @@ def get_zonas_geograficas(db: Session):
 
 
 def create_zona_geografica(db: Session, data: dict):
-    """Crear zona geográfica."""
-    result = db.execute(text("""
+    """Crear zona geográfica (codigo único: duplicado -> 409)."""
+    return _crear_unico(db, """
         INSERT INTO sinb.zona_geografica (codigo, nombre, descripcion, estado)
         VALUES (:codigo, :nombre, :descripcion, 'ACTIVO')
         RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first())
+    """, data, f"El código de zona '{data.get('codigo')}'")
 
 
 def update_zona_geografica(db: Session, id: UUID, data: dict):
     """Actualizar zona."""
-    data["id"] = id
+    params = _update_params(id, data, "codigo", "nombre", "descripcion", "estado")
     result = db.execute(text("""
         UPDATE sinb.zona_geografica SET
             codigo = COALESCE(:codigo, codigo),
@@ -366,74 +585,72 @@ def update_zona_geografica(db: Session, id: UUID, data: dict):
             estado = COALESCE(:estado, estado)
         WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_zona_geografica(db: Session, id: UUID):
-    """Eliminar zona."""
-    db.execute(text("UPDATE sinb.zona_geografica SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_zona_geografica(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar zona geográfica definitivamente."""
+    return _borrar_fisico(db, "zona_geografica", id, id_usuario, "la zona geográfica")
 
 
-def get_campos_pronostico(db: Session):
-    """Obtener campos de pronóstico."""
-    rows = _rows(db, "SELECT * FROM sinb.campo_pronostico WHERE estado = 'ACTIVO' ORDER BY nombre")
+def get_categorias_pronostico(db: Session, nombre: str | None = None):
+    """Obtener categorías de pronóstico."""
+    where = "WHERE estado = 'ACTIVO'"
+    params = {}
+    if nombre:
+        where += " AND nombre ILIKE :nombre"
+        params["nombre"] = f"%{nombre}%"
+    rows = _rows(db, f"SELECT * FROM sinb.categoria_pronostico {where} ORDER BY nombre", params)
     return [dict(row) for row in rows]
 
 
-def create_campo_pronostico(db: Session, data: dict):
-    """Crear campo de pronóstico."""
-    result = db.execute(text("""
-        INSERT INTO sinb.campo_pronostico (codigo, nombre, descripcion, estado)
-        VALUES (:codigo, :nombre, :descripcion, 'ACTIVO')
+def create_categoria_pronostico(db: Session, data: dict):
+    """Crear categoría de pronóstico (nombre único: duplicado -> 409)."""
+    return _crear_unico(db, """
+        INSERT INTO sinb.categoria_pronostico (nombre, descripcion, estado)
+        VALUES (:nombre, :descripcion, 'ACTIVO')
         RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first())
+    """, data, f"La categoría '{data.get('nombre')}'")
 
 
-def update_campo_pronostico(db: Session, id: UUID, data: dict):
-    """Actualizar campo."""
-    data["id"] = id
+def update_categoria_pronostico(db: Session, id: UUID, data: dict):
+    """Actualizar categoría."""
+    params = _update_params(id, data, "nombre", "descripcion", "estado")
     result = db.execute(text("""
-        UPDATE sinb.campo_pronostico SET
-            codigo = COALESCE(:codigo, codigo),
+        UPDATE sinb.categoria_pronostico SET
             nombre = COALESCE(:nombre, nombre),
             descripcion = COALESCE(:descripcion, descripcion),
             estado = COALESCE(:estado, estado)
         WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_campo_pronostico(db: Session, id: UUID):
-    """Eliminar campo."""
-    db.execute(text("UPDATE sinb.campo_pronostico SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_categoria_pronostico(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar categoría de pronóstico definitivamente (bloqueada si tiene escenarios o pronósticos)."""
+    return _borrar_fisico(db, "categoria_pronostico", id, id_usuario, "la categoría de pronóstico")
 
 
-def get_escenarios(db: Session, id_campo: UUID | None = None):
-    """Obtener escenarios con campo_pronostico anidado."""
+def get_escenarios(db: Session, id_categoria: UUID | None = None):
+    """Obtener escenarios con categoría anidada."""
     where = ["e.estado = 'ACTIVO'"]
     params = {}
-    if id_campo:
-        where.append("e.id_campo_pronostico = :id_campo")
-        params["id_campo"] = id_campo
+    if id_categoria:
+        where.append("e.id_categoria = :id_categoria")
+        params["id_categoria"] = id_categoria
     
     query = f"""
         SELECT e.*, 
                jsonb_build_object(
                    'id', c.id,
-                   'nombre', c.nombre,
-                   'tipo', c.tipo,
-                   'unidad', c.unidad
-               ) as campo_pronostico
+                   'nombre', c.nombre
+               ) as categoria
         FROM sinb.escenario e
-        LEFT JOIN sinb.campo_pronostico c ON c.id = e.id_campo_pronostico
+        LEFT JOIN sinb.categoria_pronostico c ON c.id = e.id_categoria
         WHERE {' AND '.join(where)}
         ORDER BY COALESCE(c.nombre, ''), e.nombre
     """
@@ -444,8 +661,8 @@ def get_escenarios(db: Session, id_campo: UUID | None = None):
 def create_escenario(db: Session, data: dict):
     """Crear escenario."""
     result = db.execute(text("""
-        INSERT INTO sinb.escenario (id_campo_pronostico, codigo, nombre, descripcion, estado)
-        VALUES (:id_campo_pronostico, :codigo, :nombre, :descripcion, 'ACTIVO')
+        INSERT INTO sinb.escenario (id_categoria, nombre, descripcion, valor_min, valor_max, estado)
+        VALUES (:id_categoria, :nombre, :descripcion, :valor_min, :valor_max, 'ACTIVO')
         RETURNING *
     """), data)
     db.commit()
@@ -454,122 +671,276 @@ def create_escenario(db: Session, data: dict):
 
 def update_escenario(db: Session, id: UUID, data: dict):
     """Actualizar escenario."""
-    data["id"] = id
+    params = {
+        "id": id,
+        "id_categoria": data.get("id_categoria"),
+        "nombre": data.get("nombre"),
+        "descripcion": data.get("descripcion"),
+        "valor_min": data.get("valor_min"),
+        "valor_max": data.get("valor_max"),
+        "estado": data.get("estado"),
+    }
     result = db.execute(text("""
         UPDATE sinb.escenario SET
-            id_campo_pronostico = COALESCE(:id_campo_pronostico, id_campo_pronostico),
-            codigo = COALESCE(:codigo, codigo),
+            id_categoria = COALESCE(:id_categoria, id_categoria),
             nombre = COALESCE(:nombre, nombre),
             descripcion = COALESCE(:descripcion, descripcion),
+            valor_min = COALESCE(:valor_min, valor_min),
+            valor_max = COALESCE(:valor_max, valor_max),
             estado = COALESCE(:estado, estado)
         WHERE id = :id
         RETURNING *
-    """), data)
+    """), params)
     db.commit()
     return dict(result.mappings().first()) if result.rowcount > 0 else None
 
 
-def delete_escenario(db: Session, id: UUID):
-    """Eliminar escenario."""
-    db.execute(text("UPDATE sinb.escenario SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def delete_escenario(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar escenario definitivamente."""
+    return _borrar_fisico(db, "escenario", id, id_usuario, "el escenario")
 
 
-def get_dimensiones_recomendacion(db: Session):
-    """Obtener dimensiones de recomendación."""
-    rows = _rows(db, "SELECT * FROM sinb.dimension_recomendacion WHERE estado = 'ACTIVO' ORDER BY nombre")
-    return [dict(row) for row in rows]
+# --- Catálogos: detalle por ID (mismo shape que los listados) ---
+
+def get_caracteristica(db: Session, id: UUID):
+    """Obtener característica por ID con su indicador natural anidado."""
+    return _row(db, """
+        SELECT c.*,
+               jsonb_build_object(
+                   'id', i.id,
+                   'nombre_cientifico', i.nombre_cientifico,
+                   'nombre_comun', i.nombre_comun,
+                   'codigo', i.codigo
+               ) as indicador
+        FROM sinb.caracteristica c
+        JOIN sinb.indicador_natural i ON i.id = c.id_indicador_natural
+        WHERE c.id = :id AND c.estado = 'ACTIVO'
+    """, {"id": id})
 
 
-def create_dimension_recomendacion(db: Session, data: dict):
-    """Crear dimensión."""
-    result = db.execute(text("""
-        INSERT INTO sinb.dimension_recomendacion (nombre, descripcion, estado)
-        VALUES (:nombre, :descripcion, 'ACTIVO')
-        RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first())
+def get_comportamiento(db: Session, id: UUID):
+    """Obtener comportamiento por ID con grupo y característica anidados."""
+    return _row(db, """
+        SELECT c.*,
+               jsonb_build_object(
+                   'id', g.id,
+                   'nombre', g.nombre,
+                   'codigo', g.codigo
+               ) as grupo,
+               jsonb_build_object(
+                   'id', car.id,
+                   'caracteristica', car.caracteristica,
+                   'id_indicador_natural', car.id_indicador_natural
+               ) as caracteristica
+        FROM sinb.comportamiento c
+        JOIN sinb.caracteristica car ON car.id = c.id_caracteristica
+        LEFT JOIN sinb.grupo g ON g.id = c.id_grupo
+        WHERE c.id = :id AND c.estado = 'ACTIVO'
+    """, {"id": id})
 
 
-def update_dimension_recomendacion(db: Session, id: UUID, data: dict):
-    """Actualizar dimensión."""
-    data["id"] = id
-    result = db.execute(text("""
-        UPDATE sinb.dimension_recomendacion SET
-            nombre = COALESCE(:nombre, nombre),
-            descripcion = COALESCE(:descripcion, descripcion),
-            estado = COALESCE(:estado, estado)
-        WHERE id = :id
-        RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first()) if result.rowcount > 0 else None
+def get_significado(db: Session, id: UUID):
+    """Obtener significado por ID con grupo y comportamiento anidados."""
+    return _row(db, """
+        SELECT s.*,
+               jsonb_build_object(
+                   'id', g.id,
+                   'nombre', g.nombre,
+                   'codigo', g.codigo
+               ) as grupo,
+               jsonb_build_object(
+                   'id', c.id,
+                   'comportamiento', c.comportamiento,
+                   'id_caracteristica', c.id_caracteristica
+               ) as comportamiento
+        FROM sinb.significado s
+        JOIN sinb.comportamiento c ON c.id = s.id_comportamiento
+        LEFT JOIN sinb.grupo g ON g.id = s.id_grupo
+        WHERE s.id = :id AND s.estado = 'ACTIVO'
+    """, {"id": id})
 
 
-def delete_dimension_recomendacion(db: Session, id: UUID):
-    """Eliminar dimensión."""
-    db.execute(text("UPDATE sinb.dimension_recomendacion SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
+def get_zona_geografica(db: Session, id: UUID):
+    """Obtener zona geográfica por ID."""
+    return _row(db, "SELECT * FROM sinb.zona_geografica WHERE id = :id AND estado = 'ACTIVO'",
+                {"id": id})
 
 
-def get_categorias_comportamiento(db: Session):
-    """Obtener categorías de comportamiento."""
-    rows = _rows(db, "SELECT * FROM sinb.categoria_comportamiento WHERE estado = 'ACTIVO' ORDER BY nombre")
-    return [dict(row) for row in rows]
+def get_categoria_pronostico(db: Session, id: UUID):
+    """Obtener categoría de pronóstico por ID."""
+    return _row(db, "SELECT * FROM sinb.categoria_pronostico WHERE id = :id AND estado = 'ACTIVO'",
+                {"id": id})
 
 
-def create_categoria_comportamiento(db: Session, data: dict):
-    """Crear categoría."""
-    result = db.execute(text("""
-        INSERT INTO sinb.categoria_comportamiento (nombre, descripcion, estado)
-        VALUES (:nombre, :descripcion, 'ACTIVO')
-        RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first())
+def get_escenario(db: Session, id: UUID):
+    """Obtener escenario por ID con su categoría anidada."""
+    return _row(db, """
+        SELECT e.*,
+               jsonb_build_object(
+                   'id', c.id,
+                   'nombre', c.nombre
+               ) as categoria
+        FROM sinb.escenario e
+        LEFT JOIN sinb.categoria_pronostico c ON c.id = e.id_categoria
+        WHERE e.id = :id AND e.estado = 'ACTIVO'
+    """, {"id": id})
 
 
-def update_categoria_comportamiento(db: Session, id: UUID, data: dict):
-    """Actualizar categoría."""
-    data["id"] = id
-    result = db.execute(text("""
-        UPDATE sinb.categoria_comportamiento SET
-            nombre = COALESCE(:nombre, nombre),
-            descripcion = COALESCE(:descripcion, descripcion),
-            estado = COALESCE(:estado, estado)
-        WHERE id = :id
-        RETURNING *
-    """), data)
-    db.commit()
-    return dict(result.mappings().first()) if result.rowcount > 0 else None
-
-
-def delete_categoria_comportamiento(db: Session, id: UUID):
-    """Eliminar categoría."""
-    db.execute(text("UPDATE sinb.categoria_comportamiento SET estado = 'ELIMINADO' WHERE id = :id"), {"id": id})
-    db.commit()
 
 
 # ============================================================================
 # PRONÓSTICOS ESTACIONALES Y TEMPORALES
 # ============================================================================
 
-def get_pronosticos_estacionales(db: Session, skip: int = 0, limit: int = 15, 
-                                  id_campo: UUID | None = None,
+_LARGO_HEADER_SELECT = """
+        SELECT pe.id, pe.codigo, pe.fecha_emision, pe.periodo_inicio, pe.periodo_fin, pe.estado,
+               pe.id_usuario_subio, pe.id_municipio, pe.codigo_comunidad, pe.texto_observador,
+               pe.id_grupo, pe.id_indicador_natural, pe.id_caracteristica, pe.id_comportamiento,
+               pe.latitud::float, pe.longitud::float, pe.altitud::float,
+               pe.notas, pe.id_pe_off, pe.es_ingesta,
+               pe.creado_en, pe.actualizado_en,
+               g.nombre as grupo_nombre,
+               COALESCE(NULLIF(i.nombre_comun, ''), i.nombre_cientifico, i.codigo) as indicador_nombre,
+               c.caracteristica as caracteristica_nombre, co.comportamiento as comportamiento_nombre,
+               u.nombre as elaborador_nombre
+        FROM sinb.pronostico_largo pe
+        JOIN sinb.grupo g ON g.id = pe.id_grupo
+        JOIN sinb.indicador_natural i ON i.id = pe.id_indicador_natural
+        JOIN sinb.caracteristica c ON c.id = pe.id_caracteristica
+        JOIN sinb.comportamiento co ON co.id = pe.id_comportamiento
+        LEFT JOIN usuarios.usuario u ON u.id_usuario = pe.id_usuario_subio
+    """
+
+
+def _cadena_biocultural(row: dict) -> dict:
+    """Construir la cadena biocultural (4 niveles) desde las columnas de la cabecera."""
+    return {
+        "id_grupo": row.get("id_grupo"),
+        "grupo": row.get("grupo_nombre"),
+        "id_indicador_natural": row.get("id_indicador_natural"),
+        "indicador": row.get("indicador_nombre"),
+        "id_caracteristica": row.get("id_caracteristica"),
+        "caracteristica": row.get("caracteristica_nombre"),
+        "id_comportamiento": row.get("id_comportamiento"),
+        "comportamiento": row.get("comportamiento_nombre"),
+    }
+
+
+def _contexto(row: dict) -> dict:
+    return {
+        "latitud": row.get("latitud"),
+        "longitud": row.get("longitud"),
+        "altitud": row.get("altitud"),
+        "notas": row.get("notas"),
+    }
+
+
+def _hijos_pronostico_largo(db: Session, ids: list[UUID]) -> dict:
+    """Cargar bloques (con escenarios), recomendaciones y observadores para uno o más pronósticos."""
+    hijos = {"pronosticos": {}, "recomendaciones": {}, "observadores": {}}
+    if not ids:
+        return hijos
+
+    items = _rows(db, """
+        SELECT i.id, i.id_pronostico_largo, i.id_categoria, i.metodo_validacion, i.id_regla_pronostica,
+               i.ejecutar_en, i.fuente, i.orden, i.creado_en, i.id_item_off,
+               cp.nombre as categoria_nombre
+        FROM sinb.pronostico_largo_item i
+        JOIN sinb.categoria_pronostico cp ON cp.id = i.id_categoria
+        WHERE i.id_pronostico_largo = ANY(:ids)
+        ORDER BY i.orden, i.creado_en
+    """, {"ids": ids})
+
+    item_ids = [it["id"] for it in items]
+    escenarios: dict = {}
+    if item_ids:
+        for e in _rows(db, """
+            SELECT ee.id_pronostico_largo_item, ee.confianza::text as confianza,
+                   e.id as id_escenario, e.nombre, e.descripcion, ee.id_escenario_off
+            FROM sinb.escenario_estacional ee
+            JOIN sinb.escenario e ON e.id = ee.id_escenario
+            WHERE ee.id_pronostico_largo_item = ANY(:item_ids)
+            ORDER BY e.nombre
+        """, {"item_ids": item_ids}):
+            escenarios.setdefault(e["id_pronostico_largo_item"], []).append({
+                "id_escenario": e["id_escenario"],
+                "nombre": e["nombre"],
+                "descripcion": e["descripcion"],
+                "confianza": e["confianza"],
+                "id_escenario_off": e["id_escenario_off"],
+            })
+
+    for it in items:
+        it = dict(it)
+        it["escenarios"] = escenarios.get(it["id"], [])
+        hijos["pronosticos"].setdefault(it["id_pronostico_largo"], []).append(it)
+
+    recs = _rows(db, """
+        SELECT pr.id, pr.id_pronostico_largo, pr.id as id_recomendacion,
+               pr.nombre, pr.id_recomendacion_off, pr.creado_en
+        FROM sinb.pronostico_largo_recomendacion pr
+        WHERE pr.id_pronostico_largo = ANY(:ids)
+        ORDER BY pr.creado_en
+    """, {"ids": ids})
+
+    for r in recs:
+        hijos["recomendaciones"].setdefault(r["id_pronostico_largo"], []).append(dict(r))
+
+    for o in _rows(db, """
+        SELECT po.id_pronostico_largo, po.id_usuario, u.nombre, u.usuario,
+               po.fecha_asignacion, po.id_observador_off
+        FROM sinb.pronostico_largo_observador po
+        JOIN usuarios.usuario u ON u.id_usuario = po.id_usuario
+        WHERE po.id_pronostico_largo = ANY(:ids)
+        ORDER BY u.nombre
+    """, {"ids": ids}):
+        hijos["observadores"].setdefault(o["id_pronostico_largo"], []).append({
+            "id_usuario": o["id_usuario"],
+            "nombre": o["nombre"],
+            "usuario": o["usuario"],
+            "fecha_asignacion": o["fecha_asignacion"],
+            "id_observador_off": o["id_observador_off"],
+        })
+
+    return hijos
+
+
+def _armar_pronostico_largo(row: dict, hijos: dict) -> dict:
+    """Ensamblar la respuesta anidada de un pronóstico largo."""
+    observadores = hijos["observadores"].get(row["id"], [])
+    return {
+        **row,
+        "cadena_biocultural": _cadena_biocultural(row),
+        "contexto": _contexto(row),
+        "pronosticos": hijos["pronosticos"].get(row["id"], []),
+        "recomendaciones": hijos["recomendaciones"].get(row["id"], []),
+        "observadores": observadores,
+        "tipo_registro": "COLECTIVO" if len(observadores) > 1 else "INDIVIDUAL",
+    }
+
+
+def get_pronosticos_estacionales(db: Session, skip: int = 0, limit: int = 15,
+                                  todos: bool = False,
+                                  id_categoria: UUID | None = None,
                                   fecha_emision_desde: date | None = None,
                                   fecha_emision_hasta: date | None = None,
                                   estado: str | None = None,
-                                  id_usuario_elabora: int | None = None,
+                                  id_usuario_subio: int | None = None,
                                   id_departamento: int | None = None,
-                                  id_municipio: int | None = None):
-    """Obtener pronósticos estacionales con paginación y filtros."""
+                                  id_municipio: int | None = None,
+                                  codigo_comunidad: str | None = None):
+    """Obtener pronósticos largo plazo con paginación, filtros y hijos anidados.
+
+    `todos=True` devuelve el conjunto completo (sin `LIMIT`/`OFFSET`).
+    """
     params = {"limit": limit, "skip": skip}
     where = ["pe.estado IN ('EMITIDO', 'ACEPTADO', 'RECHAZADO', 'EN_REVISION')"]
-    
-    if id_campo:
-        where.append("pe.id_campo_pronostico = :id_campo")
-        params["id_campo"] = id_campo
+
+    if id_categoria:
+        where.append("""EXISTS (SELECT 1 FROM sinb.pronostico_largo_item it
+                                WHERE it.id_pronostico_largo = pe.id
+                                  AND it.id_categoria = :id_categoria)""")
+        params["id_categoria"] = id_categoria
     if fecha_emision_desde:
         where.append("pe.fecha_emision >= :fecha_emision_desde")
         params["fecha_emision_desde"] = fecha_emision_desde
@@ -577,243 +948,618 @@ def get_pronosticos_estacionales(db: Session, skip: int = 0, limit: int = 15,
         where.append("pe.fecha_emision <= :fecha_emision_hasta")
         params["fecha_emision_hasta"] = fecha_emision_hasta
     if estado:
-        where.append("pe.estado = :estado")
+        where.append("pe.estado = CAST(:estado AS sinb.estado_validacion)")
         params["estado"] = estado
-    if id_usuario_elabora:
-        where.append("pe.id_usuario_elabora = :id_usuario_elabora")
-        params["id_usuario_elabora"] = id_usuario_elabora
-    
+    if id_usuario_subio:
+        where.append("pe.id_usuario_subio = :id_usuario_subio")
+        params["id_usuario_subio"] = id_usuario_subio
+    if id_municipio:
+        where.append("pe.id_municipio = :id_municipio")
+        params["id_municipio"] = id_municipio
+    if codigo_comunidad:
+        where.append("pe.codigo_comunidad = :codigo_comunidad")
+        params["codigo_comunidad"] = codigo_comunidad
+
     where_clause = " AND ".join(where)
-    
+
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    query_params = params if not todos else {
+        k: v for k, v in params.items() if k not in ("limit", "skip")}
+
     rows = _rows(db, f"""
-        SELECT pe.*, cp.nombre as campo_nombre, u.nombre as elaborador_nombre,
-               ARRAY_AGG(DISTINCT jsonb_build_object(
-                   'id_escenario', ee.id_escenario,
-                   'nombre', e.nombre,
-                   'probabilidad', ee.probabilidad
-               )) FILTER (WHERE ee.id_escenario IS NOT NULL) as escenarios
-        FROM sinb.pronostico_estacional pe
-        LEFT JOIN sinb.campo_pronostico cp ON cp.id = pe.id_campo_pronostico
-        LEFT JOIN usuarios.usuario u ON u.id_usuario = pe.id_usuario_elabora
-        LEFT JOIN sinb.escenario_estacional ee ON ee.id_pronostico_estacional = pe.id
-        LEFT JOIN sinb.escenario e ON e.id = ee.id_escenario
+        {_LARGO_HEADER_SELECT}
         WHERE {where_clause}
-        GROUP BY pe.id, cp.nombre, u.nombre
         ORDER BY pe.fecha_emision DESC, pe.creado_en DESC
-        LIMIT :limit OFFSET :skip
-    """, params)
-    
+        {page}
+    """, query_params)
+
     total = _row(db, f"""
-        SELECT COUNT(DISTINCT pe.id) as total
-        FROM sinb.pronostico_estacional pe
+        SELECT COUNT(*) as total
+        FROM sinb.pronostico_largo pe
         WHERE {where_clause}
     """, {k: v for k, v in params.items() if k not in ['limit', 'skip']})['total']
-    
-    return _serialize(rows), total
+
+    hijos = _hijos_pronostico_largo(db, [r["id"] for r in rows])
+    return _serialize([_armar_pronostico_largo(r, hijos) for r in rows]), total
 
 
-def get_pronostico_estacional(db: Session, id: UUID):
-    """Obtener pronóstico estacional completo con escenarios y observadores asignados."""
-    pe = _row(db, """
-        SELECT pe.*, cp.*, u.nombre as elaborador_nombre
-        FROM sinb.pronostico_estacional pe
-        LEFT JOIN sinb.campo_pronostico cp ON cp.id = pe.id_campo_pronostico
-        LEFT JOIN usuarios.usuario u ON u.id_usuario = pe.id_usuario_elabora
-        WHERE pe.id = :id
-    """, {"id": id})
-    
-    if pe:
-        # Escenarios
-        pe["escenarios"] = _rows(db, """
-            SELECT ee.probabilidad, e.id as id_escenario, e.nombre, e.descripcion
-            FROM sinb.escenario_estacional ee
-            JOIN sinb.escenario e ON e.id = ee.id_escenario
-            WHERE ee.id_pronostico_estacional = :id
-        """, {"id": id})
-        
-        # Observadores asignados
-        pe["observadores"] = _rows(db, """
-            SELECT po.id_usuario, u.nombre, u.usuario, po.confianza, po.fecha_asignacion
-            FROM sinb.pronostico_observador po
-            JOIN usuarios.usuario u ON u.id_usuario = po.id_usuario
-            WHERE po.id_pronostico_estacional = :id
-        """, {"id": id})
-    
-    return pe
-
-
-def create_pronostico_estacional(db: Session, data: dict, id_usuario: int | None = None):
-    """Crear pronóstico estacional con escenarios y observadores opcionales."""
-    if id_usuario and not data.get("id_usuario_elabora"):
-        data["id_usuario_elabora"] = id_usuario
-    
-    # Generar código único
-    data["codigo"] = f"PE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
-    pe = _row(db, """
-        INSERT INTO sinb.pronostico_estacional 
-        (codigo, id_campo_pronostico, fecha_emision, periodo_inicio, periodo_fin,
-         estado, id_usuario_elabora, notas)
-        VALUES (:codigo, :id_campo_pronostico, :fecha_emision, :periodo_inicio, :periodo_fin,
-                'EMITIDO', :id_usuario_elabora, :notas)
-        RETURNING *
-    """, data)
-    
-    if not pe:
+def get_pronostico_largo(db: Session, id: UUID):
+    """Obtener pronóstico largo plazo completo: cadena, periodo, contexto, bloques y recomendaciones."""
+    row = _row(db, f"{_LARGO_HEADER_SELECT} WHERE pe.id = :id", {"id": id})
+    if not row:
         return None
+    hijos = _hijos_pronostico_largo(db, [row["id"]])
+    return _serialize(_armar_pronostico_largo(row, hijos))
+
+
+def _validar_cadena_biocultural(db: Session, cadena: dict | None):
+    """Validar que la cadena grupo → indicador → característica → comportamiento sea coherente (422)."""
+    if not cadena:
+        raise HTTPException(status_code=422, detail="cadena_biocultural es obligatoria")
+    fila = _row(db, """
+        SELECT 1
+        FROM sinb.grupo g
+        JOIN sinb.indicador_natural i ON i.id = :id_indicador_natural AND i.id_grupo = g.id
+        JOIN sinb.caracteristica c ON c.id = :id_caracteristica AND c.id_indicador_natural = i.id
+        JOIN sinb.comportamiento co ON co.id = :id_comportamiento AND co.id_caracteristica = c.id
+        WHERE g.id = :id_grupo
+          AND g.estado = 'ACTIVO' AND i.estado = 'ACTIVO'
+          AND c.estado = 'ACTIVO' AND co.estado = 'ACTIVO'
+    """, {
+        "id_grupo": cadena.get("id_grupo"),
+        "id_indicador_natural": cadena.get("id_indicador_natural"),
+        "id_caracteristica": cadena.get("id_caracteristica"),
+        "id_comportamiento": cadena.get("id_comportamiento"),
+    })
+    if not fila:
+        raise HTTPException(
+            status_code=422,
+            detail="La cadena biocultural es incoherente: el indicador no pertenece al grupo, "
+                   "la característica al indicador o el comportamiento a la característica"
+        )
+
+
+def _validar_escenarios_de_item(db: Session, id_categoria: UUID, escenarios: list):
+    """
+    Validar los escenarios de un bloque:
+    - confianza ALTA | MEDIA | BAJA cuando viene (es opcional)
+    - el escenario existe, está activo y pertenece a la categoría del bloque
+    """
+    for esc in escenarios or []:
+        conf = esc.get("confianza")
+        if conf is not None and conf not in ("ALTA", "MEDIA", "BAJA"):
+            raise HTTPException(status_code=422, detail="La confianza debe ser ALTA, MEDIA o BAJA")
+        existe = _row(db, """
+            SELECT 1 FROM sinb.escenario
+            WHERE id = :id AND id_categoria = :id_categoria AND estado = 'ACTIVO'
+        """, {"id": esc.get("id_escenario"), "id_categoria": id_categoria})
+        if not existe:
+            raise HTTPException(
+                status_code=422,
+                detail="El escenario no existe o no pertenece a la categoría del bloque de pronóstico"
+            )
+
+
+def _validar_items_pronostico_largo(db: Session, items: list | None):
+    """Validar los bloques de pronóstico: al menos uno y categoría activa por bloque."""
+    if not items:
+        raise HTTPException(status_code=422, detail="Debe incluir al menos un bloque de pronóstico")
+    for it in items:
+        categoria = _row(db, """
+            SELECT id FROM sinb.categoria_pronostico
+            WHERE id = :id AND estado = 'ACTIVO'
+        """, {"id": it.get("id_categoria")})
+        if not categoria:
+            raise HTTPException(status_code=422, detail="La categoría de pronóstico no existe o no está activa")
+        _validar_escenarios_de_item(db, categoria["id"], it.get("id_escenarios") or [])
+
+
+def _validar_recomendaciones_largo(db: Session, recomendaciones: list | None):
+    """Validar recomendaciones en texto libre: nombre no vacío y sin IDs duplicados (422)."""
+    if not recomendaciones:
+        return
+    ids = [r.get("id_recomendacion") for r in recomendaciones if r.get("id_recomendacion")]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="Recomendación duplicada en la lista")
+    for r in recomendaciones:
+        nombre = (r.get("nombre") or "").strip()
+        if not nombre:
+            raise HTTPException(
+                status_code=422,
+                detail="Cada recomendación debe tener texto (nombre) no vacío"
+            )
+        r["nombre"] = nombre
+
+
+def _validar_codigo_comunidad_municipio(db: Session, codigo_comunidad: str | None, id_municipio: int | None):
+    """Validar que la comunidad pertenece al municipio especificado (422)."""
+    if not codigo_comunidad or not id_municipio:
+        return
+    existe = _row(db, """
+        SELECT 1 
+        FROM shared.comunidades c
+        WHERE c.codigo_ine = :codigo_comunidad 
+          AND c.id_municipio = :id_municipio
+    """, {"codigo_comunidad": codigo_comunidad, "id_municipio": id_municipio})
     
-    # Insertar escenarios si vienen
-    escenarios = data.get("escenarios", [])
-    for esc in escenarios:
-        _execute(db, """
-            INSERT INTO sinb.escenario_estacional 
-            (id_pronostico_estacional, id_escenario, probabilidad)
-            VALUES (:id_pronostico_estacional, :id_escenario, :probabilidad)
-        """, {**esc, "id_pronostico_estacional": pe["id"]})
+    if not existe:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La comunidad {codigo_comunidad} no pertenece al municipio {id_municipio}"
+        )
+
+
+def _validar_observadores_largo(db: Session, observadores: list | None, id_municipio: int | None = None):
+    """
+    1..N observadores obligatorios (07 §4.5): auto-registro o en representación.
+    Valida existencia, rol, actividad y mismo municipio.
+    """
+    if not observadores:
+        raise HTTPException(
+            status_code=422,
+            detail="Debe mencionar al menos un observador (auto-registro o en representación)"
+        )
+    ids = [o.get("id_usuario") for o in observadores]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="Observador duplicado en la lista")
+    filas = _rows(db, """
+        SELECT id_usuario, id_municipio, id_rol, nombre, activo
+        FROM usuarios.usuario
+        WHERE id_usuario = ANY(:ids)
+    """, {"ids": ids})
+    if len(filas) != len(ids):
+        raise HTTPException(status_code=422, detail="Uno o más observadores no existen")
+    roles_validos = {6, 7, 8, 12, 13}  # UGR Municipio, Responsable Local, Alcalde, Recolector, Observador local
+    for f in filas:
+        if f.get("activo") is False:
+            raise HTTPException(status_code=422, detail=f"El usuario {f['nombre']} está inactivo")
+        if f["id_rol"] not in roles_validos:
+            raise HTTPException(status_code=422, detail=f"El usuario {f['nombre']} no tiene rol de observador")
+    municipios = {f["id_municipio"] for f in filas if f["id_municipio"]}
+    if len(municipios) > 1:
+        raise HTTPException(status_code=422, detail="Todos los observadores deben ser del mismo municipio")
+    if id_municipio and municipios and municipios != {id_municipio}:
+        raise HTTPException(status_code=422, detail="Los observadores deben pertenecer al municipio del pronóstico")
+
+
+def _insertar_hijos_largo(db: Session, id_pronostico: UUID,
+                          items: list | None, recomendaciones: list | None, observadores: list | None):
+    """Insertar bloques+escenarios, recomendaciones (texto libre) y observadores (misma transacción)."""
+    import uuid
+    if items is not None:
+        for idx, it in enumerate(items):
+            item = _row(db, """
+                INSERT INTO sinb.pronostico_largo_item
+                (id_pronostico_largo, id_categoria, metodo_validacion, id_regla_pronostica,
+                 ejecutar_en, fuente, orden, id_item_off)
+                VALUES (:id_pronostico_largo, :id_categoria, :metodo_validacion, :id_regla_pronostica,
+                        :ejecutar_en, :fuente, :orden, :id_item_off)
+                RETURNING id
+            """, {
+                "id_pronostico_largo": id_pronostico,
+                "id_categoria": it.get("id_categoria"),
+                "metodo_validacion": it.get("metodo_validacion"),
+                "id_regla_pronostica": it.get("id_regla_pronostica"),
+                "ejecutar_en": it.get("ejecutar_en"),
+                "fuente": it.get("fuente"),
+                "orden": it.get("orden") or (idx + 1),
+                "id_item_off": it.get("id_item_off") or str(uuid.uuid4()),
+            })
+            for esc in it.get("id_escenarios") or []:
+                confianza = esc.get("confianza") if isinstance(esc, dict) else None
+                db.execute(text("""
+                    INSERT INTO sinb.escenario_estacional
+                    (id_pronostico_largo_item, id_escenario, confianza, id_escenario_off)
+                    VALUES (:id_item, :id_escenario, CAST(:confianza AS sinb.confianza_nivel), :id_escenario_off)
+                """), {
+                    "id_item": item["id"],
+                    "id_escenario": esc.get("id_escenario"),
+                    "confianza": confianza,
+                    "id_escenario_off": esc.get("id_escenario_off") if isinstance(esc, dict) else None or str(uuid.uuid4()),
+                })
+
+    for r in recomendaciones or []:
+        db.execute(text("""
+            INSERT INTO sinb.pronostico_largo_recomendacion
+            (id, id_pronostico_largo, nombre, id_recomendacion_off)
+            VALUES (:id, :id_pronostico_largo, :nombre, :id_recomendacion_off)
+            ON CONFLICT (id) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                id_recomendacion_off = EXCLUDED.id_recomendacion_off
+        """), {
+            "id": r.get("id_recomendacion") or str(uuid.uuid4()),
+            "id_pronostico_largo": id_pronostico,
+            "nombre": r.get("nombre"),
+            "id_recomendacion_off": r.get("id_recomendacion_off") or str(uuid.uuid4()),
+        })
+
+    for obs in observadores or []:
+        db.execute(text("""
+            INSERT INTO sinb.pronostico_largo_observador (id_pronostico_largo, id_usuario, id_observador_off)
+            VALUES (:id_pronostico_largo, :id_usuario, :id_observador_off)
+            ON CONFLICT (id_pronostico_largo, id_usuario)
+            DO UPDATE SET fecha_asignacion = now()
+        """), {
+            "id_pronostico_largo": id_pronostico,
+            "id_usuario": obs.get("id_usuario"),
+            "id_observador_off": obs.get("id_observador_off") or str(uuid.uuid4()),
+        })
+
+
+def create_pronostico_largo(db: Session, data: dict, id_usuario: int | None = None):
+    """Crear pronóstico largo plazo con contrato anidado (MD 15): cadena, periodo, contexto, bloques y recomendaciones."""
+    # El autor SIEMPRE lo fija el servidor: así la regla "solo el autor edita"
+    # no se puede eludir enviando el id_usuario_subio de otra persona.
+    if id_usuario:
+        data["id_usuario_subio"] = id_usuario
+
+    periodo = data.get("periodo") or {}
+    _validar_periodo_pronostico(periodo.get("inicio"), periodo.get("fin"))
+    _validar_cadena_biocultural(db, data.get("cadena_biocultural"))
     
-    # Insertar observadores asignados si vienen
-    observadores = data.get("observadores", [])
-    for obs in observadores:
-        _execute(db, """
-            INSERT INTO sinb.pronostico_observador 
-            (id_pronostico_estacional, id_usuario, confianza)
-            VALUES (:id_pronostico_estacional, :id_usuario, :confianza)
-        """, {**obs, "id_pronostico_estacional": pe["id"]})
+    # Validar municipio si existe
+    if data.get("id_municipio") is not None and not _row(
+            db, "SELECT 1 FROM shared.municipio WHERE id = :id", {"id": data["id_municipio"]}):
+        raise HTTPException(status_code=422, detail="El municipio no existe")
     
+    # Validar coherencia comunidad-municipio
+    _validar_codigo_comunidad_municipio(db, data.get("codigo_comunidad"), data.get("id_municipio"))
+
+    items = data.get("pronosticos")
+    _validar_items_pronostico_largo(db, items)
+    _validar_recomendaciones_largo(db, data.get("recomendaciones"))
+    _validar_observadores_largo(db, data.get("observadores"), data.get("id_municipio"))
+
+    cadena = data["cadena_biocultural"]
+    contexto = data.get("contexto") or {}
+
+    params = {
+        "codigo": f"PE-{datetime.now(ZONA_BOLIVIA).strftime('%Y%m%d%H%M%S')}",
+        "id_pe_off": data.get("id_pe_off"),
+        "fecha_emision": data.get("fecha_emision") or _hoy_bolivia(),
+        "periodo_inicio": periodo.get("inicio"),
+        "periodo_fin": periodo.get("fin"),
+        "id_usuario_subio": data.get("id_usuario_subio"),
+        "id_municipio": data.get("id_municipio"),
+        "codigo_comunidad": data.get("codigo_comunidad"),
+        "texto_observador": data.get("texto_observador"),
+        "id_grupo": cadena.get("id_grupo"),
+        "id_indicador_natural": cadena.get("id_indicador_natural"),
+        "id_caracteristica": cadena.get("id_caracteristica"),
+        "id_comportamiento": cadena.get("id_comportamiento"),
+        "latitud": contexto.get("latitud"),
+        "longitud": contexto.get("longitud"),
+        "altitud": contexto.get("altitud"),
+        "notas": contexto.get("notas"),
+    }
+
+    try:
+        pe = _row(db, """
+            INSERT INTO sinb.pronostico_largo
+            (codigo, id_pe_off, fecha_emision, periodo_inicio, periodo_fin,
+             id_usuario_subio, id_municipio, codigo_comunidad, texto_observador,
+             id_grupo, id_indicador_natural, id_caracteristica, id_comportamiento,
+             latitud, longitud, altitud, notas)
+            VALUES (:codigo, :id_pe_off, :fecha_emision, :periodo_inicio, :periodo_fin,
+                    :id_usuario_subio, :id_municipio, :codigo_comunidad, :texto_observador,
+                    :id_grupo, :id_indicador_natural, :id_caracteristica, :id_comportamiento,
+                    :latitud, :longitud, :altitud, :notas)
+            RETURNING *
+        """, params)
+    except IntegrityError as e:
+        db.rollback()
+        if "codigo" in str(e.orig):
+            raise HTTPException(status_code=409, detail="Código de pronóstico duplicado")
+        raise HTTPException(status_code=422, detail="Violación de integridad referencial")
+
+    if not pe:
+        db.rollback()
+        return None
+
+    _insertar_hijos_largo(db, pe["id"], items, data.get("recomendaciones"), data.get("observadores"))
     db.commit()
-    return get_pronostico_estacional(db, pe["id"])
+    return get_pronostico_largo(db, pe["id"])
 
 
-def update_pronostico_estacional(db: Session, id: UUID, data: dict):
-    """Actualizar pronóstico estacional."""
-    data["id"] = id
-    result = _row(db, """
-        UPDATE sinb.pronostico_estacional SET
-            id_campo_pronostico = COALESCE(:id_campo_pronostico, id_campo_pronostico),
+def _validar_periodo_pronostico(periodo_inicio, periodo_fin):
+    """Validar que el periodo sea coherente (fecha_fin >= fecha_inicio)."""
+    if periodo_inicio and periodo_fin and periodo_fin < periodo_inicio:
+        raise HTTPException(status_code=422, detail="periodo_fin debe ser posterior o igual a periodo_inicio")
+
+
+def update_pronostico_largo(db: Session, id: UUID, data: dict):
+    """Actualizar pronóstico largo plazo; si vienen bloques o recomendaciones, reemplazan a los hijos."""
+    actual = _row(db, "SELECT * FROM sinb.pronostico_largo WHERE id = :id", {"id": id})
+    if not actual:
+        return None
+
+    periodo = data.get("periodo")
+    if periodo:
+        _validar_periodo_pronostico(
+            periodo.get("inicio") or actual["periodo_inicio"],
+            periodo.get("fin") or actual["periodo_fin"],
+        )
+    if data.get("cadena_biocultural"):
+        _validar_cadena_biocultural(db, data["cadena_biocultural"])
+    if data.get("id_municipio") is not None and not _row(
+            db, "SELECT 1 FROM shared.municipio WHERE id = :id", {"id": data["id_municipio"]}):
+        raise HTTPException(status_code=422, detail="El municipio no existe")
+
+    items = data.get("pronosticos")
+    if items is not None:
+        _validar_items_pronostico_largo(db, items)
+    recomendaciones = data.get("recomendaciones")
+    if recomendaciones is not None:
+        _validar_recomendaciones_largo(db, recomendaciones)
+
+    cadena = data.get("cadena_biocultural") or {}
+    contexto = data.get("contexto") or {}
+    con_contexto = data.get("contexto") is not None
+
+    params = {
+        "id": id,
+        "fecha_emision": data.get("fecha_emision"),
+        "periodo_inicio": (periodo or {}).get("inicio"),
+        "periodo_fin": (periodo or {}).get("fin"),
+        "estado": data.get("estado"),
+        "id_municipio": data.get("id_municipio"),
+        "texto_observador": data.get("texto_observador"),
+        "id_grupo": cadena.get("id_grupo"),
+        "id_indicador_natural": cadena.get("id_indicador_natural"),
+        "id_caracteristica": cadena.get("id_caracteristica"),
+        "id_comportamiento": cadena.get("id_comportamiento"),
+        "latitud": contexto.get("latitud") if con_contexto else None,
+        "longitud": contexto.get("longitud") if con_contexto else None,
+        "altitud": contexto.get("altitud") if con_contexto else None,
+        "notas": contexto.get("notas") if con_contexto else None,
+    }
+    _row(db, """
+        UPDATE sinb.pronostico_largo SET
             fecha_emision = COALESCE(:fecha_emision, fecha_emision),
             periodo_inicio = COALESCE(:periodo_inicio, periodo_inicio),
             periodo_fin = COALESCE(:periodo_fin, periodo_fin),
             estado = COALESCE(:estado, estado),
-            id_usuario_elabora = COALESCE(:id_usuario_elabora, id_usuario_elabora),
-            notas = COALESCE(:notas, notas),
-            actualizado_en = now()
+            id_municipio = COALESCE(:id_municipio, id_municipio),
+            texto_observador = COALESCE(:texto_observador, texto_observador),
+            id_grupo = COALESCE(:id_grupo, id_grupo),
+            id_indicador_natural = COALESCE(:id_indicador_natural, id_indicador_natural),
+            id_caracteristica = COALESCE(:id_caracteristica, id_caracteristica),
+            id_comportamiento = COALESCE(:id_comportamiento, id_comportamiento),
+            latitud = COALESCE(:latitud, latitud),
+            longitud = COALESCE(:longitud, longitud),
+            altitud = COALESCE(:altitud, altitud),
+            notas = COALESCE(:notas, notas)
         WHERE id = :id
         RETURNING *
-    """, data)
+    """, params)
+
+    if items is not None:
+        _execute(db, "DELETE FROM sinb.pronostico_largo_item WHERE id_pronostico_largo = :id", {"id": id})
+    if recomendaciones is not None:
+        _execute(db, """
+            DELETE FROM sinb.pronostico_largo_recomendacion WHERE id_pronostico_largo = :id
+        """, {"id": id})
+    _insertar_hijos_largo(
+        db, id,
+        items if items is not None else None,
+        recomendaciones if recomendaciones is not None else None,
+        None,
+    )
     db.commit()
-    return result
+    return get_pronostico_largo(db, id)
 
 
-def delete_pronostico_estacional(db: Session, id: UUID):
-    """Eliminar pronóstico estacional."""
-    _execute(db, """
-        UPDATE sinb.pronostico_estacional SET estado = 'ELIMINADO', actualizado_en = now()
-        WHERE id = :id
-    """, {"id": id})
+def delete_pronostico_largo(db: Session, id: UUID, id_usuario: int | None = None):
+    """
+    Eliminar pronóstico largo plazo (borrado físico en cascada desde la cabecera):
+    bloques -> escenario_estacional, recomendaciones, observadores
+    y verificacion_pronostico tienen ON DELETE CASCADE sobre esta tabla.
+
+    Deja su tombstone: es una cabecera, así que al retirar la fila la app
+    descarta también sus hijos.
+    """
+    existe = _row(db, "SELECT id, codigo, id_pe_off FROM sinb.pronostico_largo WHERE id = :id", {"id": id})
+    if not existe:
+        raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
+    _registrar_borrado(db, "pronostico_largo", existe, id_usuario)
+    db.execute(text("DELETE FROM sinb.pronostico_largo WHERE id = :id"), {"id": id})
     db.commit()
 
 
-def add_escenario_a_pronostico(db: Session, id_pronostico: UUID, id_escenario: UUID, probabilidad: float):
-    """Agregar escenario a pronóstico estacional."""
+def _item_pertenece_al_pronostico(db: Session, id_pronostico: UUID, id_item: UUID) -> dict:
+    item = _row(db, """
+        SELECT id, id_categoria FROM sinb.pronostico_largo_item
+        WHERE id = :id AND id_pronostico_largo = :id_pronostico
+    """, {"id": id_item, "id_pronostico": id_pronostico})
+    if not item:
+        raise HTTPException(status_code=404, detail="Bloque de pronóstico no encontrado")
+    return item
+
+
+def add_escenario_a_pronostico(db: Session, id_pronostico: UUID, id_item: UUID,
+                               id_escenario: UUID, confianza: str | None = None):
+    """Agregar (o actualizar) un escenario en un bloque del pronóstico."""
+    item = _item_pertenece_al_pronostico(db, id_pronostico, id_item)
+    _validar_escenarios_de_item(
+        db, item["id_categoria"], [{"id_escenario": id_escenario, "confianza": confianza}]
+    )
     result = _row(db, """
-        INSERT INTO sinb.escenario_estacional 
-        (id_pronostico_estacional, id_escenario, probabilidad)
-        VALUES (:id_pronostico_estacional, :id_escenario, :probabilidad)
-        ON CONFLICT (id_pronostico_estacional, id_escenario) 
-        DO UPDATE SET probabilidad = :probabilidad
+        INSERT INTO sinb.escenario_estacional
+        (id_pronostico_largo_item, id_escenario, confianza)
+        VALUES (:id_item, :id_escenario, CAST(:confianza AS sinb.confianza_nivel))
+        ON CONFLICT (id_pronostico_largo_item, id_escenario)
+        DO UPDATE SET confianza = EXCLUDED.confianza
         RETURNING *
-    """, {"id_pronostico_estacional": id_pronostico, "id_escenario": id_escenario, "probabilidad": probabilidad})
+    """, {"id_item": id_item, "id_escenario": id_escenario, "confianza": confianza})
     db.commit()
     return result
 
 
-def remove_escenario_de_pronostico(db: Session, id_pronostico: UUID, id_escenario: UUID):
-    """Remover escenario de pronóstico estacional."""
-    _execute(db, """
+def remove_escenario_de_pronostico(db: Session, id_pronostico: UUID, id_item: UUID, id_escenario: UUID):
+    """Remover un escenario de un bloque del pronóstico."""
+    _item_pertenece_al_pronostico(db, id_pronostico, id_item)
+    result = _row(db, """
         DELETE FROM sinb.escenario_estacional
-        WHERE id_pronostico_estacional = :id_pronostico AND id_escenario = :id_escenario
-    """, {"id_pronostico_estacional": id_pronostico, "id_escenario": id_escenario})
+        WHERE id_pronostico_largo_item = :id_item AND id_escenario = :id_escenario
+        RETURNING *
+    """, {"id_item": id_item, "id_escenario": id_escenario})
+    if not result:
+        raise HTTPException(status_code=404, detail="El escenario no está en este bloque de pronóstico")
     db.commit()
+    return result
 
 
 # --- Pronósticos Temporales ---
 
 def get_pronosticos_temporales(db: Session, skip: int = 0, limit: int = 15,
+                                todos: bool = False,
                                 id_categoria: UUID | None = None,
-                                id_campo: UUID | None = None,
                                 fecha_emision_desde: date | None = None,
                                 confianza: str | None = None,
-                                estado: str | None = None):
-    """Obtener pronósticos temporales con paginación."""
+                                estado: str | None = None,
+                                codigo_comunidad: str | None = None):
+    """Obtener pronósticos temporales con paginación.
+
+    `todos=True` devuelve el conjunto completo (sin `LIMIT`/`OFFSET`).
+    """
     params = {"limit": limit, "skip": skip}
     where = ["pt.estado IN ('EMITIDO', 'ACEPTADO', 'RECHAZADO', 'EN_REVISION')"]
     
     if id_categoria:
         where.append("pt.id_categoria = :id_categoria")
         params["id_categoria"] = id_categoria
-    if id_campo:
-        where.append("pt.id_campo_pronostico = :id_campo")
-        params["id_campo"] = id_campo
     if fecha_emision_desde:
         where.append("pt.fecha_emision >= :fecha_emision_desde")
         params["fecha_emision_desde"] = fecha_emision_desde
     if confianza:
-        where.append("pt.confianza = :confianza::sinb.confianza_nivel")
+        where.append("pt.confianza = CAST(:confianza AS sinb.confianza_nivel)")
         params["confianza"] = confianza
     if estado:
-        where.append("pt.estado = :estado")
+        where.append("pt.estado = CAST(:estado AS sinb.estado_validacion)")
         params["estado"] = estado
+    if codigo_comunidad:
+        where.append("pt.codigo_comunidad = :codigo_comunidad")
+        params["codigo_comunidad"] = codigo_comunidad
     
     where_clause = " AND ".join(where)
     
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    query_params = params if not todos else {
+        k: v for k, v in params.items() if k not in ("limit", "skip")}
+
     rows = _rows(db, f"""
-        SELECT pt.*, cat.nombre as categoria_nombre, cp.nombre as campo_nombre
-        FROM sinb.pronostico_temporal pt
-        LEFT JOIN sinb.categoria_pronostico_temporal cat ON cat.id = pt.id_categoria
-        LEFT JOIN sinb.campo_pronostico cp ON cp.id = pt.id_campo_pronostico
+        SELECT pt.id, pt.codigo, pt.id_pt_off, pt.id_categoria, pt.codigo_comunidad, pt.id_municipio,
+               pt.fecha_emision, pt.fecha_inicio, pt.fecha_fin, pt.texto_observador,
+               pt.confianza, pt.estado, pt.creado_en, cat.nombre as categoria_nombre,
+               pt.id_usuario_subio
+        FROM sinb.pronostico_corto pt
+        LEFT JOIN sinb.categoria_pronostico cat ON cat.id = pt.id_categoria
         WHERE {where_clause}
         ORDER BY pt.fecha_emision DESC
-        LIMIT :limit OFFSET :skip
-    """, params)
+        {page}
+    """, query_params)
     
     total = _row(db, f"""
         SELECT COUNT(*) as total
-        FROM sinb.pronostico_temporal pt
+        FROM sinb.pronostico_corto pt
         WHERE {where_clause}
     """, {k: v for k, v in params.items() if k not in ['limit', 'skip']})['total']
     
     return _serialize(rows), total
 
 
-def create_pronostico_temporal(db: Session, data: dict):
+def get_pronostico_corto_by_id(db: Session, id: UUID):
+    """Obtener pronóstico corto plazo completo."""
+    pc = _row(db, """
+        SELECT pt.id, pt.codigo, pt.id_pt_off, pt.id_categoria, pt.codigo_comunidad, pt.id_municipio,
+               pt.fecha_emision, pt.fecha_inicio, pt.fecha_fin, pt.texto_observador,
+               pt.confianza, pt.estado, pt.creado_en, cat.nombre as categoria_nombre,
+               pt.id_usuario_subio
+        FROM sinb.pronostico_corto pt
+        LEFT JOIN sinb.categoria_pronostico cat ON cat.id = pt.id_categoria
+        WHERE pt.id = :id
+    """, {"id": id})
+    
+    if pc:
+        pc = dict(pc)
+        # Observadores asignados
+        pc["observadores"] = _rows(db, """
+            SELECT po.id_usuario, u.nombre, u.usuario, po.confianza, po.fecha_asignacion
+            FROM sinb.pronostico_corto_observador po
+            JOIN usuarios.usuario u ON u.id_usuario = po.id_usuario
+            WHERE po.id_pronostico_corto = :id
+        """, {"id": id})
+    
+    return pc
+
+
+def create_pronostico_corto(db: Session, data: dict, id_usuario: int | None = None):
     """Crear pronóstico temporal."""
+    # El autor SIEMPRE lo fija el servidor (misma regla que el pronóstico largo).
+    if id_usuario:
+        data["id_usuario_subio"] = id_usuario
+    
+    _validar_periodo_pronostico(data.get("fecha_inicio"), data.get("fecha_fin"))
+    if not _row(db, """
+        SELECT 1 FROM sinb.categoria_pronostico WHERE id = :id AND estado = 'ACTIVO'
+    """, {"id": data.get("id_categoria")}):
+        raise HTTPException(status_code=422, detail="La categoría de pronóstico no existe o no está activa")
+    
+    # Validar coherencia comunidad-municipio
+    _validar_codigo_comunidad_municipio(db, data.get("codigo_comunidad"), data.get("id_municipio"))
+    
     data["codigo"] = f"PT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    params = {
+        "codigo": data["codigo"],
+        "id_pt_off": data.get("id_pt_off"),
+        "id_categoria": data.get("id_categoria"),
+        "fecha_emision": data.get("fecha_emision"),
+        "fecha_inicio": data.get("fecha_inicio"),
+        "fecha_fin": data.get("fecha_fin"),
+        "texto_observador": data.get("texto_observador"),
+        "confianza": data.get("confianza"),
+        "id_usuario_subio": data.get("id_usuario_subio"),
+        "id_municipio": data.get("id_municipio"),
+        "codigo_comunidad": data.get("codigo_comunidad"),
+    }
     result = _row(db, """
-        INSERT INTO sinb.pronostico_temporal 
-        (codigo, id_categoria, id_campo_pronostico, fecha_emision, fecha_inicio, fecha_fin,
-         valor_esperado, confianza, estado)
-        VALUES (:codigo, :id_categoria, :id_campo_pronostico, :fecha_emision, :fecha_inicio, :fecha_fin,
-                :valor_esperado, :confianza, :estado)
+        INSERT INTO sinb.pronostico_corto 
+        (codigo, id_pt_off, id_categoria, fecha_emision, fecha_inicio, fecha_fin,
+         texto_observador, confianza, id_usuario_subio, id_municipio, codigo_comunidad)
+        VALUES (:codigo, :id_pt_off, :id_categoria, :fecha_emision, :fecha_inicio, :fecha_fin,
+                :texto_observador, :confianza, :id_usuario_subio, :id_municipio, :codigo_comunidad)
         RETURNING *
-    """, data)
+    """, params)
     db.commit()
     return result
 
 
-def update_pronostico_temporal(db: Session, id: UUID, data: dict):
+def update_pronostico_corto(db: Session, id: UUID, data: dict):
     """Actualizar pronóstico temporal."""
+    if "fecha_inicio" in data or "fecha_fin" in data:
+        actual = _row(db, "SELECT fecha_inicio, fecha_fin FROM sinb.pronostico_corto WHERE id = :id", {"id": id})
+        if not actual:
+            return None
+        _validar_periodo_pronostico(
+            data.get("fecha_inicio", actual["fecha_inicio"]),
+            data.get("fecha_fin", actual["fecha_fin"]),
+        )
+    
     data["id"] = id
+    for key in ("id_categoria", "fecha_emision", "fecha_inicio", "fecha_fin",
+                "texto_observador", "confianza", "codigo_comunidad"):
+        data.setdefault(key, None)
     result = _row(db, """
-        UPDATE sinb.pronostico_temporal SET
+        UPDATE sinb.pronostico_corto SET
             id_categoria = COALESCE(:id_categoria, id_categoria),
-            id_campo_pronostico = COALESCE(:id_campo_pronostico, id_campo_pronostico),
             fecha_emision = COALESCE(:fecha_emision, fecha_emision),
             fecha_inicio = COALESCE(:fecha_inicio, fecha_inicio),
             fecha_fin = COALESCE(:fecha_fin, fecha_fin),
-            valor_esperado = COALESCE(:valor_esperado, valor_esperado),
+            texto_observador = COALESCE(:texto_observador, texto_observador),
             confianza = COALESCE(:confianza, confianza),
-            estado = COALESCE(:estado, estado),
-            actualizado_en = now()
+            codigo_comunidad = COALESCE(:codigo_comunidad, codigo_comunidad)
         WHERE id = :id
         RETURNING *
     """, data)
@@ -821,18 +1567,24 @@ def update_pronostico_temporal(db: Session, id: UUID, data: dict):
     return result
 
 
-def delete_pronostico_temporal(db: Session, id: UUID):
-    """Eliminar pronóstico temporal."""
-    _execute(db, """
-        UPDATE sinb.pronostico_temporal SET estado = 'ELIMINADO', actualizado_en = now()
-        WHERE id = :id
-    """, {"id": id})
+def delete_pronostico_corto(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar pronóstico temporal (borrado físico en cascada + tombstone)."""
+    existe = _row(db, "SELECT id, codigo, id_pt_off FROM sinb.pronostico_corto WHERE id = :id", {"id": id})
+    if not existe:
+        raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
+    _registrar_borrado(db, "pronostico_corto", existe, id_usuario)
+    db.execute(text("DELETE FROM sinb.pronostico_corto WHERE id = :id"), {"id": id})
     db.commit()
 
 
 # ============================================================================
 # ASIGNACIÓN DE OBSERVADORES A PRONÓSTICOS
 # ============================================================================
+
+def _norm_tipo_pronostico(tipo: str | None) -> str | None:
+    """Normalizar 'estacional'/'temporal' (contrato API) a 'largo'/'corto' (interno de tablas)."""
+    return {"estacional": "largo", "temporal": "corto"}.get(tipo, tipo)
+
 
 def asignar_observadores_a_pronostico(db: Session, id_pronostico: UUID, tipo_pronostico: str,
                                        id_observadores: list[int], confianza: str | None = None,
@@ -841,8 +1593,14 @@ def asignar_observadores_a_pronostico(db: Session, id_pronostico: UUID, tipo_pro
     Asignar 1..N observadores a un pronóstico (recolector → observadores del mismo municipio).
     Valida que todos los observadores sean del mismo municipio.
     """
+    tipo_pronostico = _norm_tipo_pronostico(tipo_pronostico)
     if not id_observadores:
         raise HTTPException(status_code=400, detail="Debe especificar al menos un observador")
+
+    # El pronóstico destino debe existir; si no, el INSERT choca con la FK (500)
+    tabla_pron = "sinb.pronostico_largo" if tipo_pronostico == "largo" else "sinb.pronostico_corto"
+    if not _row(db, f"SELECT 1 FROM {tabla_pron} WHERE id = :id", {"id": id_pronostico}):
+        raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
     
     # Validar que todos los observadores existen y son del mismo municipio
     observadores = _rows(db, """
@@ -866,19 +1624,32 @@ def asignar_observadores_a_pronostico(db: Session, id_pronostico: UUID, tipo_pro
             raise HTTPException(status_code=400, detail=f"El usuario {obs['nombre']} no tiene rol de observador")
     
     # Insertar asignaciones
+    # El pronóstico largo NO guarda confianza por observador (la confianza vive en los
+    # escenarios); la tabla de corto plazo sí la mantiene.
     asignaciones = []
-    tabla = "sinb.pronostico_observador" if tipo_pronostico == "estacional" else "sinb.pronostico_temporal_observador"
-    columna = "id_pronostico_estacional" if tipo_pronostico == "estacional" else "id_pronostico_temporal"
-    
+    es_largo = tipo_pronostico == "largo"
+    tabla = "sinb.pronostico_largo_observador" if es_largo else "sinb.pronostico_corto_observador"
+    columna = "id_pronostico_largo" if es_largo else "id_pronostico_corto"
+
     for id_obs in id_observadores:
-        result = _row(db, f"""
-            INSERT INTO {tabla}
-            ({columna}, id_usuario, confianza)
-            VALUES (:id_pronostico, :id_usuario, :confianza)
-            ON CONFLICT ({columna}, id_usuario)
-            DO UPDATE SET confianza = :confianza, fecha_asignacion = now()
-            RETURNING *
-        """, {"id_pronostico": id_pronostico, "id_usuario": id_obs, "confianza": confianza})
+        if es_largo:
+            result = _row(db, f"""
+                INSERT INTO {tabla}
+                ({columna}, id_usuario)
+                VALUES (:id_pronostico, :id_usuario)
+                ON CONFLICT ({columna}, id_usuario)
+                DO UPDATE SET fecha_asignacion = now()
+                RETURNING *, NULL::text AS confianza
+            """, {"id_pronostico": id_pronostico, "id_usuario": id_obs})
+        else:
+            result = _row(db, f"""
+                INSERT INTO {tabla}
+                ({columna}, id_usuario, confianza)
+                VALUES (:id_pronostico, :id_usuario, :confianza)
+                ON CONFLICT ({columna}, id_usuario)
+                DO UPDATE SET confianza = :confianza, fecha_asignacion = now()
+                RETURNING *
+            """, {"id_pronostico": id_pronostico, "id_usuario": id_obs, "confianza": confianza})
         asignaciones.append(result)
     
     db.commit()
@@ -887,15 +1658,20 @@ def asignar_observadores_a_pronostico(db: Session, id_pronostico: UUID, tipo_pro
 
 def remover_observador_de_pronostico(db: Session, id_pronostico: UUID, tipo_pronostico: str,
                                       id_usuario: int):
-    """Remover asignación de observador de un pronóstico."""
-    tabla = "sinb.pronostico_observador" if tipo_pronostico == "estacional" else "sinb.pronostico_temporal_observador"
-    columna = "id_pronostico_estacional" if tipo_pronostico == "estacional" else "id_pronostico_temporal"
-    
+    """Remover asignación de observador de un pronóstico (idempotente si no estaba asignado)."""
+    tipo_pronostico = _norm_tipo_pronostico(tipo_pronostico)
+    es_largo = tipo_pronostico == "largo"
+    tabla = "sinb.pronostico_largo_observador" if es_largo else "sinb.pronostico_corto_observador"
+    columna = "id_pronostico_largo" if es_largo else "id_pronostico_corto"
+    tabla_pron = "sinb.pronostico_largo" if es_largo else "sinb.pronostico_corto"
+
+    if not _row(db, f"SELECT 1 FROM {tabla_pron} WHERE id = :id", {"id": id_pronostico}):
+        raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
+
     _execute(db, f"""
         DELETE FROM {tabla}
         WHERE {columna} = :id_pronostico AND id_usuario = :id_usuario
     """, {"id_pronostico": id_pronostico, "id_usuario": id_usuario})
-    db.commit()
 
 
 # ============================================================================
@@ -905,50 +1681,53 @@ def remover_observador_de_pronostico(db: Session, id_pronostico: UUID, tipo_pron
 def calcular_verificacion_automatica(db: Session, id_pronostico: UUID | None = None,
                                       tipo: str = "todos"):
     """
-    Calcular automáticamente verificación de pronósticos vencidos.
+    Calcular automáticamente verificación de pronósticos vencidos con NDVI + digital.
     
     Reglas automáticas:
-    1. Pronóstico vencido (fecha_fin < NOW()) → marca como PENDIENTE_VERIFICACION
-    2. Si hay observación en ventana temporal → EN_VERIFICACION
-    3. Si coincide evento → COINCIDE
-    4. Si no hay datos → SIN_DATOS
+    1. Pronóstico vencido (periodo_fin < NOW()) → verificar
+    2. Usar datos digitales (precipitación, temperatura) para el periodo
+    3. Usar NDVI para estado de vegetación
+    4. Si no hay datos → NO_VERIFICABLE
+    5. Si hay datos y coinciden → COINCIDE, si no → NO_COINCIDE
     
     Retorna lista de verificaciones calculadas.
     """
+    tipo = _norm_tipo_pronostico(tipo)
     resultados = []
     
     # Pronósticos estacionales vencidos
-    if tipo in ["estacional", "todos"]:
-        vencidos_est = _rows(db, """
-            SELECT pe.id, pe.fecha_fin, pe.id_campo_pronostico
-            FROM sinb.pronostico_estacional pe
-            WHERE pe.fecha_fin < CURRENT_DATE
+    if tipo in ["largo", "todos"]:
+        vencidos_largo = _rows(db, """
+            SELECT pe.id, pe.periodo_inicio, pe.periodo_fin, pe.id_municipio
+            FROM sinb.pronostico_largo pe
+            WHERE pe.periodo_fin < CURRENT_DATE
             AND pe.estado = 'EMITIDO'
             AND NOT EXISTS (
                 SELECT 1 FROM sinb.verificacion_pronostico vp
-                WHERE vp.id_pronostico_estacional = pe.id
+                WHERE vp.id_pronostico_largo = pe.id
             )
         """, {})
         
-        for pe in vencidos_est:
-            resultado = _verificar_pronostico_individual(db, pe["id"], "estacional")
+        for pe in vencidos_largo:
+            resultado = _verificar_pronostico_individual(db, pe["id"], "largo")
             resultados.append(resultado)
     
     # Pronósticos temporales vencidos
-    if tipo in ["temporal", "todos"]:
-        vencidos_temp = _rows(db, """
-            SELECT pt.id, pt.fecha_fin, pt.id_campo_pronostico
-            FROM sinb.pronostico_temporal pt
-            WHERE pt.fecha_fin < CURRENT_DATE
+    if tipo in ["corto", "todos"]:
+        vencidos_corto = _rows(db, """
+            SELECT pt.id, pt.fecha_emision, pt.periodo_inicio, pt.periodo_fin, 
+                   pt.id_categoria, pt.id_municipio
+            FROM sinb.pronostico_corto pt
+            WHERE pt.periodo_fin < CURRENT_DATE
             AND pt.estado = 'EMITIDO'
             AND NOT EXISTS (
                 SELECT 1 FROM sinb.verificacion_pronostico vp
-                WHERE vp.id_pronostico_temporal = pt.id
+                WHERE vp.id_pronostico_corto = pt.id
             )
         """, {})
         
-        for pt in vencidos_temp:
-            resultado = _verificar_pronostico_individual(db, pt["id"], "temporal")
+        for pt in vencidos_corto:
+            resultado = _verificar_pronostico_individual(db, pt["id"], "corto")
             resultados.append(resultado)
     
     return resultados
@@ -956,540 +1735,214 @@ def calcular_verificacion_automatica(db: Session, id_pronostico: UUID | None = N
 
 def _verificar_pronostico_individual(db: Session, id_pronostico: UUID, tipo: str):
     """
-    Verificar un pronóstico individualmente.
+    Verificar un pronóstico individual usando datos digitales (Open-Meteo) y NDVI.
     
-    Retorna dict con:
-    - estado_calculo: COINCIDE, NO_COINCIDE, SIN_DATOS, EN_VERIFICACION
-    - calificacion: 0-100 score
-    - es_automatico: True
-    - mensaje: descripción del cálculo
+    Para corto plazo: compara categoría predicha vs datos digitales en la ventana
+    Para largo plazo: verifica si el campo ocurrió (ej. lluvia) usando datos digitales
+    
+    Retorna dict con estado de verificación.
     """
-    # Obtener pronóstico con datos
-    if tipo == "estacional":
+    from datetime import timedelta
+    
+    if tipo == "largo":
         pron = _row(db, """
-            SELECT pe.*, cp.nombre as campo_nombre
-            FROM sinb.pronostico_estacional pe
-            JOIN sinb.campo_pronostico cp ON cp.id = pe.id_campo_pronostico
+            SELECT pe.*, pe.latitud, pe.longitud,
+                   (SELECT cp.nombre FROM sinb.pronostico_largo_item it
+                    JOIN sinb.categoria_pronostico cp ON cp.id = it.id_categoria
+                    WHERE it.id_pronostico_largo = pe.id
+                    ORDER BY it.orden, it.creado_en LIMIT 1) as categoria_nombre
+            FROM sinb.pronostico_largo pe
             WHERE pe.id = :id
         """, {"id": id_pronostico})
     else:
         pron = _row(db, """
-            SELECT pt.*, cp.nombre as campo_nombre
-            FROM sinb.pronostico_temporal pt
-            JOIN sinb.campo_pronostico cp ON cp.id = pe.id_campo_pronostico
+            SELECT pt.*, cp.nombre as categoria_nombre, 
+                   COALESCE(m.latitud, 0) as latitud, COALESCE(m.longitud, 0) as longitud
+            FROM sinb.pronostico_corto pt
+            JOIN sinb.categoria_pronostico cp ON cp.id = pt.id_categoria
+            LEFT JOIN shared.municipio m ON m.id = pt.id_municipio
             WHERE pt.id = :id
         """, {"id": id_pronostico})
     
     if not pron:
         return {"error": "Pronóstico no encontrado"}
     
-    # Buscar observaciones en ventana temporal
-    observaciones = _rows(db, """
-        SELECT o.*, orr.*
-        FROM sinb.observacion o
-        LEFT JOIN sinb.observacion_registro orr ON orr.id_observacion = o.id
-        WHERE o.fecha_inicio BETWEEN :fecha_inicio AND :fecha_fin
-        AND o.es_validada = true
-    """, {"fecha_inicio": pron["periodo_inicio"], "fecha_fin": pron["fecha_fin"]})
+    id_largo = id_pronostico if tipo == "largo" else None
+    id_corto = id_pronostico if tipo == "corto" else None
+    id_municipio = pron.get("id_municipio")
     
-    if not observaciones:
-        # No hay datos → SIN_DATOS
+    # Intentar obtener datos digitales para el periodo
+    datos_digital = _row(db, """
+        SELECT 
+            AVG(precipitacion_suma) as precip_promedio,
+            SUM(precipitacion_suma) as precip_total,
+            AVG(temp_max) as temp_max_prom,
+            AVG(temp_min) as temp_min_prom,
+            COUNT(*) as dias_con_datos
+        FROM sinb.pronostico_diario_municipal
+        WHERE id_municipio = :id_municipio
+        AND fecha BETWEEN :fecha_inicio AND :fecha_fin
+    """, {
+        "id_municipio": id_municipio,
+        "fecha_inicio": pron["periodo_inicio"],
+        "fecha_fin": pron["periodo_fin"]
+    })
+    
+    # Verificar si hay datos suficientes
+    if not datos_digital or datos_digital.get("dias_con_datos", 0) == 0:
+        # No hay datos digitales → NO_VERIFICABLE
         verif = _row(db, """
             INSERT INTO sinb.verificacion_pronostico
-            (id_pronostico_estacional, id_pronostico_temporal, estado, es_automatico,
-             fecha_verificacion, observacion)
-            VALUES (:id_estacional, :id_temporal, 'SIN_DATOS', true, now(),
-                    'No hay observaciones en la ventana temporal')
+            (id_pronostico_largo, id_pronostico_corto, estado, es_autoevaluada,
+             fecha_verificacion, notas)
+            VALUES (:id_largo, :id_corto, 'NO_VERIFICABLE', true, now(),
+                    'Sin datos digitales en el periodo de verificación')
             RETURNING *
         """, {
-            "id_estacional": id_pronostico if tipo == "estacional" else None,
-            "id_temporal": id_pronostico if tipo == "temporal" else None
+            "id_largo": id_largo,
+            "id_corto": id_corto
         })
         db.commit()
         
         return {
             "id_pronostico": id_pronostico,
             "tipo": tipo,
-            "estado_calculo": "SIN_DATOS",
-            "calificacion": None,
-            "es_automatico": True,
-            "mensaje": "No hay observaciones en la ventana temporal"
+            "estado_calculo": "NO_VERIFICABLE",
+            "mensaje": "Sin datos digitales en el periodo"
         }
     
-    # Hay observaciones → EN_VERIFICACION (requiere validación manual)
+    # Determinar si coincidió según el campo
+    # Simplificado: lluvia = precip_total > 0, helada = temp_min < 0
+    campo = (pron.get("categoria_nombre") or pron.get("campo_nombre") or "").lower()
+    acierto = False
+    notas = ""
+    
+    if "lluvia" in campo:
+        acierto = datos_digital.get("precip_total", 0) > 0
+        notas = f"Precipitación total: {datos_digital.get('precip_total', 0):.1f}mm"
+    elif "helada" in campo or "frost" in campo:
+        temp_min = datos_digital.get("temp_min_prom", 10)
+        acierto = temp_min < 0
+        notas = f"Temp mínima promedio: {temp_min:.1f}°C"
+    elif "sequía" in campo or "calor" in campo:
+        temp_max = datos_digital.get("temp_max_prom", 20)
+        acierto = temp_max > 30
+        notas = f"Temp máxima promedio: {temp_max:.1f}°C"
+    else:
+        notas = f"Campo '{campo}' sin regla de verificación automática"
+    
+    estado = "COINCIDE" if acierto else "NO_COINCIDE"
+    
+    # Insertar/actualizar verificación
+    verif = _row(db, """
+        INSERT INTO sinb.verificacion_pronostico
+        (id_pronostico_largo, id_pronostico_corto, estado, es_autoevaluada,
+         fecha_verificacion, notas, acierto_categoria)
+        VALUES (:id_largo, :id_corto, :estado, true, now(), :notas, :acierto)
+        ON CONFLICT DO NOTHING
+        RETURNING *
+    """, {
+        "id_largo": id_largo,
+        "id_corto": id_corto,
+        "estado": estado,
+        "notas": notas,
+        "acierto": acierto
+    })
+    db.commit()
+    
     return {
         "id_pronostico": id_pronostico,
         "tipo": tipo,
-        "estado_calculo": "EN_VERIFICACION",
-        "calificacion": None,
-        "es_automatico": True,
-        "mensaje": f"Se encontraron {len(observaciones)} observaciones en la ventana. Requiere validación manual."
+        "estado_calculo": estado,
+        "acierto": acierto,
+        "mensaje": notas
     }
 
 
-def get_verificaciones_pendientes(db: Session):
-    """Obtener lista de pronósticos pendientes de verificación."""
-    return _rows(db, """
+def get_verificaciones_pendientes(db: Session, limit: int | None = None,
+                                  skip: int = 0, todos: bool = False):
+    """Obtener lista de pronósticos pendientes de verificación.
+
+    Por defecto sin paginar; `limit`/`skip` sólo si se piden, `todos=true` fuerza el completo.
+    """
+    page, page_params = pagina_limit_offset(limit, skip, todos)
+    return _rows(db, f"""
         SELECT 
-            pe.id as id_pronostico_estacional,
-            pt.id as id_pronostico_temporal,
-            COALESCE(cp_est.nombre, cp_temp.nombre) as campo_nombre,
-            pe.fecha_fin as fecha_fin_estacional,
-            pt.fecha_fin as fecha_fin_temporal,
-            dias_vencido
+            pe.id as id_pronostico_largo,
+            pt.id as id_pronostico_corto,
+            COALESCE(cp_largo.nombre, cp_corto.nombre) as categoria_nombre,
+            pe.periodo_fin as periodo_fin_estacional,
+            pt.fecha_fin as periodo_fin_temporal,
+            CURRENT_DATE - COALESCE(pe.periodo_fin, pt.fecha_fin) as dias_vencido
         FROM (
-            SELECT id, fecha_fin, id_campo_pronostico,
-                   CURRENT_DATE - fecha_fin as dias_vencido
-            FROM sinb.pronostico_estacional
-            WHERE fecha_fin < CURRENT_DATE
-            AND estado IN ('EMITIDO', 'ACEPTADO')
+            SELECT pl.id, pl.periodo_fin, 'LARGO'::text as tipo,
+                   (SELECT it.id_categoria FROM sinb.pronostico_largo_item it
+                    WHERE it.id_pronostico_largo = pl.id
+                    ORDER BY it.orden, it.creado_en LIMIT 1) as id_categoria
+            FROM sinb.pronostico_largo pl
+            WHERE pl.periodo_fin < CURRENT_DATE
+            AND pl.estado IN ('EMITIDO', 'ACEPTADO')
             UNION ALL
-            SELECT id, fecha_fin, id_campo_pronostico,
-                   CURRENT_DATE - fecha_fin as dias_vencido
-            FROM sinb.pronostico_temporal
-            WHERE fecha_fin < CURRENT_DATE
-            AND estado IN ('EMITIDO', 'ACEPTADO')
+            SELECT pc.id, pc.fecha_fin, 'CORTO'::text as tipo, pc.id_categoria
+            FROM sinb.pronostico_corto pc
+            WHERE pc.fecha_fin < CURRENT_DATE
+            AND pc.estado IN ('EMITIDO', 'ACEPTADO')
         ) p
         LEFT JOIN sinb.verificacion_pronostico vp 
-            ON vp.id_pronostico_estacional = p.id 
-            OR vp.id_pronostico_temporal = p.id
-        LEFT JOIN sinb.campo_pronostico cp_est ON cp_est.id = p.id_campo_pronostico
-        LEFT JOIN sinb.campo_pronostico cp_temp ON cp_temp.id = p.id_campo_pronostico
+            ON (p.tipo = 'LARGO' AND vp.id_pronostico_largo = p.id)
+            OR (p.tipo = 'CORTO' AND vp.id_pronostico_corto = p.id)
+        LEFT JOIN sinb.categoria_pronostico cp_largo ON p.tipo = 'LARGO' AND cp_largo.id = p.id_categoria
+        LEFT JOIN sinb.categoria_pronostico cp_corto ON p.tipo = 'CORTO' AND cp_corto.id = p.id_categoria
+        LEFT JOIN sinb.pronostico_largo pe ON p.tipo = 'LARGO' AND pe.id = p.id
+        LEFT JOIN sinb.pronostico_corto pt ON p.tipo = 'CORTO' AND pt.id = p.id
         WHERE vp.id IS NULL
         ORDER BY dias_vencido DESC
-    """, {})
+        {page}
+    """, page_params)
 
 
 def validar_pronostico_manual(db: Session, id_pronostico: UUID, tipo: str,
-                               estado: str, observacion: str,
-                               calificacion: float | None = None,
+                               estado: str, notas: str | None = None,
+                               acierto_categoria: bool | None = None,
                                id_usuario_verifica: int | None = None):
     """
     Validación MANUAL de pronóstico por usuario autorizado.
     Sobrescribe validación automática si existe.
     """
-    if estado not in ["COINCIDE", "NO_COINCIDE"]:
-        raise HTTPException(status_code=400, detail="Estado debe ser COINCIDE o NO_COINCIDE")
+    tipo = _norm_tipo_pronostico(tipo)
+    if estado not in ["COINCIDE", "NO_COINCIDE", "PENDIENTE", "EN_VERIFICACION", "NO_VERIFICABLE"]:
+        raise HTTPException(status_code=400, detail="Estado no válido")
     
-    id_est = id_pronostico if tipo == "estacional" else None
-    id_temp = id_pronostico if tipo == "temporal" else None
+    id_largo = id_pronostico if tipo == "largo" else None
+    id_corto = id_pronostico if tipo == "corto" else None
     
     result = _row(db, """
         INSERT INTO sinb.verificacion_pronostico
-        (id_pronostico_estacional, id_pronostico_temporal, estado, calificacion,
-         observacion, es_automatico, id_usuario_verifica, fecha_verificacion)
-        VALUES (:id_est, :id_temp, :estado, :calificacion, :observacion,
+        (id_pronostico_largo, id_pronostico_corto, estado, notas,
+         acierto_categoria, es_autoevaluada, verificado_por, fecha_verificacion)
+        VALUES (:id_largo, :id_corto, :estado, :notas, :acierto,
                 false, :id_usuario, now())
-        ON CONFLICT (id_pronostico_estacional, id_pronostico_temporal)
-        DO UPDATE SET
+        ON CONFLICT (id) DO UPDATE SET
             estado = :estado,
-            calificacion = :calificacion,
-            observacion = :observacion,
-            es_automatico = false,
-            id_usuario_verifica = :id_usuario,
+            notas = :notas,
+            acierto_categoria = :acierto,
+            es_autoevaluada = false,
+            verificado_por = :id_usuario,
             fecha_verificacion = now()
         RETURNING *
     """, {
-        "id_est": id_est,
-        "id_temp": id_temp,
+        "id_largo": id_largo,
+        "id_corto": id_corto,
         "estado": estado,
-        "calificacion": calificacion,
-        "observacion": observacion,
+        "notas": notas,
+        "acierto": acierto_categoria,
         "id_usuario": id_usuario_verifica
     })
     
     db.commit()
     return result
-
-
-# ============================================================================
 # CALENDARIO DE SIEMBRA Y RECOMENDACIONES
 # ============================================================================
-
-def get_calendario_siembra(db: Session, id_municipio: int | None = None,
-                            fecha_desde: date | None = None,
-                            fecha_hasta: date | None = None):
-    """
-    Obtener calendario de siembra consolidado por municipio.
-    Muestra épocas de siembra recomendadas por cultivo.
-    """
-    params = {}
-    where = ["rl.estado = 'ACTIVO'"]
-    
-    if id_municipio:
-        where.append("rl.id_municipio = :id_municipio")
-        params["id_municipio"] = id_municipio
-    
-    where_clause = " AND ".join(where)
-    
-    return _rows(db, f"""
-        SELECT 
-            rl.id,
-            rl.texto as recomendacion,
-            d.nombre as dimension,
-            c.nombre as categoria,
-            m.nombre as municipio,
-            p.nombre as provincia,
-            dep.nombre as departamento,
-            rl.creado_en
-        FROM sinb.recomendacion_local rl
-        JOIN sinb.dimension_recomendacion d ON d.id = rl.id_dimension
-        JOIN sinb.categoria_comportamiento c ON c.id = rl.id_categoria
-        LEFT JOIN shared.municipio m ON m.id = rl.id_municipio
-        LEFT JOIN shared.provincia p ON p.id = m.id_provincia
-        LEFT JOIN shared.departamento dep ON dep.id = m.id_departamento
-        WHERE {where_clause}
-        ORDER BY rl.creado_en DESC
-    """, params)
-
-
-# ============================================================================
-# REPORTES ENRIQUECIDOS
-# ============================================================================
-
-def get_reporte_observaciones_resumen(db: Session, filters: dict | None = None):
-    """
-    Reporte enriquecido de observaciones: totales, por comunidad, por indicador.
-    """
-    if filters is None:
-        filters = {}
-    
-    # Totales
-    totales = _row(db, """
-        SELECT 
-            COUNT(DISTINCT o.id) as total_observaciones,
-            COUNT(DISTINCT orr.id) as total_registros
-        FROM sinb.observacion o
-        LEFT JOIN sinb.observacion_registro orr ON orr.id_observacion = o.id
-        WHERE o.estado = 'ACTIVO'
-    """, {})
-    
-    # Por comunidad
-    por_comunidad = _rows(db, """
-        SELECT 
-            o.codigo_comunidad,
-            c.nombre as comunidad_nombre,
-            COUNT(*) as cantidad
-        FROM sinb.observacion o
-        LEFT JOIN shared.comunidades c ON c.codigo_ine = o.codigo_comunidad
-        WHERE o.estado = 'ACTIVO'
-        GROUP BY o.codigo_comunidad, c.nombre
-        ORDER BY cantidad DESC
-        LIMIT 20
-    """, {})
-    
-    # Por indicador
-    por_indicador = _rows(db, """
-        SELECT 
-            inat.id,
-            inat.nombre_cientifico,
-            COUNT(*) as cantidad
-        FROM sinb.observacion_registro orr
-        JOIN sinb.indicador_natural inat ON inat.id = orr.id_indicador_natural
-        JOIN sinb.observacion o ON o.id = orr.id_observacion
-        WHERE o.estado = 'ACTIVO' AND orr.id_indicador_natural IS NOT NULL
-        GROUP BY inat.id, inat.nombre_cientifico
-        ORDER BY cantidad DESC
-        LIMIT 20
-    """, {})
-    
-    # Por estado de validación
-    por_estado = _rows(db, """
-        SELECT 
-            es_validada,
-            COUNT(*) as cantidad
-        FROM sinb.observacion
-        WHERE estado = 'ACTIVO'
-        GROUP BY es_validada
-    """, {})
-    
-    return {
-        "totales": totales,
-        "por_comunidad": por_comunidad,
-        "por_indicador": por_indicador,
-        "por_estado_validacion": por_estado
-    }
-
-
-def get_reporte_pronosticos_resumen(db: Session):
-    """
-    Reporte de pronósticos con estado de verificación.
-    """
-    totales = _row(db, """
-        SELECT 
-            (SELECT COUNT(*) FROM sinb.pronostico_estacional WHERE estado != 'ELIMINADO') as total_estacional,
-            (SELECT COUNT(*) FROM sinb.pronostico_temporal WHERE estado != 'ELIMINADO') as total_temporal
-    """, {})
-    
-    por_estado = _rows(db, """
-        SELECT estado, COUNT(*) as cantidad
-        FROM sinb.pronostico_estacional
-        WHERE estado != 'ELIMINADO'
-        GROUP BY estado
-        UNION ALL
-        SELECT estado, COUNT(*) as cantidad
-        FROM sinb.pronostico_temporal
-        WHERE estado != 'ELIMINADO'
-        GROUP BY estado
-    """, {})
-    
-    verificaciones = _row(db, """
-        SELECT 
-            COUNT(*) FILTER (WHERE estado = 'COINCIDE') as coinciden,
-            COUNT(*) FILTER (WHERE estado = 'NO_COINCIDE') as no_coinciden,
-            COUNT(*) FILTER (WHERE estado IN ('PENDIENTE', 'EN_VERIFICACION', 'SIN_DATOS')) as pendientes
-        FROM sinb.verificacion_pronostico
-    """, {})
-    
-    return {
-        "total_pronosticos": totales["total_estacional"] + totales["total_temporal"],
-        "por_estado": por_estado,
-        "verificaciones_pendientes": verificaciones["pendientes"],
-        "verificaciones_coinciden": verificaciones["coinciden"],
-        "verificaciones_no_coinciden": verificaciones["no_coinciden"]
-    }
-
-
-# ============================================================================
-# FUNCIONES HELPER
-# ============================================================================
-
-def _rows(db: Session, query: str, params: dict = None):
-    """Ejecutar query y retornar múltiples filas."""
-    params = params or {}
-    return db.execute(text(query), params).mappings().all()
-
-
-def _row(db: Session, query: str, params: dict = None):
-    """Ejecutar query y retornar una fila."""
-    params = params or {}
-    return db.execute(text(query), params).mappings().first()
-
-
-def _execute(db: Session, query: str, params: dict = None):
-    """Ejecutar query sin retorno."""
-    params = params or {}
-    return db.execute(text(query), params)
-
-
-def _serialize(obj):
-    """Serializar tipos especiales (UUID, datetime, date) a JSON-compatible."""
-    if obj is None:
-        return None
-    if isinstance(obj, UUID):
-        return str(obj)
-    if isinstance(obj, (datetime, date)):
-        return obj.isoformat()
-    if isinstance(obj, dict):
-        return {k: _serialize(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_serialize(item) for item in obj]
-    return obj
-
-
-# ============================================================================
-# OBSERVACIONES
-# ============================================================================
-
-def get_observaciones(db: Session, skip: int = 0, limit: int = 15, filters: dict = None):
-    """Obtener observaciones con paginación y filtros."""
-    filters = filters or {}
-    where = ["o.estado IN ('ACTIVO', 'INACTIVO')"]
-    params = {"limit": limit, "skip": skip}
-    
-    if filters.get("id_municipio"):
-        where.append("o.id_municipio = :id_municipio")
-        params["id_municipio"] = filters["id_municipio"]
-    if filters.get("id_departamento"):
-        where.append("m.id_departamento = :id_departamento")
-        params["id_departamento"] = filters["id_departamento"]
-    if filters.get("codigo_comunidad"):
-        where.append("o.codigo_comunidad = :codigo_comunidad")
-        params["codigo_comunidad"] = filters["codigo_comunidad"]
-    if filters.get("id_usuario_responsable"):
-        where.append("o.id_usuario_responsable = :id_usuario_responsable")
-        params["id_usuario_responsable"] = filters["id_usuario_responsable"]
-    if filters.get("fecha_inicio_desde"):
-        where.append("o.fecha_inicio >= :fecha_inicio_desde")
-        params["fecha_inicio_desde"] = filters["fecha_inicio_desde"]
-    if filters.get("fecha_inicio_hasta"):
-        where.append("o.fecha_inicio <= :fecha_inicio_hasta")
-        params["fecha_inicio_hasta"] = filters["fecha_inicio_hasta"]
-    if filters.get("es_validada") is not None:
-        where.append("o.es_validada = :es_validada")
-        params["es_validada"] = filters["es_validada"]
-    
-    where_clause = " AND ".join(where)
-    
-    rows = _rows(db, f"""
-        SELECT o.*, u.usuario as responsable_nombre,
-               m.nombre as municipio_nombre,
-               c.nombre as comunidad_nombre
-        FROM sinb.observacion o
-        LEFT JOIN usuarios.usuario u ON u.id_usuario = o.id_usuario_responsable
-        LEFT JOIN shared.municipio m ON m.id = o.id_municipio
-        LEFT JOIN shared.comunidades c ON c.codigo_ine = o.codigo_comunidad
-        WHERE {where_clause}
-        ORDER BY o.fecha_inicio DESC, o.creado_en DESC
-        LIMIT :limit OFFSET :skip
-    """, params)
-    
-    total = _row(db, f"""
-        SELECT COUNT(DISTINCT o.id) as total
-        FROM sinb.observacion o
-        LEFT JOIN shared.municipio m ON m.id = o.id_municipio
-        WHERE {where_clause}
-    """, {k: v for k, v in params.items() if k not in ['limit', 'skip']})['total']
-    
-    return _serialize(rows), total
-
-
-def get_observacion(db: Session, id: UUID):
-    """Obtener observación completa con registros y anidados JSON."""
-    obs = _row(db, """
-        SELECT o.*, 
-               jsonb_build_object(
-                   'id_usuario', u.id_usuario,
-                   'usuario', u.usuario,
-                   'nombre', u.nombre,
-                   'id_rol', u.id_rol
-               ) as usuario_responsable,
-               jsonb_build_object(
-                   'id', m.id,
-                   'nombre', m.nombre,
-                   'codigo_ine', m.codigo_ine
-               ) as municipio,
-               jsonb_build_object(
-                   'codigo_ine', c.codigo_ine,
-                   'nombre', c.nombre,
-                   'geom', ST_AsGeoJSON(c.geom)::jsonb
-               ) as comunidad
-        FROM sinb.observacion o
-        LEFT JOIN usuarios.usuario u ON u.id_usuario = o.id_usuario_responsable
-        LEFT JOIN shared.municipio m ON m.id = o.id_municipio
-        LEFT JOIN shared.comunidades c ON c.codigo_ine = o.codigo_comunidad
-        WHERE o.id = :id
-    """, {"id": id})
-    
-    if obs:
-        # Registros con anidados completos
-        obs["observacion_registro"] = _rows(db, """
-            SELECT orr.*,
-                   jsonb_build_object(
-                       'id', car.id,
-                       'caracteristica', car.caracteristica,
-                       'id_indicador_natural', car.id_indicador_natural
-                   ) as caracteristica,
-                   jsonb_build_object(
-                       'id', com.id,
-                       'comportamiento', com.comportamiento,
-                       'id_caracteristica', com.id_caracteristica
-                   ) as comportamiento,
-                   jsonb_build_object(
-                       'id', s.id,
-                       'significado', s.significado,
-                       'categoria', s.categoria,
-                       'id_comportamiento', s.id_comportamiento
-                   ) as significado,
-                   jsonb_build_object(
-                       'id', i.id,
-                       'nombre_cientifico', i.nombre_cientifico,
-                       'nombre_comun', i.nombre_comun,
-                       'codigo', i.codigo
-                   ) as indicador_natural
-            FROM sinb.observacion_registro orr
-            LEFT JOIN sinb.caracteristica car ON car.id = orr.id_caracteristica
-            LEFT JOIN sinb.comportamiento com ON com.id = orr.id_comportamiento
-            LEFT JOIN sinb.significado s ON s.id = orr.id_significado
-            LEFT JOIN sinb.indicador_natural i ON i.id = orr.id_indicador_natural
-            WHERE orr.id_observacion = :id
-            ORDER BY orr.creado_en
-        """, {"id": id})
-    
-    return _serialize(obs)
-
-
-def create_observacion(db: Session, data: dict, id_usuario: int):
-    """Crear observación con registros opcionales."""
-    import uuid
-    
-    # Si no viene id_off, generar uno nuevo
-    if not data.get("id_obs_off"):
-        data["id_obs_off"] = str(uuid.uuid4())[:32]
-    
-    # Si no viene responsable, usar el usuario actual
-    if not data.get("id_usuario_responsable"):
-        data["id_usuario_responsable"] = id_usuario
-    
-    # Generar codigo_corto
-    data["codigo_corto"] = f"OBS-{uuid.uuid4().hex[:8].upper()}"
-    
-    # Extraer registros si existen
-    registros = data.pop("observacion_registro", [])
-    
-    # Insertar observación
-    result = _row(db, """
-        INSERT INTO sinb.observacion 
-        (id_off, codigo_corto, codigo_comunidad, id_municipio, 
-         id_usuario_responsable, fecha_inicio, fecha_fin, 
-         hora_inicio, hora_fin, fecha_registro, clima_observado, estado)
-        VALUES (:id_off, :codigo_corto, :codigo_comunidad, :id_municipio,
-                :id_usuario_responsable, :fecha_inicio, :fecha_fin,
-                :hora_inicio, :hora_fin, :fecha_registro, :clima_observado, 'ACTIVO')
-        RETURNING *
-    """, data)
-    db.commit()
-    
-    if not result:
-        raise HTTPException(status_code=500, detail="Error al crear observación")
-    
-    obs_id = result["id"]
-    
-    # Insertar registros si existen
-    for reg in registros:
-        if not reg.get("id_reg_off"):
-            reg["id_reg_off"] = str(uuid.uuid4())[:32]
-        reg["id_observacion"] = obs_id
-        _row(db, """
-            INSERT INTO sinb.observacion_registro
-            (id_off, id_observacion, id_caracteristica, id_comportamiento,
-             id_significado, id_indicador_natural, valor_observado, unidad)
-            VALUES (:id_off, :id_observacion, :id_caracteristica, :id_comportamiento,
-                    :id_significado, :id_indicador_natural, :valor_observado, :unidad)
-            RETURNING *
-        """, reg)
-    
-    db.commit()
-    return _serialize(get_observacion(db, obs_id))
-
-
-def update_observacion(db: Session, id: UUID, data: dict):
-    """Actualizar observación."""
-    data["id"] = id
-    result = _row(db, """
-        UPDATE sinb.observacion SET
-            codigo_comunidad = COALESCE(:codigo_comunidad, codigo_comunidad),
-            id_municipio = COALESCE(:id_municipio, id_municipio),
-            fecha_inicio = COALESCE(:fecha_inicio, fecha_inicio),
-            fecha_fin = COALESCE(:fecha_fin, fecha_fin),
-            hora_inicio = COALESCE(:hora_inicio, hora_inicio),
-            hora_fin = COALESCE(:hora_fin, hora_fin),
-            fecha_registro = COALESCE(:fecha_registro, fecha_registro),
-            clima_observado = COALESCE(:clima_observado, clima_observado),
-            es_validada = COALESCE(:es_validada, es_validada),
-            observacion_rechazada_motivo = COALESCE(:observacion_rechazada_motivo, observacion_rechazada_motivo),
-            actualizado_en = now()
-        WHERE id = :id
-        RETURNING *
-    """, data)
-    db.commit()
-    return _serialize(result)
-
-
-def delete_observacion(db: Session, id: UUID):
-    """Eliminar lógico de observación."""
-    _execute(db, "UPDATE sinb.observacion SET estado = 'ELIMINADO', actualizado_en = now() WHERE id = :id", {"id": id})
-    db.commit()
 
 
 # ============================================================================
@@ -1497,15 +1950,50 @@ def delete_observacion(db: Session, id: UUID):
 # ============================================================================
 
 import httpx
+import time
+from zoneinfo import ZoneInfo
 
 OPEN_METEO_BASE = "https://api.open-meteo.com/v1"
+ZONA_BOLIVIA = ZoneInfo("America/La_Paz")
+HORIZONTE_DIAS = 16
+
+
+def _hoy_bolivia() -> date:
+    """
+    Fecha local de Bolivia. El servidor corre en UTC: entre 00:00 y 04:00 UTC
+    (20:00-24:00 Bolivia) date.today() devolvería un día adelantado y la ventana
+    de 16 días quedaría desfasada respecto al día solar de los datos.
+    """
+    return datetime.now(ZONA_BOLIVIA).date()
+
+
+def _serie(arr: list, i: int):
+    """Valor i-ésimo de una serie de Open-Meteo, o None si la serie viene más corta que `time`."""
+    return arr[i] if i < len(arr) else None
+
+
+def _con_reintentos(fn, intentos: int = 3, base: float = 2.0):
+    """
+    Ejecutar fn reintentando ante cualquier fallo (timeout/SSL/503 de Open-Meteo)
+    con espera exponencial: 2 s, 4 s, 8 s...
+    """
+    ultima_exception = None
+    for n in range(1, intentos + 1):
+        try:
+            return fn()
+        except Exception as e:
+            ultima_exception = e
+            if n < intentos:
+                time.sleep(base ** n)
+    raise ultima_exception
+
 
 def consultar_open_meteo(
     latitud: float,
     longitud: float,
     tipo: str = "daily",
     variables: list[str] = None,
-    horizonte_dias: int = 7
+    horizonte_dias: int = 16
 ) -> dict:
     """
     Consultar API de Open-Meteo.
@@ -1513,9 +2001,9 @@ def consultar_open_meteo(
     Args:
         latitud: Latitud del punto
         longitud: Longitud del punto
-        tipo: "daily", "hourly", o "minutely_15"
+        tipo: "daily" (16 días) o "hourly" (168 horas)
         variables: Lista de variables a consultar
-        horizonte_dias: Días de horizonte (1-16)
+        horizonte_dias: Días de horizonte (default 16, max 16)
     
     Returns:
         Datos crudos de Open-Meteo
@@ -1524,27 +2012,31 @@ def consultar_open_meteo(
         "latitude": latitud,
         "longitude": longitud,
         "timezone": "America/La_Paz",
-        "forecast_days": min(horizonte_dias, 16)
+        "forecast_days": min(horizonte_dias, HORIZONTE_DIAS)
     }
     
-    # Variables por defecto según tipo
+    # Variables por defecto según tipo (agricultura-focused)
     if tipo == "daily":
         params["daily"] = ",".join(variables or [
             "temperature_2m_max", "temperature_2m_min",
-            "precipitation_sum", "precipitation_probability_max"
+            "precipitation_sum", "precipitation_probability_max",
+            "relative_humidity_2m_max", "relative_humidity_2m_min",
+            "et0_fao_evapotranspiration",
+            "wind_speed_10m_max", "wind_direction_10m_dominant",
+            "shortwave_radiation_sum", "uv_index_max",
+            "sunrise", "sunset"
         ])
     elif tipo == "hourly":
         params["hourly"] = ",".join(variables or [
-            "temperature_2m", "precipitation_probability", "relative_humidity_2m"
+            "temperature_2m", "relative_humidity_2m",
+            "precipitation", "precipitation_probability",
+            "wind_speed_10m", "wind_direction_10m",
+            "et0_fao_evapotranspiration", "weather_code"
         ])
         params["forecast_hours"] = min(horizonte_dias * 24, 168)
-    elif tipo == "minutely_15":
-        params["minutely_15"] = ",".join(variables or [
-            "precipitation", "temperature_2m"
-        ])
     
     try:
-        response = httpx.get(f"{OPEN_METEO_BASE}/forecast", params=params, timeout=10.0)
+        response = httpx.get(f"{OPEN_METEO_BASE}/forecast", params=params, timeout=30.0)
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError as e:
@@ -1559,7 +2051,8 @@ def guardar_pronostico_diario_municipal(
     id_municipio: int,
     latitud: float,
     longitud: float,
-    fecha: date = None
+    fecha: date = None,
+    reintentos: int = 3
 ) -> dict:
     """
     Guardar pronóstico diario para un municipio (uso automático cron).
@@ -1567,32 +2060,292 @@ def guardar_pronostico_diario_municipal(
     **Horario de referencia:** Los datos son del día COMPLETO en hora local
     (0:00 a 23:59 America/La_Paz, UTC-4).
     
-    - temp_max: máxima del día (ocurre típicamente entre 12:00-15:00)
-    - temp_min: mínima del día (ocurre típicamente entre 03:00-06:00)
-    - sunrise: salida del sol (inicio del día solar, ~06:00-06:30)
-    - sunset: puesta del sol (fin del día solar, ~18:00-19:00)
+    Variables guardadas:
+    - Temperatura: máx, mín
+    - Precipitación: suma, probabilidad máx
+    - Humedad relativa: máx, mín
+    - Evapotranspiración FAO ET₀
+    - Viento: velocidad máx, dirección dominante
+    - Radiación solar
+    - Índice UV máx
+    - Amanecer/atardecer
+    
+    Se escribe en UN solo upsert por municipio (ON CONFLICT uk_pronostico_diario)
+    y se comitea una vez: o quedan los 16 días o ninguno. Sólo se tocan las fechas
+    que trae Open-Meteo (hoy en adelante); los días pasados quedan como evidencia.
     
     Args:
         db: Sesión de base de datos
         id_municipio: ID del municipio
         latitud: Latitud del centroide del municipio
         longitud: Longitud del centroide del municipio
-        fecha: Fecha a consultar (hoy por defecto)
+        fecha: Fecha a consultar (hoy en hora Bolivia por defecto)
+        reintentos: Intentos sobre Open-Meteo antes de rendirse (default 3, espera 2/4/8 s)
     
     Returns:
         Datos guardados
     """
-    from datetime import date as date_type, datetime as datetime_type
-    
     if fecha is None:
-        fecha = date_type.today()
+        fecha = _hoy_bolivia()
+
+    # 3 intentos con backoff: un timeout de Open-Meteo dejaba al municipio con la
+    # cola de la corrida anterior (15 días en vez de 16).
+    datos = _con_reintentos(
+        lambda: consultar_open_meteo(latitud, longitud, "daily", horizonte_dias=HORIZONTE_DIAS),
+        intentos=reintentos
+    )
+
+    daily = datos.get("daily") or {}
+    fechas = daily.get("time") or []
+    if not fechas:
+        raise HTTPException(status_code=503, detail="Open-Meteo no devolvió datos diarios")
+
+    series = {
+        "temp_max": daily.get("temperature_2m_max", []),
+        "temp_min": daily.get("temperature_2m_min", []),
+        "precip_sum": daily.get("precipitation_sum", []),
+        "precip_prob": daily.get("precipitation_probability_max", []),
+        "humedad_max": daily.get("relative_humidity_2m_max", []),
+        "humedad_min": daily.get("relative_humidity_2m_min", []),
+        "eto": daily.get("et0_fao_evapotranspiration", []),
+        "viento_vel": daily.get("wind_speed_10m_max", []),
+        "viento_dir": daily.get("wind_direction_10m_dominant", []),
+        "radiacion": daily.get("shortwave_radiation_sum", []),
+        "uv_max": daily.get("uv_index_max", []),
+    }
+
+    # Una serie más corta que `time` ya no rompe la mitad del lote: se guarda None y avisa.
+    cortas = {k: len(v) for k, v in series.items() if 0 < len(v) != len(fechas)}
+    if cortas:
+        print(f"[advertencia] municipio {id_municipio}: series más cortas que time -> {cortas}")
+
+    filas = []
+    for i, fecha_str in enumerate(fechas):
+        fila = {"id_municipio": id_municipio, "fecha": date.fromisoformat(fecha_str)}
+        for k, v in series.items():
+            fila[k] = _serie(v, i)
+        fila["sunrise"] = _parsear_hora_local(daily.get("sunrise", []), i)
+        fila["sunset"] = _parsear_hora_local(daily.get("sunset", []), i)
+        filas.append(fila)
+
+    db.execute(text("""
+        INSERT INTO sinb.pronostico_diario_municipal
+            (id_municipio, fecha, temp_max, temp_min, precipitacion_suma,
+             precipitacion_prob_max, humedad_relativa_max, humedad_relativa_min,
+             evapotranspiracion, viento_velocidad_max, viento_direccion,
+             radiacion_solar, uv_index_max, sunrise, sunset)
+        VALUES
+            (:id_municipio, :fecha, :temp_max, :temp_min, :precip_sum,
+             :precip_prob, :humedad_max, :humedad_min,
+             :eto, :viento_vel, :viento_dir,
+             :radiacion, :uv_max, :sunrise, :sunset)
+        ON CONFLICT (id_municipio, fecha) DO UPDATE SET
+            temp_max = EXCLUDED.temp_max,
+            temp_min = EXCLUDED.temp_min,
+            precipitacion_suma = EXCLUDED.precipitacion_suma,
+            precipitacion_prob_max = EXCLUDED.precipitacion_prob_max,
+            humedad_relativa_max = EXCLUDED.humedad_relativa_max,
+            humedad_relativa_min = EXCLUDED.humedad_relativa_min,
+            evapotranspiracion = EXCLUDED.evapotranspiracion,
+            viento_velocidad_max = EXCLUDED.viento_velocidad_max,
+            viento_direccion = EXCLUDED.viento_direccion,
+            radiacion_solar = EXCLUDED.radiacion_solar,
+            uv_index_max = EXCLUDED.uv_index_max,
+            sunrise = EXCLUDED.sunrise,
+            sunset = EXCLUDED.sunset,
+            actualizado_en = now()
+    """), filas)
+    db.commit()
+
+    return {
+        "municipio_id": id_municipio,
+        "registros_guardados": len(filas),
+        "fechas": [f["fecha"].isoformat() for f in filas],
+        "nota": "16 días desde hoy (0:00-23:59 hora local America/La_Paz)"
+    }
+
+
+def _parsear_hora_local(serie: list, i: int):
+    """sunrise/sunset vienen como '2026-10-07T06:12' en hora local; la columna es timestamptz."""
+    valor = _serie(serie, i)
+    if not valor:
+        return None
+    try:
+        return datetime.fromisoformat(str(valor).replace("T", " "))
+    except ValueError:
+        return None
+
+
+def get_pronostico_diario_historico(
+    db: Session,
+    filtros: dict,
+    pagina: int = 1,
+    por_pagina: int = 50
+) -> tuple[list, int]:
+    """
+    Obtener histórico de pronóstico diario con filtros y paginación.
     
-    # Consultar Open-Meteo con sunrise/sunset
-    datos = consultar_open_meteo(
-        latitud, longitud, "daily", 
-        variables=["temperature_2m_max", "temperature_2m_min", "precipitation_sum", 
-                   "precipitation_probability_max", "sunrise", "sunset"],
-        horizonte_dias=7
+    Args:
+        db: Sesión de base de datos
+        filtros: Diccionario de filtros (id_municipio, codigo_comunidad, fechas, etc.)
+        pagina: Número de página (default 1)
+        por_pagina: Registros por página (default 50)
+    
+    Returns:
+        Tupla (lista_de_registros, total_registros)
+    """
+    where = []
+    params = {}
+    
+    # Filtros geográficos
+    if filtros.get("id_municipio"):
+        where.append("pdm.id_municipio = :id_municipio")
+        params["id_municipio"] = filtros["id_municipio"]
+    
+    if filtros.get("codigo_comunidad"):
+        where.append("c.codigo_ine = :codigo_comunidad")
+        params["codigo_comunidad"] = filtros["codigo_comunidad"]
+    
+    # Filtros de fecha
+    if filtros.get("fecha_desde"):
+        where.append("pdm.fecha >= :fecha_desde")
+        params["fecha_desde"] = filtros["fecha_desde"]
+    
+    if filtros.get("fecha_hasta"):
+        where.append("pdm.fecha <= :fecha_hasta")
+        params["fecha_hasta"] = filtros["fecha_hasta"]
+    
+    # Filtros de datos meteorológicos
+    if filtros.get("temp_max_min") is not None:
+        where.append("pdm.temp_max >= :temp_max_min")
+        params["temp_max_min"] = filtros["temp_max_min"]
+    
+    if filtros.get("temp_max_max") is not None:
+        where.append("pdm.temp_max <= :temp_max_max")
+        params["temp_max_max"] = filtros["temp_max_max"]
+    
+    if filtros.get("precipitacion_min") is not None:
+        where.append("pdm.precipitacion_suma >= :precipitacion_min")
+        params["precipitacion_min"] = filtros["precipitacion_min"]
+    
+    if filtros.get("precipitacion_max") is not None:
+        where.append("pdm.precipitacion_suma <= :precipitacion_max")
+        params["precipitacion_max"] = filtros["precipitacion_max"]
+    
+    if filtros.get("humedad_max_min") is not None:
+        where.append("pdm.humedad_relativa_max >= :humedad_max_min")
+        params["humedad_max_min"] = filtros["humedad_max_min"]
+    
+    # JOIN con municipio y comunidad si es necesario
+    joins = ["JOIN shared.municipio m ON m.id = pdm.id_municipio"]
+    if filtros.get("codigo_comunidad"):
+        joins.append("LEFT JOIN shared.comunidades c ON c.codigo_ine = pdm.codigo_comunidad")
+    
+    joins_clause = " ".join(joins)
+    where_clause = " AND ".join(where) if where else "TRUE"
+    
+    # Count total
+    count_query = f"""
+        SELECT COUNT(*) as total
+        FROM sinb.pronostico_diario_municipal pdm
+        {joins_clause}
+        WHERE {where_clause}
+    """
+    total_result = _row(db, count_query, params)
+    total = total_result["total"] if total_result else 0
+    
+    # Paginación
+    offset = (pagina - 1) * por_pagina
+    
+    rows = _rows(db, f"""
+        SELECT 
+            pdm.id, pdm.id_municipio, pdm.fecha,
+            pdm.temp_max, pdm.temp_min,
+            pdm.precipitacion_suma, pdm.precipitacion_prob_max,
+            pdm.humedad_relativa_max, pdm.humedad_relativa_min,
+            pdm.evapotranspiracion, pdm.viento_velocidad_max, pdm.viento_direccion,
+            pdm.radiacion_solar, pdm.uv_index_max,
+            pdm.sunrise, pdm.sunset,
+            pdm.fuente,
+            m.nombre as municipio_nombre
+        FROM sinb.pronostico_diario_municipal pdm
+        {joins_clause}
+        WHERE {where_clause}
+        ORDER BY pdm.fecha DESC
+        LIMIT :limit OFFSET :offset
+    """, {**params, "limit": por_pagina, "offset": offset})
+    
+    return _serialize(rows), total
+
+
+def get_pronostico_diario_consultar(
+    db: Session,
+    id_municipio: int,
+    tipo: str = "daily"
+) -> tuple[list, str, date]:
+    """
+    Consultar pronóstico digital almacenado (16 días desde hoy).
+    
+    Args:
+        db: Sesión de base de datos
+        id_municipio: ID del municipio
+        tipo: "daily" o "hourly"
+    
+    Returns:
+        Tupla (lista_de_registros, nombre_municipio, fecha_hoy)
+    """
+    fecha_hoy = _hoy_bolivia()
+    fecha_fin = fecha_hoy + timedelta(days=HORIZONTE_DIAS - 1)
+
+    rows = _rows(db, """
+        SELECT 
+            pdm.id, pdm.id_municipio, pdm.fecha,
+            pdm.temp_max, pdm.temp_min,
+            pdm.precipitacion_suma, pdm.precipitacion_prob_max,
+            pdm.humedad_relativa_max, pdm.humedad_relativa_min,
+            pdm.evapotranspiracion, pdm.viento_velocidad_max, pdm.viento_direccion,
+            pdm.radiacion_solar, pdm.uv_index_max,
+            pdm.sunrise, pdm.sunset,
+            pdm.fuente,
+            m.nombre as municipio_nombre
+        FROM sinb.pronostico_diario_municipal pdm
+        JOIN shared.municipio m ON m.id = pdm.id_municipio
+        WHERE pdm.id_municipio = :id_municipio 
+          AND pdm.fecha BETWEEN :fecha_hoy AND :fecha_fin
+        ORDER BY pdm.fecha ASC
+        LIMIT 16
+    """, {"id_municipio": id_municipio, "fecha_hoy": fecha_hoy, "fecha_fin": fecha_fin})
+    
+    municipio_nombre = rows[0]["municipio_nombre"] if rows else None
+    
+    return _serialize(rows), municipio_nombre, fecha_hoy
+
+
+def get_pronostico_comunidad_directo(
+    db: Session,
+    latitud: float,
+    longitud: float,
+    id_municipio: int = None
+) -> tuple[list, str, date]:
+    """
+    Obtener pronóstico directo de Open-Meteo para una comunidad (16 días).
+    No guarda en base de datos, solo retorna los datos crudos formateados.
+    
+    Args:
+        latitud: Latitud de la comunidad
+        longitud: Longitud de la comunidad
+        id_municipio: ID del municipio (opcional, para obtener nombre)
+    
+    Returns:
+        Tupla (lista_de_registros_formateados, nombre_municipio, fecha_hoy)
+    """
+    from datetime import date as date_type, datetime as datetime_type
+    from uuid import uuid4
+    
+    fecha_hoy = _hoy_bolivia()
+    
+    datos = _con_reintentos(
+        lambda: consultar_open_meteo(latitud, longitud, "daily", horizonte_dias=HORIZONTE_DIAS)
     )
     
     if "daily" not in datos:
@@ -1604,112 +2357,157 @@ def guardar_pronostico_diario_municipal(
     temp_min = daily.get("temperature_2m_min", [])
     precip_sum = daily.get("precipitation_sum", [])
     precip_prob = daily.get("precipitation_probability_max", [])
+    humedad_max = daily.get("relative_humidity_2m_max", [])
+    humedad_min = daily.get("relative_humidity_2m_min", [])
+    eto = daily.get("et0_fao_evapotranspiration", [])
+    viento_vel = daily.get("wind_speed_10m_max", [])
+    viento_dir = daily.get("wind_direction_10m_dominant", [])
+    radiacion = daily.get("shortwave_radiation_sum", [])
+    uv_max = daily.get("uv_index_max", [])
     sunrise_list = daily.get("sunrise", [])
     sunset_list = daily.get("sunset", [])
     
-    registros_guardados = []
+    registros = []
     
     for i, fecha_str in enumerate(fechas):
         fecha_obj = date_type.fromisoformat(fecha_str)
         
-        # Parsear sunrise/sunset si existen
         sunrise_dt = None
         sunset_dt = None
         if i < len(sunrise_list):
             try:
-                sunrise_dt = datetime_type.fromisoformat(sunrise_list[i].replace("T", " "))
+                sunrise_dt = datetime_type.fromisoformat(sunrise_list[i])
             except:
                 pass
         if i < len(sunset_list):
             try:
-                sunset_dt = datetime_type.fromisoformat(sunset_list[i].replace("T", " "))
+                sunset_dt = datetime_type.fromisoformat(sunset_list[i])
             except:
                 pass
         
-        # Upsert: actualizar si existe, insertar si no
-        existing = _row(db, """
-            SELECT id FROM sinb.pronostico_diario_municipal
-            WHERE id_municipio = :id_municipio AND fecha = :fecha
-        """, {"id_municipio": id_municipio, "fecha": fecha_obj})
-        
-        if existing:
-            # Actualizar
-            _execute(db, """
-                UPDATE sinb.pronostico_diario_municipal SET
-                    temp_max = :temp_max,
-                    temp_min = :temp_min,
-                    precipitacion_suma = :precip_sum,
-                    precipitacion_prob_max = :precip_prob,
-                    sunrise = :sunrise,
-                    sunset = :sunset,
-                    actualizado_en = now()
-                WHERE id_municipio = :id_municipio AND fecha = :fecha
-            """, {
-                "temp_max": temp_max[i] if i < len(temp_max) else None,
-                "temp_min": temp_min[i] if i < len(temp_min) else None,
-                "precip_sum": precip_sum[i] if i < len(precip_sum) else None,
-                "precip_prob": precip_prob[i] if i < len(precip_prob) else None,
-                "sunrise": sunrise_dt,
-                "sunset": sunset_dt,
-                "id_municipio": id_municipio,
-                "fecha": fecha_obj
-            })
-        else:
-            # Insertar
-            _execute(db, """
-                INSERT INTO sinb.pronostico_diario_municipal
-                (id_municipio, fecha, temp_max, temp_min, precipitacion_suma, 
-                 precipitacion_prob_max, sunrise, sunset)
-                VALUES (:id_municipio, :fecha, :temp_max, :temp_min, :precip_sum, 
-                        :precip_prob, :sunrise, :sunset)
-            """, {
-                "id_municipio": id_municipio,
-                "fecha": fecha_obj,
-                "temp_max": temp_max[i] if i < len(temp_max) else None,
-                "temp_min": temp_min[i] if i < len(temp_min) else None,
-                "precip_sum": precip_sum[i] if i < len(precip_sum) else None,
-                "precip_prob": precip_prob[i] if i < len(precip_prob) else None,
-                "sunrise": sunrise_dt,
-                "sunset": sunset_dt
-            })
-        
-        registros_guardados.append(fecha_str)
+        registros.append({
+            "id": str(uuid4()),
+            "id_municipio": id_municipio,
+            "fecha": fecha_str,
+            "temp_max": temp_max[i] if i < len(temp_max) else None,
+            "temp_min": temp_min[i] if i < len(temp_min) else None,
+            "precipitacion_suma": precip_sum[i] if i < len(precip_sum) else None,
+            "precipitacion_prob_max": precip_prob[i] if i < len(precip_prob) else None,
+            "humedad_relativa_max": humedad_max[i] if i < len(humedad_max) else None,
+            "humedad_relativa_min": humedad_min[i] if i < len(humedad_min) else None,
+            "evapotranspiracion": eto[i] if i < len(eto) else None,
+            "viento_velocidad_max": viento_vel[i] if i < len(viento_vel) else None,
+            "viento_direccion": viento_dir[i] if i < len(viento_dir) else None,
+            "radiacion_solar": radiacion[i] if i < len(radiacion) else None,
+            "uv_index_max": uv_max[i] if i < len(uv_max) else None,
+            "sunrise": sunrise_dt.isoformat() if sunrise_dt else None,
+            "sunset": sunset_dt.isoformat() if sunset_dt else None,
+            "fuente": "open-meteo-directo",
+            "municipio_nombre": None,
+            "latitud": latitud,
+            "longitud": longitud
+        })
     
-    return {
-        "municipio_id": id_municipio,
-        "registros_guardados": len(registros_guardados),
-        "fechas": registros_guardados,
-        "nota": "Datos del día completo (0:00-23:59 hora local America/La_Paz)"
-    }
+    # Obtener nombre del municipio si tenemos id_municipio
+    municipio_nombre = None
+    if id_municipio:
+        m = _row(db, "SELECT nombre FROM shared.municipio WHERE id = :id", {"id": id_municipio})
+        if m:
+            municipio_nombre = m["nombre"]
+            for r in registros:
+                r["municipio_nombre"] = municipio_nombre
+    
+    return registros, municipio_nombre, fecha_hoy
 
 
-def get_pronostico_diario_municipal(
-    db: Session,
-    id_municipio: int,
-    fecha_desde: date = None,
-    fecha_hasta: date = None
+def get_pronostico_todos_municipios_16dias(
+    db: Session
 ) -> list:
-    """Obtener pronóstico diario por municipio."""
-    where = ["pdm.id_municipio = :id_municipio"]
-    params = {"id_municipio": id_municipio}
+    """
+    Obtener pronóstico de TODOS los municipios × 16 días.
     
-    if fecha_desde:
-        where.append("pdm.fecha >= :fecha_desde")
-        params["fecha_desde"] = fecha_desde
+    Args:
+        db: Sesión de base de datos
     
-    if fecha_hasta:
-        where.append("pdm.fecha <= :fecha_hasta")
-        params["fecha_hasta"] = fecha_hasta
-    
-    where_clause = " AND ".join(where)
-    
-    rows = _rows(db, f"""
-        SELECT pdm.*, m.nombre as municipio_nombre
+    Returns:
+        Lista de pronósticos (343 municipios × 16 días = 5,488 registros)
+    """
+    fecha_hoy = _hoy_bolivia()
+    fecha_fin = fecha_hoy + timedelta(days=HORIZONTE_DIAS - 1)
+
+    rows = _rows(db, """
+        SELECT 
+            pdm.id, pdm.id_municipio, pdm.fecha,
+            pdm.temp_max, pdm.temp_min,
+            pdm.precipitacion_suma, pdm.precipitacion_prob_max,
+            pdm.humedad_relativa_max, pdm.humedad_relativa_min,
+            pdm.evapotranspiracion, pdm.viento_velocidad_max, pdm.viento_direccion,
+            pdm.radiacion_solar, pdm.uv_index_max,
+            m.nombre as municipio_nombre,
+            m.id_departamento, m.id_provincia,
+            ST_Y(ST_Centroid(m.geom)) as latitud,
+            ST_X(ST_Centroid(m.geom)) as longitud
         FROM sinb.pronostico_diario_municipal pdm
         JOIN shared.municipio m ON m.id = pdm.id_municipio
-        WHERE {where_clause}
-        ORDER BY pdm.fecha DESC
-    """, params)
+        WHERE pdm.fecha BETWEEN :fecha_hoy AND :fecha_fin
+        ORDER BY pdm.id_municipio ASC, pdm.fecha ASC
+    """, {"fecha_hoy": fecha_hoy, "fecha_fin": fecha_fin})
+    
+    return _serialize(rows)
+
+
+def get_pronostico_todos_municipios(
+    db: Session,
+    fecha: date
+) -> list:
+    """
+    Obtener pronóstico de TODOS los municipios para una fecha específica.
+    
+    Args:
+        db: Sesión de base de datos
+        fecha: Fecha a consultar
+    
+    Returns:
+        Lista de pronósticos (uno por municipio)
+    """
+    rows = _rows(db, """
+        SELECT 
+            pdm.id, pdm.id_municipio, pdm.fecha,
+            pdm.temp_max, pdm.temp_min,
+            pdm.precipitacion_suma, pdm.precipitacion_prob_max,
+            pdm.humedad_relativa_max, pdm.humedad_relativa_min,
+            pdm.evapotranspiracion, pdm.viento_velocidad_max, pdm.viento_direccion,
+            pdm.radiacion_solar, pdm.uv_index_max,
+            m.nombre as municipio_nombre,
+            m.id_departamento, m.id_provincia,
+            ST_Y(ST_Centroid(m.geom)) as latitud,
+            ST_X(ST_Centroid(m.geom)) as longitud
+        FROM sinb.pronostico_diario_municipal pdm
+        JOIN shared.municipio m ON m.id = pdm.id_municipio
+        WHERE pdm.fecha = :fecha
+        ORDER BY pdm.id_municipio ASC
+    """, {"fecha": fecha})
+    
+    # Si no hay datos para la fecha exacta, buscar la más cercana
+    if not rows:
+        rows = _rows(db, """
+            SELECT 
+                pdm.id, pdm.id_municipio, pdm.fecha,
+                pdm.temp_max, pdm.temp_min,
+                pdm.precipitacion_suma, pdm.precipitacion_prob_max,
+                pdm.humedad_relativa_max, pdm.humedad_relativa_min,
+                pdm.evapotranspiracion, pdm.viento_velocidad_max, pdm.viento_direccion,
+                pdm.radiacion_solar, pdm.uv_index_max,
+                m.nombre as municipio_nombre,
+                m.id_departamento, m.id_provincia,
+                ST_Y(ST_Centroid(m.geom)) as latitud,
+                ST_X(ST_Centroid(m.geom)) as longitud
+            FROM sinb.pronostico_diario_municipal pdm
+            JOIN shared.municipio m ON m.id = pdm.id_municipio
+            WHERE pdm.fecha >= :fecha
+            ORDER BY pdm.fecha ASC, pdm.id_municipio ASC
+            LIMIT 343
+        """, {"fecha": fecha})
     
     return _serialize(rows)
 
@@ -1837,7 +2635,8 @@ def get_pronosticos_diarios_filtrados(
     fecha_desde: date = None,
     fecha_hasta: date = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    todos: bool = False
 ) -> tuple:
     """
     Obtener pronósticos diarios con filtros geográficos.
@@ -1851,6 +2650,7 @@ def get_pronosticos_diarios_filtrados(
         fecha_hasta: Fecha máxima
         skip: Saltar registros (paginación)
         limit: Límite de registros
+        todos: True = conjunto completo sin LIMIT/OFFSET
     
     Returns:
         Tupla (datos, total)
@@ -1877,9 +2677,19 @@ def get_pronosticos_diarios_filtrados(
     if fecha_hasta:
         where.append("pdm.fecha <= :fecha_hasta")
         params["fecha_hasta"] = fecha_hasta
+    else:
+        # Sin fecha hasta: horizonte exacto de 16 días (hoy..hoy+15), para que el
+        # "16 días" no dependa de cuántas filas dejó la última corrida del cron.
+        where.append("pdm.fecha <= CURRENT_DATE + (:horizonte - 1) * interval '1 day'")
+        params["horizonte"] = HORIZONTE_DIAS
     
     where_clause = " AND ".join(where)
     
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
+    query_params = params if not todos else {
+        k: v for k, v in params.items() if k not in ("limit", "skip")}
+
     # Consulta con joins geográficos
     rows = _rows(db, f"""
         SELECT pdm.*, 
@@ -1892,8 +2702,8 @@ def get_pronosticos_diarios_filtrados(
         JOIN shared.departamento d ON d.id = m.id_departamento
         WHERE {where_clause}
         ORDER BY pdm.fecha DESC, pdm.id_municipio
-        LIMIT :limit OFFSET :skip
-    """, params)
+        {page}
+    """, query_params)
     
     # Total
     total = _row(db, f"""
@@ -1926,7 +2736,7 @@ def get_pronosticos_por_departamento(
     """
     from datetime import date as date_type
     if fecha is None:
-        fecha = date_type.today()
+        fecha = _hoy_bolivia()
     
     rows = _rows(db, """
         SELECT 
@@ -2006,244 +2816,306 @@ def get_centroides_municipios_por_departamento(
     return _serialize(rows)
 
 
+
 # ============================================================================
-# GALERÍA DE EVIDENCIAS (Fotos/Audio de Bioindicadores)
+# FOTOS DE INDICADOR NATURAL (1:N con sinb.indicador_natural)
 # ============================================================================
 
-def get_evidencias_galeria(
-    db: Session,
-    filtros: dict = None,
-    skip: int = 0,
-    limit: int = 100
-) -> tuple:
+_FOTO_SELECT = """
+    SELECT f.id,
+           f.id_indicador_natural,
+           f.path_foto,
+           f.path_foto as url_descarga,
+           f.descripcion,
+           f.id_usuario_subio,
+           f.creado_en,
+           f.actualizado_en,
+           jsonb_build_object(
+               'id', u.id_usuario,
+               'nombre', u.nombre,
+               'usuario', u.usuario,
+               'id_rol', u.id_rol
+           ) as usuario
+    FROM sinb.indicador_foto f
+    JOIN usuarios.usuario u ON u.id_usuario = f.id_usuario_subio
+"""
+
+
+def get_fotos_indicador(db: Session, id_indicador_natural: UUID,
+                        limit: int | None = None, skip: int = 0, todos: bool = False) -> tuple[list, int]:
+    """Listar fotos de un indicador natural, mas recientes primero.
+
+    Devuelve (filas, total sin paginar).
     """
-    Obtener galería de evidencias con filtros completos y anidados JSON.
-    
-    Args:
-        db: Sesión de base de datos
-        filtros: Diccionario con filtros (id_indicador, id_grupo, id_municipio, etc.)
-        skip: Saltar registros
-        limit: Límite de registros
-    
-    Returns:
-        Tupla (lista de evidencias, total)
-    """
-    filtros = filtros or {}
-    where = ["e.activo = true"]
-    params = {"skip": skip, "limit": limit}
-    
-    if filtros.get("id_indicador_natural"):
-        where.append("e.id_indicador_natural = :id_indicador_natural")
-        params["id_indicador_natural"] = filtros["id_indicador_natural"]
-    
-    if filtros.get("id_grupo"):
-        where.append("i.id_grupo = :id_grupo")
-        params["id_grupo"] = filtros["id_grupo"]
-    
-    if filtros.get("id_municipio"):
-        where.append("o.id_municipio = :id_municipio")
-        params["id_municipio"] = filtros["id_municipio"]
-    
-    if filtros.get("codigo_comunidad"):
-        where.append("o.codigo_comunidad = :codigo_comunidad")
-        params["codigo_comunidad"] = filtros["codigo_comunidad"]
-    
-    if filtros.get("id_usuario_subio"):
-        where.append("e.id_usuario_subio = :id_usuario_subio")
-        params["id_usuario_subio"] = filtros["id_usuario_subio"]
-    
-    if filtros.get("formato"):
-        where.append("e.formato = :formato")
-        params["formato"] = filtros["formato"]
-    
-    if filtros.get("fecha_desde"):
-        where.append("e.fecha_carga >= :fecha_desde")
-        params["fecha_desde"] = filtros["fecha_desde"]
-    
-    if filtros.get("fecha_hasta"):
-        where.append("e.fecha_carga <= :fecha_hasta")
-        params["fecha_hasta"] = filtros["fecha_hasta"]
-    
-    if filtros.get("con_gps") is True:
-        where.append("e.descripcion IS NOT NULL")  # Asumiendo que GPS se guarda en descripción o metadata
-    elif filtros.get("con_gps") is False:
-        where.append("e.descripcion IS NULL")
-    
-    where_clause = " AND ".join(where)
-    
-    # Consulta principal con anidados JSON
-    query = f"""
-        SELECT 
-            e.id,
-            e.id_indicador_natural,
-            jsonb_build_object(
-                'id', i.id,
-                'nombre_cientifico', i.nombre_cientifico,
-                'nombre_comun', i.nombre_comun,
-                'codigo', i.codigo,
-                'grupo', jsonb_build_object(
-                    'id', g.id,
-                    'nombre', g.nombre,
-                    'codigo', g.codigo
-                )
-            ) as indicador,
-            e.id_observacion_registro,
-            jsonb_build_object(
-                'id', orr.id,
-                'id_observacion', orr.id_observacion,
-                'valor_observado', orr.valor_observado
-            ) as observacion_registro,
-            e.id_usuario_subio,
-            jsonb_build_object(
-                'id_usuario', u.id_usuario,
-                'usuario', u.usuario,
-                'nombre', u.nombre,
-                'id_rol', u.id_rol
-            ) as usuario,
-            e.path_archivo,
-            e.descripcion,
-            e.formato,
-            e.tamano_bytes,
-            e.hash_sha256,
-            e.fecha_carga,
-            e.activo,
-            jsonb_build_object(
-                'latitud', NULL,
-                'longitud', NULL,
-                'metadata', jsonb_build_object(
-                    'formato', e.formato,
-                    'tamano_mb', round(e.tamano_bytes / 1048576.0, 2)
-                )
-            ) as metadata
-        FROM sinb.evidencia e
-        LEFT JOIN sinb.indicador_natural i ON i.id = e.id_indicador_natural
-        LEFT JOIN sinb.grupo g ON g.id = i.id_grupo
-        LEFT JOIN sinb.observacion_registro orr ON orr.id = e.id_observacion_registro
-        LEFT JOIN sinb.observacion o ON o.id = orr.id_observacion
-        LEFT JOIN usuarios.usuario u ON u.id_usuario = e.id_usuario_subio
-        WHERE {where_clause}
-        ORDER BY e.fecha_carga DESC
-        LIMIT :limit OFFSET :skip
-    """
-    
-    rows = _rows(db, query, params)
-    
-    # Total
-    total_query = f"""
-        SELECT COUNT(DISTINCT e.id) as total
-        FROM sinb.evidencia e
-        LEFT JOIN sinb.indicador_natural i ON i.id = e.id_indicador_natural
-        LEFT JOIN sinb.observacion o ON o.id = e.id_observacion_registro
-        WHERE {where_clause}
-    """
-    total = _row(db, total_query, {k: v for k, v in params.items() if k not in ['limit', 'skip']})['total']
-    
+    total = _row(db, """
+        SELECT COUNT(*) AS total FROM sinb.indicador_foto WHERE id_indicador_natural = :id
+    """, {"id": id_indicador_natural})["total"]
+    page, page_params = pagina_limit_offset(limit, skip, todos)
+    rows = _rows(db, _FOTO_SELECT + """
+        WHERE f.id_indicador_natural = :id
+        ORDER BY f.creado_en DESC
+    """ + page, {"id": id_indicador_natural, **page_params})
     return _serialize(rows), total
 
 
-def get_indicadores_destacados_galeria(
-    db: Session,
-    id_grupo: UUID = None,
-    limit: int = 10
-) -> list:
+def get_foto_indicador(db: Session, id_foto: UUID):
+    """Obtener una foto por su id (incluye usuario propietario)."""
+    row = _row(db, _FOTO_SELECT + """
+        WHERE f.id = :id
+    """, {"id": id_foto})
+    return dict(row) if row else None
+
+
+def create_foto_indicador(db: Session, id_indicador_natural: UUID, path_foto: str,
+                          descripcion: str, id_usuario_subio: int) -> dict:
+    """Insertar una foto de indicador natural."""
+    result = db.execute(text("""
+        INSERT INTO sinb.indicador_foto
+            (id_indicador_natural, path_foto, descripcion, id_usuario_subio)
+        VALUES
+            (:id_indicador_natural, :path_foto, :descripcion, :id_usuario_subio)
+        RETURNING *
+    """), {
+        "id_indicador_natural": id_indicador_natural,
+        "path_foto": path_foto,
+        "descripcion": descripcion,
+        "id_usuario_subio": id_usuario_subio,
+    })
+    db.commit()
+    return dict(result.mappings().first())
+
+
+def update_foto_indicador(db: Session, id_foto: UUID, descripcion: str) -> dict:
+    """Actualizar la descripcion de una foto."""
+    result = db.execute(text("""
+        UPDATE sinb.indicador_foto
+           SET descripcion = :descripcion,
+               actualizado_en = now()
+         WHERE id = :id
+        RETURNING *
+    """), {"id": id_foto, "descripcion": descripcion})
+    db.commit()
+    row = result.mappings().first()
+    return dict(row) if row else None
+
+
+def delete_foto_indicador(db: Session, id_foto: UUID, id_usuario: int | None = None) -> bool:
+    """Eliminar fisicamente la fila de la foto (con tombstone; el archivo lo borra el router)."""
+    fila = _row(db, "SELECT id, path_foto FROM sinb.indicador_foto WHERE id = :id", {"id": id_foto})
+    if not fila:
+        return False
+    _registrar_borrado(db, "indicador_foto", fila, id_usuario)
+    db.execute(text("DELETE FROM sinb.indicador_foto WHERE id = :id"), {"id": id_foto})
+    db.commit()
+    return True
+
+
+def delete_aviso(db: Session, id: UUID, id_usuario: int | None = None):
+    """Eliminar aviso definitivamente (borrado físico + registro de borrado)."""
+    return _borrar_fisico(db, "avisos", id, id_usuario, "el aviso")
+
+
+# ============================================================================
+# AVISOS: DETALLE Y ACTUALIZACIÓN
+# ============================================================================
+
+def get_aviso(db: Session, id: UUID):
+    """Obtener un aviso por ID con categoría, municipio y emisor."""
+    return _row(db, """
+        SELECT a.*, cp.nombre as categoria_nombre, m.nombre as municipio_nombre,
+               u.nombre as emisor_nombre
+        FROM sinb.avisos a
+        LEFT JOIN sinb.categoria_pronostico cp ON cp.id = a.id_categoria
+        LEFT JOIN shared.municipio m ON m.id = a.id_municipio
+        LEFT JOIN usuarios.usuario u ON u.id_usuario = a.id_usuario_subio
+        WHERE a.id = :id
+    """, {"id": id})
+
+
+def update_aviso(db: Session, id: UUID, data: dict):
+    """Actualizar mensaje, vigencia o estado de un aviso.
+
+    Si cambia `vigencia_horas` se recalcula `fecha_vencimiento` desde la
+    fecha de emisión (constraint chk_vigencia exige vencimiento > emisión).
     """
-    Obtener indicadores con más evidencias (fotos) en la galería.
-    
-    Args:
-        db: Sesión de base de datos
-        id_grupo: Filtrar por grupo biocultural
-        limit: Límite de resultados
-    
-    Returns:
-        Lista de indicadores con conteo de fotos
-    """
-    where = ["e.activo = true", "e.id_indicador_natural IS NOT NULL"]
-    params = {"limit": limit}
-    
-    if id_grupo:
-        where.append("i.id_grupo = :id_grupo")
-        params["id_grupo"] = id_grupo
-    
-    where_clause = " AND ".join(where)
-    
+    aviso = _row(db, "SELECT fecha_emision FROM sinb.avisos WHERE id = :id", {"id": id})
+    if not aviso:
+        return None
+
+    params = {
+        "id": id,
+        "mensaje": data.get("mensaje"),
+        "vigencia_horas": data.get("vigencia_horas"),
+        "estado": data.get("estado"),
+        "fecha_vencimiento": None,
+    }
+    if data.get("vigencia_horas") is not None and aviso["fecha_emision"]:
+        params["fecha_vencimiento"] = aviso["fecha_emision"] + timedelta(hours=data["vigencia_horas"])
+
+    result = db.execute(text("""
+        UPDATE sinb.avisos SET
+            mensaje = COALESCE(:mensaje, mensaje),
+            vigencia_horas = COALESCE(:vigencia_horas, vigencia_horas),
+            estado = COALESCE(:estado, estado),
+            fecha_vencimiento = COALESCE(:fecha_vencimiento, fecha_vencimiento)
+        WHERE id = :id
+        RETURNING *
+    """), params)
+    db.commit()
+    row = result.mappings().first()
+    return dict(row) if row else None
+
+
+# ============================================================================
+# OBSERVADOR ÍNDICE: DETALLE, ACTUALIZACIÓN Y BORRADO
+# ============================================================================
+
+def get_observador_indice(db: Session, id: UUID):
+    """Obtener un registro de observador índice por ID."""
+    return _row(db, """
+        SELECT oi.*, u.nombre as usuario_nombre,
+               i.nombre_cientifico as indicador_nombre
+        FROM sinb.observador_indice oi
+        JOIN usuarios.usuario u ON u.id_usuario = oi.id_usuario
+        LEFT JOIN sinb.indicador_natural i ON i.id = oi.id_indicador_natural
+        WHERE oi.id = :id
+    """, {"id": id})
+
+
+def update_observador_indice(db: Session, id: UUID, data: dict):
+    """Actualizar valor y fecha de cálculo de un índice."""
+    result = db.execute(text("""
+        UPDATE sinb.observador_indice SET
+            valor = COALESCE(:valor, valor),
+            fecha_calculo = COALESCE(:fecha_calculo, fecha_calculo)
+        WHERE id = :id
+        RETURNING *
+    """), {
+        "id": id,
+        "valor": data.get("valor"),
+        "fecha_calculo": data.get("fecha_calculo"),
+    })
+    db.commit()
+    row = result.mappings().first()
+    return dict(row) if row else None
+
+
+def delete_observador_indice(db: Session, id: UUID, id_usuario: int | None = None) -> bool:
+    """Eliminar un registro de observador índice (físico + tombstone)."""
+    fila = _row(db, "SELECT id FROM sinb.observador_indice WHERE id = :id", {"id": id})
+    if not fila:
+        return False
+    _registrar_borrado(db, "observador_indice", fila, id_usuario)
+    db.execute(text("DELETE FROM sinb.observador_indice WHERE id = :id"), {"id": id})
+    db.commit()
+    return True
+
+
+# ============================================================================
+# PRONÓSTICO LARGO: ESCENARIOS Y OBSERVADORES
+# ============================================================================
+
+def update_escenario_en_pronostico(db: Session, id_pronostico: UUID, id_item: UUID,
+                                   id_escenario: UUID, confianza: str | None = None):
+    """Actualizar la confianza (ALTA|MEDIA|BAJA) de un escenario ya asignado a un bloque."""
+    item = _item_pertenece_al_pronostico(db, id_pronostico, id_item)
+    _validar_escenarios_de_item(
+        db, item["id_categoria"], [{"id_escenario": id_escenario, "confianza": confianza}]
+    )
+    result = _row(db, """
+        UPDATE sinb.escenario_estacional
+           SET confianza = CAST(:confianza AS sinb.confianza_nivel)
+         WHERE id_pronostico_largo_item = :id_item AND id_escenario = :id_escenario
+        RETURNING *
+    """, {"id_item": id_item, "id_escenario": id_escenario, "confianza": confianza})
+    db.commit()
+    return result
+
+
+def get_observadores_de_pronostico(db: Session, id_pronostico: UUID, tipo_pronostico: str,
+                                   limit: int | None = None, skip: int = 0, todos: bool = False):
+    """Listar los observadores asignados a un pronóstico (estacional o temporal)."""
+    tipo_pronostico = _norm_tipo_pronostico(tipo_pronostico)
+    if tipo_pronostico == "largo":
+        tabla_pron, tabla, columna = "sinb.pronostico_largo", "sinb.pronostico_largo_observador", "id_pronostico_largo"
+    else:
+        tabla_pron, tabla, columna = "sinb.pronostico_corto", "sinb.pronostico_corto_observador", "id_pronostico_corto"
+
+    existe = _row(db, f"SELECT 1 FROM {tabla_pron} WHERE id = :id", {"id": id_pronostico})
+    if not existe:
+        raise HTTPException(status_code=404, detail="Pronóstico no encontrado")
+
+    # El pronóstico largo no almacena confianza por observador → se devuelve NULL
+    # para que la respuesta tenga la misma forma en estacional y temporal.
+    # La confianza del temporal viene del enum; el id_observador_off sólo existe en
+    # la tabla de largo → NULL en temporal, misma forma en ambos casos.
+    select_confianza = "NULL::text" if tipo_pronostico == "largo" else "po.confianza"
+    select_off = "po.id_observador_off" if tipo_pronostico == "largo" else "NULL::varchar"
+    total = _row(db, f"""
+        SELECT COUNT(*) AS total FROM {tabla} po WHERE po.{columna} = :id
+    """, {"id": id_pronostico})["total"]
+    page, page_params = pagina_limit_offset(limit, skip, todos)
     rows = _rows(db, f"""
-        SELECT 
-            i.id,
-            i.nombre_cientifico,
-            i.nombre_comun,
-            i.codigo,
-            g.id as id_grupo,
-            g.nombre as grupo_nombre,
-            COUNT(e.id) as cantidad_evidencias,
-            jsonb_agg(
-                jsonb_build_object(
-                    'id', e.id,
-                    'path_archivo', e.path_archivo,
-                    'descripcion', e.descripcion,
-                    'formato', e.formato
-                ) ORDER BY e.fecha_carga DESC
-            ) FILTER (WHERE e.id IS NOT NULL) as ultimas_fotos
-        FROM sinb.indicador_natural i
-        LEFT JOIN sinb.grupo g ON g.id = i.id_grupo
-        LEFT JOIN sinb.evidencia e ON e.id_indicador_natural = i.id AND e.activo = true
-        WHERE {where_clause}
-        GROUP BY i.id, i.nombre_cientifico, i.nombre_comun, i.codigo, g.id, g.nombre
-        ORDER BY cantidad_evidencias DESC
-        LIMIT :limit
-    """, params)
-    
-    return _serialize(rows)
+        SELECT po.{columna} as id_pronostico, po.id_usuario,
+               {select_confianza} as confianza,
+               po.fecha_asignacion, {select_off} as id_observador_off,
+               u.nombre as usuario_nombre, u.id_rol, u.id_municipio
+        FROM {tabla} po
+        JOIN usuarios.usuario u ON u.id_usuario = po.id_usuario
+        WHERE po.{columna} = :id
+        ORDER BY po.fecha_asignacion DESC
+        {page}
+    """, {"id": id_pronostico, **page_params})
+    return rows, total
 
 
-def get_galeria_por_municipio(
-    db: Session,
-    id_municipio: int,
-    limit: int = 50
-) -> list:
+# ============================================================================
+# REPORTE: PRONÓSTICOS CON ESTADO DE VERIFICACIÓN
+# ============================================================================
+
+def get_reporte_pronosticos_resumen(db: Session):
+    """Reporte de pronósticos con estado de verificación.
+
+    Devuelve totales por tipo (largo/corto), conteo por estado y el
+    desglose de verificaciones (coinciden / no coinciden / pendientes).
     """
-    Obtener galería de evidencias filtrada por municipio.
-    
-    Args:
-        db: Sesión de base de datos
-        id_municipio: ID del municipio
-        limit: Límite de resultados
-    
-    Returns:
-        Lista de evidencias con información del municipio
-    """
-    rows = _rows(db, """
-        SELECT 
-            e.id,
-            e.path_archivo,
-            e.descripcion,
-            e.formato,
-            e.fecha_carga,
-            jsonb_build_object(
-                'id', i.id,
-                'nombre_cientifico', i.nombre_cientifico,
-                'nombre_comun', i.nombre_comun
-            ) as indicador,
-            jsonb_build_object(
-                'id', m.id,
-                'nombre', m.nombre,
-                'codigo_ine', m.codigo_ine
-            ) as municipio,
-            jsonb_build_object(
-                'codigo_ine', c.codigo_ine,
-                'nombre', c.nombre
-            ) as comunidad,
-            COUNT(*) OVER() as total_comunal
-        FROM sinb.evidencia e
-        LEFT JOIN sinb.indicador_natural i ON i.id = e.id_indicador_natural
-        LEFT JOIN sinb.observacion_registro orr ON orr.id = e.id_observacion_registro
-        LEFT JOIN sinb.observacion o ON o.id = orr.id_observacion
-        LEFT JOIN shared.municipio m ON m.id = o.id_municipio
-        LEFT JOIN shared.comunidades c ON c.codigo_ine = o.codigo_comunidad
-        WHERE e.activo = true 
-          AND m.id = :id_municipio
-          AND e.id_indicador_natural IS NOT NULL
-        ORDER BY e.fecha_carga DESC
-        LIMIT :limit
-    """, {"id_municipio": id_municipio, "limit": limit})
-    
-    return _serialize(rows)
+    # El borrado de pronósticos es físico (no existe el valor 'ELIMINADO' en el
+    # enum sinb.estado_validacion), por eso se cuentan todas las filas.
+    totales = _row(db, """
+        SELECT
+            (SELECT COUNT(*) FROM sinb.pronostico_largo) as total_largo,
+            (SELECT COUNT(*) FROM sinb.pronostico_corto) as total_corto
+    """, {}) or {"total_largo": 0, "total_corto": 0}
+
+    por_estado = _rows(db, """
+        SELECT estado, COUNT(*) as cantidad FROM (
+            SELECT estado FROM sinb.pronostico_largo
+            UNION ALL
+            SELECT estado FROM sinb.pronostico_corto
+        ) t
+        GROUP BY estado
+        ORDER BY cantidad DESC
+    """, {})
+
+    verificaciones = _row(db, """
+        SELECT
+            COUNT(*) FILTER (WHERE estado = 'COINCIDE') as coinciden,
+            COUNT(*) FILTER (WHERE estado = 'NO_COINCIDE') as no_coinciden,
+            COUNT(*) FILTER (WHERE estado IN ('PENDIENTE', 'EN_VERIFICACION',
+                                              'SIN_DATOS', 'NO_VERIFICABLE')) as pendientes,
+            COUNT(*) as total
+        FROM sinb.verificacion_pronostico
+    """, {}) or {"coinciden": 0, "no_coinciden": 0, "pendientes": 0, "total": 0}
+
+    total_largo = int(totales["total_largo"])
+    total_corto = int(totales["total_corto"])
+    return {
+        "total_pronosticos": total_largo + total_corto,
+        "total_largo": total_largo,
+        "total_corto": total_corto,
+        "por_estado": por_estado,
+        "verificaciones_total": int(verificaciones["total"]),
+        "verificaciones_pendientes": int(verificaciones["pendientes"]),
+        "verificaciones_coinciden": int(verificaciones["coinciden"]),
+        "verificaciones_no_coinciden": int(verificaciones["no_coinciden"]),
+    }

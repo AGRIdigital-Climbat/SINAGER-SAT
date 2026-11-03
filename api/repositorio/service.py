@@ -5,6 +5,8 @@ import json
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ..pagination import pagina_limit_offset
+
 
 # ============================================================================
 #  HELPERS COMPARTIDOS
@@ -22,13 +24,13 @@ def _rows(db: Session, query: str, params: dict) -> list:
 # ============================================================================
 #  ORIGEN DEL DOCUMENTO (EDAN / RIDA)
 # ============================================================================
-#  El origen NO es una columna: se deriva de 'id_formulario_rida'. Asi no puede
+#  El origen NO es una columna: se deriva de 'id_evento_rida'. Asi no puede
 #  quedar desincronizado del dato real, no necesita backfill y no hay dos
 #  fuentes de verdad.
 #
-#      id_formulario_rida IS NULL      -> 'edan'  (documento de EDAN)
-#      id_formulario_rida IS NOT NULL  -> 'rida'  (documento de RIDA)
-_ORIGEN_SQL = "CASE WHEN d.id_formulario_rida IS NULL THEN 'edan' ELSE 'rida' END AS origen"
+#      id_evento_rida IS NULL      -> 'edan'  (documento de EDAN)
+#      id_evento_rida IS NOT NULL  -> 'rida'  (documento de RIDA/evento)
+_ORIGEN_SQL = "CASE WHEN d.id_evento_rida IS NULL THEN 'edan' ELSE 'rida' END AS origen"
 
 # Firmas digitales: tambien derivadas, no columnas.
 #
@@ -58,6 +60,12 @@ _FIRMA_VALIDADA_SQL = (
 _SELECT_DOCS = f"""
     SELECT d.*, {_ORIGEN_SQL}, {_CANTIDAD_FIRMAS_SQL}, {_FIRMA_VALIDADA_SQL},
            t.codigo AS tipo_codigo, t.nombre AS tipo_nombre
+    FROM repositorio.documentos d
+    JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
+"""
+
+# Mismo FROM del listado, para el COUNT(*) del total sin paginar.
+_FROM_DOCS = """
     FROM repositorio.documentos d
     JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
 """
@@ -138,7 +146,7 @@ def delete_tipo_documento(db: Session, id_tipo: int, hard: bool = False) -> bool
 def resolver_destino_documento(
     db: Session,
     id_edan: int | None = None,
-    id_formulario_rida: int | None = None,
+    id_evento_rida: int | None = None,
 ) -> dict | None:
     """Valida el destino de un documento y devuelve los ids ya resueltos.
 
@@ -146,43 +154,35 @@ def resolver_destino_documento(
     de los dos ids llegue. Devuelve None si la entidad indicada no existe (el
     router responde 404) y lanza ValueError si no llega ninguno de los dos.
 
-    Cuando llega 'id_formulario_rida' se guarda TAMBIÉN el 'id_edan' que el
-    formulario ya tiene (rida.formulario_rida.id_edan), para que el documento
+    Cuando llega 'id_evento_rida' se guarda TAMBIÉN el 'id_edan' que el
+    evento ya tiene (rida.evento_rida.id_edan), para que el documento
     quede vinculado a las dos tablas y se pueda rastrear desde la pantalla del
     EDAN. El cliente solo manda un id; el otro lo resuelve la API.
 
     Returns:
         {
-          "id_edan": int | None,             # NULL solo si el formulario RIDA no tiene EDAN
-          "id_formulario_rida": int | None,  # NULL = documento de EDAN
-          "id_municipio": int | None,        # resuelto, para el nombre del archivo
+          "id_edan": int | None,        # el evento siempre tiene EDAN
+          "id_evento_rida": int | None,  # NULL = documento de EDAN
+          "id_municipio": int | None,    # resuelto, para el nombre del archivo
         }
     """
-    if id_edan is None and id_formulario_rida is None:
-        raise ValueError("Se debe enviar id_edan o id_formulario_rida")
+    if id_edan is None and id_evento_rida is None:
+        raise ValueError("Se debe enviar id_edan o id_evento_rida")
 
-    if id_formulario_rida is not None:
-        formulario = _row(db, """
-            SELECT id_formulario, id_edan
-            FROM rida.formulario_rida
-            WHERE id_formulario = :id
-        """, {"id": id_formulario_rida})
-        if not formulario:
+    if id_evento_rida is not None:
+        evento = _row(db, """
+            SELECT ev.id_evento_rida, ev.id_edan, e.id_municipio
+            FROM rida.evento_rida ev
+            LEFT JOIN edan.edan e ON e.id_edan = ev.id_edan
+            WHERE ev.id_evento_rida = :id
+        """, {"id": id_evento_rida})
+        if not evento:
             return None
 
-        # El municipio se resuelve por el EDAN del formulario: formulario_rida
-        # no tiene columna id_municipio.
-        id_municipio = None
-        if formulario["id_edan"] is not None:
-            edan_row = _row(db, """
-                SELECT id_municipio FROM edan.edan WHERE id_edan = :id
-            """, {"id": formulario["id_edan"]})
-            id_municipio = edan_row["id_municipio"] if edan_row else None
-
         return {
-            "id_edan": formulario["id_edan"],
-            "id_formulario_rida": formulario["id_formulario"],
-            "id_municipio": id_municipio,
+            "id_edan": evento["id_edan"],
+            "id_evento_rida": evento["id_evento_rida"],
+            "id_municipio": evento["id_municipio"],
         }
 
     edan_row = _row(db, """
@@ -193,7 +193,7 @@ def resolver_destino_documento(
 
     return {
         "id_edan": id_edan,
-        "id_formulario_rida": None,
+        "id_evento_rida": None,
         "id_municipio": edan_row["id_municipio"],
     }
 
@@ -216,24 +216,23 @@ def upload_documento(
     tiene_firma_digital: bool = False,
     resultado_firma: dict | None = None,
     fecha_validacion_firma: datetime_type | None = None,
-    id_formulario_rida: int | None = None,
+    id_evento_rida: int | None = None,
 ) -> int:
     """Inserta un nuevo documento PDF (sin versionado).
 
-    Guarda el par (id_edan, id_formulario_rida) ya resuelto por
-    resolver_destino_documento(); ambos pueden venir en NULL solo si la entidad
-    de origen no tiene EDAN asociado.
+    Guarda el par (id_edan, id_evento_rida) ya resuelto por
+    resolver_destino_documento(); 'id_evento_rida' NULL = documento de EDAN.
     """
     result = db.execute(text("""
         INSERT INTO repositorio.documentos
-            (id_edan, id_formulario_rida, id_tipo_documento, nombre_original, path_archivo,
+            (id_edan, id_evento_rida, id_tipo_documento, nombre_original, path_archivo,
              tamano_bytes, hash_sha256, id_usuario_subio,
              id_municipio, id_departamento, id_provincia,
              fecha_documento, nombre_documento,
              observaciones, tiene_firma_digital, resultado_firma,
              fecha_validacion_firma)
         VALUES
-            (:id_edan, :id_formulario_rida, :id_tipo_documento, :nombre_original, :path_archivo,
+            (:id_edan, :id_evento_rida, :id_tipo_documento, :nombre_original, :path_archivo,
              :tamano_bytes, :hash_sha256, :id_usuario_subio,
              :id_municipio, :id_departamento, :id_provincia,
              :fecha_documento, :nombre_documento,
@@ -242,7 +241,7 @@ def upload_documento(
         RETURNING id_documento
     """), {
         "id_edan": id_edan,
-        "id_formulario_rida": id_formulario_rida,
+        "id_evento_rida": id_evento_rida,
         "id_tipo_documento": id_tipo_documento,
         "nombre_original": nombre_original,
         "path_archivo": file_path,
@@ -263,15 +262,18 @@ def upload_documento(
     return result
 
 
-def list_documentos_by_formulario_rida(
+def list_documentos_by_evento_rida(
     db: Session,
-    id_formulario_rida: int,
+    id_evento_rida: int,
     id_tipo_documento: int | None = None,
     include_inactive: bool = False,
+    limit: int | None = None,
+    skip: int = 0,
+    todos: bool = False,
 ):
-    """Lista documentos de un formulario RIDA (origen = rida)."""
-    conds = ["d.id_formulario_rida = :id"]
-    params: dict = {"id": id_formulario_rida}
+    """Lista documentos de un evento RIDA (origen = rida)."""
+    conds = ["d.id_evento_rida = :id"]
+    params: dict = {"id": id_evento_rida}
     if not include_inactive:
         conds.append("d.activo = TRUE")
     if id_tipo_documento:
@@ -279,10 +281,14 @@ def list_documentos_by_formulario_rida(
         params["tipo"] = id_tipo_documento
 
     where = " AND ".join(conds)
-    return _rows(db, _SELECT_DOCS + f"""
+    total = _row(db, f"SELECT COUNT(*) AS total {_FROM_DOCS} WHERE {where}", params)["total"]
+    page, page_params = pagina_limit_offset(limit, skip, todos)
+    rows = _rows(db, _SELECT_DOCS + f"""
         WHERE {where}
         ORDER BY t.orden, d.fecha_subida DESC
-    """, params)
+        {page}
+    """, {**params, **page_params})
+    return rows, total
 
 
 def list_documentos_by_edan(
@@ -291,13 +297,16 @@ def list_documentos_by_edan(
     id_tipo_documento: int | None = None,
     include_inactive: bool = False,
     origen: str | None = None,
+    limit: int | None = None,
+    skip: int = 0,
+    todos: bool = False,
 ):
     """Lista documentos de un EDAN.
 
     Sin 'origen' devuelve TODOS los documentos de ese EDAN, incluidos los de sus
-    formularios RIDA (cada documento RIDA guarda tambien su id_edan, asi que es
+    eventos RIDA (cada documento RIDA guarda tambien su id_edan, asi que es
     rastreable desde la pantalla del EDAN). Con origen='edan' se limita a los
-    que no tienen formulario RIDA, y con 'rida' a los que si.
+    que no tienen evento RIDA, y con 'rida' a los que si.
     """
     conds = ["d.id_edan = :id"]
     params: dict = {"id": id_edan}
@@ -307,15 +316,19 @@ def list_documentos_by_edan(
         conds.append("d.id_tipo_documento = :tipo")
         params["tipo"] = id_tipo_documento
     if origen == "edan":
-        conds.append("d.id_formulario_rida IS NULL")
+        conds.append("d.id_evento_rida IS NULL")
     elif origen == "rida":
-        conds.append("d.id_formulario_rida IS NOT NULL")
+        conds.append("d.id_evento_rida IS NOT NULL")
 
     where = " AND ".join(conds)
-    return _rows(db, _SELECT_DOCS + f"""
+    total = _row(db, f"SELECT COUNT(*) AS total {_FROM_DOCS} WHERE {where}", params)["total"]
+    page, page_params = pagina_limit_offset(limit, skip, todos)
+    rows = _rows(db, _SELECT_DOCS + f"""
         WHERE {where}
         ORDER BY t.orden, d.fecha_subida DESC
-    """, params)
+        {page}
+    """, {**params, **page_params})
+    return rows, total
 
 
 def get_documento(db: Session, id_documento: int):
@@ -359,23 +372,33 @@ def buscar_documentos(
     id_municipio: int | None = None,
     limit: int = 50,
     origen: str | None = None,
+    skip: int = 0,
+    todos: bool = False,
 ):
-    """Búsqueda por nombre_documento (ILIKE) y nombre_original."""
-    params = {"q": f"%{query_text}%", "limit": limit}
+    """Búsqueda por nombre_documento (ILIKE) y nombre_original.
+
+    `limit`/`skip` paginan (los más recientes primero); `todos=True` devuelve todo.
+    """
+    params: dict = {"q": f"%{query_text}%"}
+    if not todos:
+        params.update({"limit": limit, "skip": skip})
     where = """(d.activo = TRUE)
                AND (d.nombre_documento ILIKE :q OR d.nombre_original ILIKE :q)"""
     if id_municipio:
         where += " AND d.id_municipio = :m"
         params["m"] = id_municipio
     if origen == "edan":
-        where += " AND d.id_formulario_rida IS NULL"
+        where += " AND d.id_evento_rida IS NULL"
     elif origen == "rida":
-        where += " AND d.id_formulario_rida IS NOT NULL"
+        where += " AND d.id_evento_rida IS NOT NULL"
+
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
 
     return _rows(db, _SELECT_DOCS + f"""
         WHERE {where}
         ORDER BY d.fecha_documento DESC NULLS LAST, d.fecha_subida DESC
-        LIMIT :limit
+        {page}
     """, params)
 
 
@@ -383,7 +406,7 @@ def list_documentos_filtrados(
     db: Session,
     origen: str | None = None,
     id_edan: int | None = None,
-    id_formulario_rida: int | None = None,
+    id_evento_rida: int | None = None,
     id_departamento: int | None = None,
     id_provincia: int | None = None,
     id_municipio: int | None = None,
@@ -393,26 +416,31 @@ def list_documentos_filtrados(
     nombre_documento_like: str | None = None,
     limit: int = 50,
     skip: int = 0,
+    todos: bool = False,
 ):
     """Lista documentos con filtros por metadata estructurada.
 
-    'origen' es el filtro EDAN/RIDA. Se deriva de id_formulario_rida, asi que
+    'origen' es el filtro EDAN/RIDA. Se deriva de id_evento_rida, asi que
     se puede combinar con cualquier otro filtro: origen='rida' +
     id_municipio=1 devuelve solo los documentos RIDA de ese municipio.
+
+    `limit`/`skip` paginan (los más recientes primero); `todos=True` devuelve todo.
     """
     conds = ["d.activo = TRUE"]
-    params: dict = {"limit": limit, "skip": skip}
+    params: dict = {}
+    if not todos:
+        params = {"limit": limit, "skip": skip}
 
     if origen == "edan":
-        conds.append("d.id_formulario_rida IS NULL")
+        conds.append("d.id_evento_rida IS NULL")
     elif origen == "rida":
-        conds.append("d.id_formulario_rida IS NOT NULL")
+        conds.append("d.id_evento_rida IS NOT NULL")
     if id_edan is not None:
         conds.append("d.id_edan = :id_edan")
         params["id_edan"] = id_edan
-    if id_formulario_rida is not None:
-        conds.append("d.id_formulario_rida = :id_formulario_rida")
-        params["id_formulario_rida"] = id_formulario_rida
+    if id_evento_rida is not None:
+        conds.append("d.id_evento_rida = :id_evento_rida")
+        params["id_evento_rida"] = id_evento_rida
     if id_departamento is not None:
         conds.append("d.id_departamento = :id_departamento")
         params["id_departamento"] = id_departamento
@@ -436,10 +464,12 @@ def list_documentos_filtrados(
         params["nombre_documento_like"] = f"%{nombre_documento_like}%"
 
     where = " AND ".join(conds)
+    # cantidad → paginación; todos=True → sin LIMIT/OFFSET
+    page = "" if todos else " LIMIT :limit OFFSET :skip"
     rows = _rows(db, _SELECT_DOCS + f"""
         WHERE {where}
         ORDER BY d.fecha_documento DESC NULLS LAST, d.fecha_subida DESC
-        LIMIT :limit OFFSET :skip
+        {page}
     """, params)
     total = _row(db, f"""
         SELECT COUNT(*) AS c
