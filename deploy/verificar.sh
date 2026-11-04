@@ -171,6 +171,30 @@ else
     PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -c "\d edan" 2>/dev/null | head -30
 fi
 
+# --------------------------------------------------
+# [9] MotorIA
+# --------------------------------------------------
+echo ""
+echo "[9] MotorIA:"
+if PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -t -A -c "SELECT 1 FROM pg_namespace WHERE nspname='motor_ia';" 2>/dev/null | grep -q 1; then
+    ok "Schema motor_ia existe"
+    PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -c "
+    SELECT 'tipos_documento' AS tabla, COUNT(*) AS registros FROM motor_ia.tipos_documento
+    UNION ALL SELECT 'documentos', COUNT(*) FROM motor_ia.documentos
+    UNION ALL SELECT 'chunks', COUNT(*) FROM motor_ia.chunks
+    UNION ALL SELECT 'proveedores_llm', COUNT(*) FROM motor_ia.proveedores_llm
+    UNION ALL SELECT 'grupo_documentos', COUNT(*) FROM motor_ia.grupo_documentos
+    ORDER BY tabla;
+    " 2>/dev/null
+    if PGPASSWORD=$PW psql -h 127.0.0.1 -U $USER -d $DB -t -A -c "SELECT extversion FROM pg_extension WHERE extname='vector';" 2>/dev/null | grep -q .; then
+        ok "Extensión vector instalada"
+    else
+        fail "Extensión vector no instalada"
+    fi
+else
+    fail "Schema motor_ia no existe (aplicar v2.63.0_motor_ia.sql)"
+fi
+
 echo ""
 echo "================================================"
 echo "  VERIFICACION COMPLETADA"

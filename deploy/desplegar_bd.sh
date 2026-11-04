@@ -155,6 +155,17 @@ for MIGRATION in $(ls -1v "$MIGRATIONS_DIR"/migration_*.sql 2>/dev/null); do
         || warn "Migración $NAME falló (revisar)."
 done
 
+# MotorIA requiere superusuario para CREATE EXTENSION vector
+MOTOR_MIGRATION="$MIGRATIONS_DIR/migrations/v2.63.0_motor_ia.sql"
+if [ -f "$MOTOR_MIGRATION" ]; then
+    echo "  Ejecutando migración MotorIA ..."
+    sudo -u postgres psql -d $DB -f "$MOTOR_MIGRATION" >/dev/null 2>&1 \
+        && ok "Migración MotorIA ejecutada" \
+        || warn "Migración MotorIA falló (revisar pgvector)."
+else
+    warn "Migración MotorIA no encontrada: $MOTOR_MIGRATION"
+fi
+
 ok "Migraciones completadas"
 
 # --------------------------------------------------

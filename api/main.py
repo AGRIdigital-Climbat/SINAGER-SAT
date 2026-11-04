@@ -26,6 +26,7 @@ from .rida.solicitudes import solicitudes_router
 from .ayuda_humanitaria import ayuda_humanitaria_router
 from .sinb.router_v2 import router as sinb_router
 from .sinb.router_ndvi import router as ndvi_router
+from .motor_ia.router import router as motor_ia_router
 from .audit import AuditMiddleware
 
 TAGS_METADATA_V1 = [
@@ -100,9 +101,9 @@ V2_ROUTERS = [
     ("rida_necesidades", necesidades_router),
     ("rida_solicitudes", solicitudes_router),
     ("ayuda_humanitaria", ayuda_humanitaria_router),
-    ("almacenes", almacenes_router),
     ("sinb", sinb_router),
     ("sinb_ndvi", ndvi_router),
+    ("motor_ia", motor_ia_router),
 ]
 
 app = FastAPI(

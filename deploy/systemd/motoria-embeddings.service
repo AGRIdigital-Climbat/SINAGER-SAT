@@ -1,0 +1,24 @@
+[Unit]
+Description=MotorIA Embeddings Local (FastEmbed ONNX)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prosuco
+Group=prosuco
+WorkingDirectory=/home/prosuco/SINAGERSAT/BaseData
+ExecStart=/home/prosuco/SINAGERSAT/BaseData/venv/bin/uvicorn services.motoria_embeddings.main:app --host 127.0.0.1 --port 8001 --workers 2
+Restart=on-failure
+RestartSec=10
+Environment=PATH=/home/prosuco/SINAGERSAT/BaseData/venv/bin:/usr/bin:/bin
+EnvironmentFile=/home/prosuco/SINAGERSAT/BaseData/.env
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=MKL_NUM_THREADS=1
+Environment=NUMEXPR_NUM_THREADS=1
+Environment=VECLIB_MAXIMUM_THREADS=1
+Environment=HF_HUB_OFFLINE=1
+
+[Install]
+WantedBy=multi-user.target

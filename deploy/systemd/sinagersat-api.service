@@ -1,16 +1,19 @@
 [Unit]
 Description=SINAGERSAT API REST (FastAPI)
-After=network.target postgresql.service
+After=network.target postgresql.service motoria-embeddings.service
 Requires=postgresql.service
+Wants=motoria-embeddings.service
 
 [Service]
 Type=simple
 User=prosuco
 Group=prosuco
 WorkingDirectory=/home/prosuco/SINAGERSAT/BaseData
-ExecStart=/home/prosuco/SINAGERSAT/BaseData/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=5
+ExecStart=/home/prosuco/SINAGERSAT/BaseData/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 3
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+StartLimitIntervalSec=60
 Environment=PATH=/home/prosuco/SINAGERSAT/BaseData/venv/bin:/usr/bin:/bin
 EnvironmentFile=/home/prosuco/SINAGERSAT/BaseData/.env
 

@@ -155,6 +155,20 @@ if [ "$MODE" != "api" ]; then
         ok "PostGIS instalado"
     fi
 
+    # pgvector (requerido por MotorIA para embeddings)
+    PG_VER=$(psql --version | grep -oP '\d+' | head -1)
+    if dpkg -l | grep -q "postgresql-$PG_VER-pgvector" 2>/dev/null; then
+        ok "pgvector ya instalado"
+    else
+        echo "  Instalando pgvector..."
+        apt-get install -y -qq "postgresql-$PG_VER-pgvector" 2>/dev/null || true
+        if dpkg -l | grep -q "postgresql-$PG_VER-pgvector" 2>/dev/null; then
+            ok "pgvector instalado"
+        else
+            warn "No se pudo instalar pgvector; la migración de MotorIA fallará"
+        fi
+    fi
+
     # Python3 + pip + venv
     if command -v python3 &>/dev/null; then
         PYTHON_VER=$(python3 --version 2>&1 | grep -oP '\d+\.\d+')
@@ -187,6 +201,15 @@ if [ "$MODE" != "api" ]; then
     if ! command -v curl &>/dev/null; then
         apt-get install -y -qq curl
         ok "curl instalado"
+    fi
+
+    # ffmpeg (requerido por Whisper para /voz)
+    if ! command -v ffmpeg &>/dev/null; then
+        echo "  Instalando ffmpeg..."
+        apt-get install -y -qq ffmpeg
+        ok "ffmpeg instalado"
+    else
+        ok "ffmpeg disponible"
     fi
 
 else
@@ -364,11 +387,17 @@ fi
 
 # Instalar dependencias
 echo "  Instalando dependencias Python..."
+# Torch CPU primero: evita que sentence-transformers descargue la variante CUDA
+# (más pesada) y mantiene el consumo de RAM/disco bajo en el servidor.
+if ! sudo -u "$REAL_USER" bash -c "source '$VENV_DIR/bin/activate' && python -c 'import torch'" 2>/dev/null; then
+    sudo -u "$REAL_USER" bash -c "source '$VENV_DIR/bin/activate' && pip install -q torch --index-url https://download.pytorch.org/whl/cpu" \
+        || warn "No se pudo instalar torch CPU; se intentará con las dependencias normales"
+fi
 sudo -u "$REAL_USER" bash -c "source '$VENV_DIR/bin/activate' && pip install -q -r '$PROJECT_DIR/requirements.txt'"
 ok "Dependencias Python instaladas"
 
-# Verificar que uvicorn funciona
-if sudo -u "$REAL_USER" bash -c "source '$VENV_DIR/bin/activate' && python -c 'import uvicorn; import fastapi; import sqlalchemy; print(\"OK\")'" 2>/dev/null; then
+# Verificar que uvicorn y las dependencias de MotorIA funcionan
+if sudo -u "$REAL_USER" bash -c "source '$VENV_DIR/bin/activate' && python -c 'import uvicorn; import fastapi; import sqlalchemy; import pymupdf; import openai; import sentence_transformers; import whisper; print(\"OK\")'" 2>/dev/null; then
     ok "Módulos Python verificados"
 else
     fail "Error al verificar módulos Python"
@@ -436,6 +465,17 @@ if [ "$MODE" = "update" ] || [ "$MODE" = "full" ]; then
     else
         warn "Archivo migration_v1.2.7.sql no encontrado"
     fi
+
+    # Ejecutar migración de MotorIA (requiere superusuario por CREATE EXTENSION)
+    MIGRATION_MOTOR_IA="$PROJECT_DIR/database/migrations/v2.63.0_motor_ia.sql"
+    if [ -f "$MIGRATION_MOTOR_IA" ]; then
+        echo "  Ejecutando migración MotorIA..."
+        sudo -u postgres psql -d $DB -f "$MIGRATION_MOTOR_IA" >/dev/null 2>&1 \
+            && ok "Migración MotorIA ejecutada" \
+            || warn "Migración MotorIA falló; revisar pgvector y permisos"
+    else
+        warn "Archivo migrations/v2.63.0_motor_ia.sql no encontrado"
+    fi
     
     ok "Migraciones completadas"
 fi
@@ -450,6 +490,14 @@ ENV_FILE="$PROJECT_DIR/.env"
 # Detectar IP del servidor para DATABASE_URL
 SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' 2>/dev/null || echo "127.0.0.1")
 
+# Conservar el token de MotorIA si ya existía (evita invalidar clientes)
+EXISTING_API_TOKEN=$(grep '^API_AUTH_TOKEN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
+API_AUTH_TOKEN="${EXISTING_API_TOKEN:-$(openssl rand -hex 32)}"
+EXISTING_LOCAL_TOKEN=$(grep '^EMBEDDINGS_LOCAL_TOKEN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
+EMBEDDINGS_LOCAL_TOKEN="${EMBEDDINGS_LOCAL_TOKEN:-${EXISTING_LOCAL_TOKEN:-$(openssl rand -hex 32)}}"
+EXISTING_GEMINI_EMBEDDINGS_KEY=$(grep '^GEMINI_EMBEDDINGS_API_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
+GEMINI_EMBEDDINGS_API_KEY="${GEMINI_EMBEDDINGS_API_KEY:-$EXISTING_GEMINI_EMBEDDINGS_KEY}"
+
 cat > "$ENV_FILE" << ENVEOF
 # SINAGERSAT API - Configuración de entorno
 # Generado por desplegar_todo.sh el $(date '+%Y-%m-%d %H:%M:%S')
@@ -461,6 +509,37 @@ DATABASE_URL=postgresql://${USER}:${PW}@127.0.0.1:5432/${DB}
 JWT_SECRET=sinagersat-secret-key-change-in-production-2026
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_MINUTES=480
+
+# MotorIA (RAG)
+MOTOR_IA_SCHEMA=motor_ia
+MOTOR_IA_UPLOAD_DIR=uploads/motor_ia
+API_AUTH_TOKEN=${API_AUTH_TOKEN}
+LLM_MODE=external
+LLM_API_BASE=https://api.groq.com/openai/v1
+LLM_MODEL=openai/gpt-oss-20b
+LLM_MAX_TOKENS=512
+LLM_RAZONAMIENTO_TOKENS=2048
+LLM_MASTER_KEY_FILE=.keys/motor_ia_llm_master.key
+# Cargar la clave del proveedor externo (Groq/OpenAI-compatible) o registrar
+# un proveedor desde POST /api/v2/motor-ia/llm/proveedores
+LLM_API_KEY=${LLM_API_KEY:-}
+EMBEDDINGS_MODE=${EMBEDDINGS_MODE:-external}
+EMBEDDINGS_API_BASE=${EMBEDDINGS_API_BASE:-http://127.0.0.1:8001/v1}
+EMBEDDINGS_API_KEY=${EMBEDDINGS_LOCAL_TOKEN}
+EMBEDDINGS_API_MODEL=${EMBEDDINGS_API_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+EMBEDDINGS_LOCAL_MODEL=${EMBEDDINGS_LOCAL_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+EMBEDDINGS_LOCAL_TOKEN=${EMBEDDINGS_LOCAL_TOKEN}
+EMBEDDINGS_LOCAL_MAX_BATCH=${EMBEDDINGS_LOCAL_MAX_BATCH:-128}
+EMBEDDINGS_EXTERNAL_BATCH_SIZE=${EMBEDDINGS_EXTERNAL_BATCH_SIZE:-8}
+GEMINI_EMBEDDINGS_API_KEY=${GEMINI_EMBEDDINGS_API_KEY:-}
+EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+EMBEDDINGS_DIM=${EMBEDDINGS_DIM:-384}
+EMBEDDINGS_IDLE_UNLOAD_SEC=${EMBEDDINGS_IDLE_UNLOAD_SEC:-120}
+EMBEDDINGS_TORCH_THREADS=${EMBEDDINGS_TORCH_THREADS:-1}
+EMBEDDINGS_PROVIDER_NAME=${EMBEDDINGS_PROVIDER_NAME:-local-multilingual}
+EMBEDDINGS_METRICS_ENABLED=${EMBEDDINGS_METRICS_ENABLED:-true}
+EMBEDDINGS_METRICS_PROVIDER=${EMBEDDINGS_METRICS_PROVIDER:-local-multilingual}
+WHISPER_MODEL=tiny
 ENVEOF
 
 # Ajustar permisos
@@ -482,8 +561,29 @@ else
     ok "Directorio de uploads ya existe"
 fi
 
+# MotorIA: documentos PDF y clave maestra de cifrado
+mkdir -p "$PROJECT_DIR/uploads/motor_ia" "$PROJECT_DIR/.keys"
+chown -R "$REAL_USER":"$(id -gn "$REAL_USER")" "$PROJECT_DIR/uploads/motor_ia" "$PROJECT_DIR/.keys" 2>/dev/null || true
+chmod 755 "$PROJECT_DIR/uploads/motor_ia" 2>/dev/null || true
+chmod 700 "$PROJECT_DIR/.keys" 2>/dev/null || true
+ok "Directorios de MotorIA listos (uploads/motor_ia y .keys)"
+
 # ================================================================
-#  7.2 CREAR SCRIPTS DE INICIO
+#  7.2 INSTALAR UNIDADES SYSTEMD DE MOTORIA
+# ================================================================
+if command -v systemctl >/dev/null 2>&1 && [ "${EUID:-$(id -u)}" -eq 0 ]; then
+    step 8 "Instalando unidades systemd de SINAGERSAT y MotorIA..."
+    cp "$PROJECT_DIR/deploy/systemd/sinagersat-api.service" /etc/systemd/system/sinagersat-api.service 2>/dev/null || true
+    cp "$PROJECT_DIR/deploy/systemd/motoria-embeddings.service" /etc/systemd/system/motoria-embeddings.service 2>/dev/null || true
+    systemctl daemon-reload
+    systemctl enable motoria-embeddings.service 2>/dev/null || true
+    ok "Unidades systemd instaladas"
+else
+    ok "Saltando instalacion de systemd (no es root o no hay systemctl)"
+fi
+
+# ================================================================
+#  7.3 CREAR SCRIPTS DE INICIO
 # ================================================================
 step 8 "Generando scripts de inicio..."
 
