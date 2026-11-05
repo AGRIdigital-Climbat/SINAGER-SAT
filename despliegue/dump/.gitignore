@@ -1,0 +1,3 @@
+# Los dumps de BD son regenerables con: bash despliegue/scripts/generar_dump.sh
+# No se suben a GitHub (exceden el límite de 100MB por archivo).
+*.sql

@@ -1,0 +1,15 @@
+-- SINAGERSAT v1.2.7
+-- Fecha: 2026-07-29
+-- No requiere cambios en esquema de BD.
+-- Solo cambios en lógica de API:
+--
+-- 1. PUT /rea/reportes/{id}/estado:
+--    Rol 6 puede cambiar estado de reportes de rol 7 en el mismo municipio.
+--    Rol 7 solo sus propios reportes (sin cambio).
+--    Roles 1-5 sin restricción (sin cambio).
+--
+-- 2. GET /auth/mis-permisos:
+--    Bugfix: faltaba campo "message" en SuccessResponse (causaba 500).
+--
+-- 3. get_current_user:
+--    Ahora incluye id_municipio en el payload (necesario para la regla de rol 6).
