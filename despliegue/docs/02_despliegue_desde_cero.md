@@ -17,7 +17,7 @@ Guía paso a paso para instalar SINAGERSAT completo en un servidor nuevo: Postgr
 ├── services/               ← MotorIA embeddings
 ├── requirements.txt
 ├── despliegue/             ← ESTA CARPETA
-│   ├── dump/               ← dump de BD
+│   ├── dump/               ← dump de BD (3 partes .sql.gz.?? si viene de GitHub)
 │   ├── migraciones/        ← migraciones SQL
 │   ├── scripts/            ← comandos de instalación
 │   └── docs/               ← esta documentación
@@ -70,6 +70,9 @@ bash despliegue/scripts/00_requisitos.sh
 sudo bash despliegue/scripts/01_instalar_postgres.sh
 
 # 3. Restaurar BD (dump con todos los esquemas)
+#    Si el dump está en partes (desde GitHub), ensamblar primero:
+#      bash despliegue/scripts/ensamblar_dump.sh
+#    (o directamente: 02_restaurar_bd.sh auto-detecta las partes)
 sudo bash despliegue/scripts/02_restaurar_bd.sh
 
 # 4. Entorno Python + dependencias

@@ -45,12 +45,21 @@ if ! pg_isready -q 2>/dev/null; then
 fi
 ok "PostgreSQL corriendo"
 
-# [2] Encontrar dump más reciente
+# [2] Encontrar dump más reciente (o ensamblar desde partes)
 step "[2/6] Buscando dump de BD..."
 BACKUP=$(ls -1t "$DUMP_DIR"/db_sinagersat_*.sql 2>/dev/null | head -1)
 if [ -z "$BACKUP" ] || [ ! -s "$BACKUP" ]; then
+    # ¿Hay partes comprimidas? → ensamblar
+    if ls "$DUMP_DIR"/db_sinagersat_*.sql.gz.[0-9][0-9] &>/dev/null || ls "$DUMP_DIR"/db_sinagersat_*.sql.gz.[a-z][a-z] &>/dev/null; then
+        echo "  Dump no encontrado, pero hay partes — ensamblando..."
+        bash "$SCRIPT_DIR/ensamblar_dump.sh"
+        BACKUP=$(ls -1t "$DUMP_DIR"/db_sinagersat_*.sql 2>/dev/null | head -1)
+    fi
+fi
+if [ -z "$BACKUP" ] || [ ! -s "$BACKUP" ]; then
     fail "No se encontró dump en $DUMP_DIR/"
     echo "  Esperado: db_sinagersat_YYYYMMDD_HHMMSS.sql"
+    echo "  O partes: db_*.sql.gz.00 .01 ... (ensamblar con ensamblar_dump.sh)"
     exit 1
 fi
 BACKUP_SIZE=$(du -h "$BACKUP" | cut -f1)

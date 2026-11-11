@@ -1,3 +1,7 @@
-# Los dumps de BD son regenerables con: bash despliegue/scripts/generar_dump.sh
-# No se suben a GitHub (exceden el límite de 100MB por archivo).
+# Dumps crudos: NO subir a GitHub (límite 100MB por archivo).
+# Reconstruibles con: bash despliegue/scripts/ensamblar_dump.sh
 *.sql
+*.sql.gz
+
+# SÍ se suben las partes comprimidas del dump (<50MB cada una)
+!*.sql.gz.??
