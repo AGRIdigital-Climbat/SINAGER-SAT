@@ -1,0 +1,1735 @@
+{
+ "_descripcion": "Verificacion cruzada contra la MICRODATA OFICIAL INE CPV-2024 (no requerida para la carga; sirve de fixture de regresion en el servidor limpio). Agregada por (idep||iprov||imun) = shared.municipio.codigo_ine. Particular = v01_tipoviv 1-6; viviendas = 1-14; hogares = particular y v02_condocup in {0,1}; poblacion = filas de Persona_CPV-2024.csv.",
+ "fuente_url": "https://nimbus.ine.gob.bo/index.php/s/qEmK9gnkGCZ3K7D/download",
+ "fuente_pagina": "https://cpv2024.ine.gob.bo/index.php/principal/descargas/",
+ "fuente_sha256": "9c41c13e655b99bbe4944801953b70678317e3ae9599f35d791e1262ab372160",
+ "fecha_verificacion": "2026-11-14",
+ "nacional": {
+  "hogares": 3623711,
+  "viviendas": 4480201,
+  "poblacion": 11365333,
+  "hogares_todos": 3623711,
+  "viviendas_todas": 4480201,
+  "poblacion_todos": 11365333,
+  "viviendas_particulares": 4463773,
+  "viviendas_colectivas": 16428,
+  "poblacion_en_viviendas_particulares": 11134130
+ },
+ "por_municipio": {
+  "010101": {
+   "hogares": 92531,
+   "viviendas": 113009,
+   "poblacion": 296746
+  },
+  "010102": {
+   "hogares": 3056,
+   "viviendas": 4924,
+   "poblacion": 9256
+  },
+  "010103": {
+   "hogares": 4654,
+   "viviendas": 6717,
+   "poblacion": 13649
+  },
+  "010201": {
+   "hogares": 2450,
+   "viviendas": 4323,
+   "poblacion": 7903
+  },
+  "010202": {
+   "hogares": 4598,
+   "viviendas": 6606,
+   "poblacion": 16812
+  },
+  "010301": {
+   "hogares": 3187,
+   "viviendas": 3652,
+   "poblacion": 13694
+  },
+  "010302": {
+   "hogares": 3271,
+   "viviendas": 4303,
+   "poblacion": 12539
+  },
+  "010303": {
+   "hogares": 2543,
+   "viviendas": 3985,
+   "poblacion": 9055
+  },
+  "010304": {
+   "hogares": 2635,
+   "viviendas": 4138,
+   "poblacion": 9155
+  },
+  "010401": {
+   "hogares": 3186,
+   "viviendas": 4906,
+   "poblacion": 9192
+  },
+  "010402": {
+   "hogares": 2243,
+   "viviendas": 3620,
+   "poblacion": 8509
+  },
+  "010403": {
+   "hogares": 2087,
+   "viviendas": 3092,
+   "poblacion": 6942
+  },
+  "010404": {
+   "hogares": 1189,
+   "viviendas": 1671,
+   "poblacion": 3768
+  },
+  "010405": {
+   "hogares": 1439,
+   "viviendas": 1956,
+   "poblacion": 5654
+  },
+  "010501": {
+   "hogares": 7742,
+   "viviendas": 9941,
+   "poblacion": 24546
+  },
+  "010502": {
+   "hogares": 2301,
+   "viviendas": 3191,
+   "poblacion": 7200
+  },
+  "010601": {
+   "hogares": 4279,
+   "viviendas": 6268,
+   "poblacion": 13323
+  },
+  "010602": {
+   "hogares": 3069,
+   "viviendas": 4045,
+   "poblacion": 8480
+  },
+  "010701": {
+   "hogares": 5047,
+   "viviendas": 7103,
+   "poblacion": 14713
+  },
+  "010702": {
+   "hogares": 8651,
+   "viviendas": 15001,
+   "poblacion": 26715
+  },
+  "010703": {
+   "hogares": 4071,
+   "viviendas": 4631,
+   "poblacion": 16484
+  },
+  "010704": {
+   "hogares": 4000,
+   "viviendas": 5459,
+   "poblacion": 14282
+  },
+  "010801": {
+   "hogares": 3187,
+   "viviendas": 5819,
+   "poblacion": 9107
+  },
+  "010901": {
+   "hogares": 1371,
+   "viviendas": 1829,
+   "poblacion": 5375
+  },
+  "010902": {
+   "hogares": 4660,
+   "viviendas": 7215,
+   "poblacion": 14848
+  },
+  "010903": {
+   "hogares": 1280,
+   "viviendas": 1458,
+   "poblacion": 5016
+  },
+  "011001": {
+   "hogares": 3136,
+   "viviendas": 3810,
+   "poblacion": 13282
+  },
+  "011002": {
+   "hogares": 818,
+   "viviendas": 1007,
+   "poblacion": 2547
+  },
+  "011003": {
+   "hogares": 2288,
+   "viviendas": 2754,
+   "poblacion": 7235
+  },
+  "020101": {
+   "hogares": 250931,
+   "viviendas": 312222,
+   "poblacion": 757431
+  },
+  "020102": {
+   "hogares": 7585,
+   "viviendas": 8950,
+   "poblacion": 21729
+  },
+  "020103": {
+   "hogares": 6849,
+   "viviendas": 9078,
+   "poblacion": 20446
+  },
+  "020104": {
+   "hogares": 16297,
+   "viviendas": 20904,
+   "poblacion": 46188
+  },
+  "020105": {
+   "hogares": 297898,
+   "viviendas": 382080,
+   "poblacion": 885825
+  },
+  "020201": {
+   "hogares": 18316,
+   "viviendas": 23545,
+   "poblacion": 47257
+  },
+  "020202": {
+   "hogares": 6737,
+   "viviendas": 7776,
+   "poblacion": 16953
+  },
+  "020203": {
+   "hogares": 3956,
+   "viviendas": 5069,
+   "poblacion": 8679
+  },
+  "020204": {
+   "hogares": 4479,
+   "viviendas": 5618,
+   "poblacion": 9287
+  },
+  "020205": {
+   "hogares": 2509,
+   "viviendas": 2968,
+   "poblacion": 5118
+  },
+  "020206": {
+   "hogares": 2631,
+   "viviendas": 2982,
+   "poblacion": 7226
+  },
+  "020301": {
+   "hogares": 5244,
+   "viviendas": 7111,
+   "poblacion": 13551
+  },
+  "020302": {
+   "hogares": 5233,
+   "viviendas": 6959,
+   "poblacion": 15570
+  },
+  "020303": {
+   "hogares": 5108,
+   "viviendas": 7554,
+   "poblacion": 12219
+  },
+  "020304": {
+   "hogares": 1930,
+   "viviendas": 2178,
+   "poblacion": 5238
+  },
+  "020305": {
+   "hogares": 1742,
+   "viviendas": 2419,
+   "poblacion": 4221
+  },
+  "020306": {
+   "hogares": 1463,
+   "viviendas": 1573,
+   "poblacion": 6442
+  },
+  "020307": {
+   "hogares": 1213,
+   "viviendas": 1477,
+   "poblacion": 4022
+  },
+  "020308": {
+   "hogares": 3569,
+   "viviendas": 4811,
+   "poblacion": 8037
+  },
+  "020401": {
+   "hogares": 6604,
+   "viviendas": 8080,
+   "poblacion": 14012
+  },
+  "020402": {
+   "hogares": 8013,
+   "viviendas": 9366,
+   "poblacion": 17811
+  },
+  "020403": {
+   "hogares": 7065,
+   "viviendas": 8215,
+   "poblacion": 17336
+  },
+  "020404": {
+   "hogares": 2527,
+   "viviendas": 2909,
+   "poblacion": 5658
+  },
+  "020405": {
+   "hogares": 4116,
+   "viviendas": 4686,
+   "poblacion": 8837
+  },
+  "020501": {
+   "hogares": 6388,
+   "viviendas": 7368,
+   "poblacion": 17830
+  },
+  "020502": {
+   "hogares": 3494,
+   "viviendas": 4583,
+   "poblacion": 9029
+  },
+  "020503": {
+   "hogares": 2500,
+   "viviendas": 3190,
+   "poblacion": 6721
+  },
+  "020601": {
+   "hogares": 11459,
+   "viviendas": 13245,
+   "poblacion": 30083
+  },
+  "020602": {
+   "hogares": 6269,
+   "viviendas": 7235,
+   "poblacion": 16386
+  },
+  "020603": {
+   "hogares": 4152,
+   "viviendas": 4589,
+   "poblacion": 9761
+  },
+  "020604": {
+   "hogares": 1391,
+   "viviendas": 1507,
+   "poblacion": 4224
+  },
+  "020605": {
+   "hogares": 1425,
+   "viviendas": 1556,
+   "poblacion": 3529
+  },
+  "020606": {
+   "hogares": 3243,
+   "viviendas": 4338,
+   "poblacion": 7716
+  },
+  "020607": {
+   "hogares": 6898,
+   "viviendas": 7858,
+   "poblacion": 21843
+  },
+  "020608": {
+   "hogares": 4602,
+   "viviendas": 5166,
+   "poblacion": 13379
+  },
+  "020701": {
+   "hogares": 6164,
+   "viviendas": 8217,
+   "poblacion": 19156
+  },
+  "020702": {
+   "hogares": 3068,
+   "viviendas": 4279,
+   "poblacion": 9060
+  },
+  "020801": {
+   "hogares": 41941,
+   "viviendas": 53518,
+   "poblacion": 113554
+  },
+  "020802": {
+   "hogares": 3220,
+   "viviendas": 4386,
+   "poblacion": 8592
+  },
+  "020803": {
+   "hogares": 4653,
+   "viviendas": 5624,
+   "poblacion": 13648
+  },
+  "020804": {
+   "hogares": 2675,
+   "viviendas": 3430,
+   "poblacion": 7897
+  },
+  "020805": {
+   "hogares": 3114,
+   "viviendas": 3988,
+   "poblacion": 7936
+  },
+  "020806": {
+   "hogares": 5887,
+   "viviendas": 7552,
+   "poblacion": 17016
+  },
+  "020807": {
+   "hogares": 2562,
+   "viviendas": 3101,
+   "poblacion": 7540
+  },
+  "020901": {
+   "hogares": 4434,
+   "viviendas": 5432,
+   "poblacion": 10703
+  },
+  "020902": {
+   "hogares": 6638,
+   "viviendas": 7720,
+   "poblacion": 16497
+  },
+  "020903": {
+   "hogares": 4142,
+   "viviendas": 4703,
+   "poblacion": 12296
+  },
+  "020904": {
+   "hogares": 1777,
+   "viviendas": 2093,
+   "poblacion": 5297
+  },
+  "020905": {
+   "hogares": 4892,
+   "viviendas": 5619,
+   "poblacion": 13598
+  },
+  "021001": {
+   "hogares": 7144,
+   "viviendas": 8429,
+   "poblacion": 18679
+  },
+  "021002": {
+   "hogares": 4434,
+   "viviendas": 5727,
+   "poblacion": 10887
+  },
+  "021003": {
+   "hogares": 5809,
+   "viviendas": 6454,
+   "poblacion": 15565
+  },
+  "021004": {
+   "hogares": 7870,
+   "viviendas": 9795,
+   "poblacion": 23505
+  },
+  "021005": {
+   "hogares": 3455,
+   "viviendas": 3905,
+   "poblacion": 9552
+  },
+  "021006": {
+   "hogares": 1871,
+   "viviendas": 1942,
+   "poblacion": 7877
+  },
+  "021101": {
+   "hogares": 7214,
+   "viviendas": 9052,
+   "poblacion": 18303
+  },
+  "021102": {
+   "hogares": 9458,
+   "viviendas": 11381,
+   "poblacion": 23279
+  },
+  "021103": {
+   "hogares": 2998,
+   "viviendas": 3428,
+   "poblacion": 7615
+  },
+  "021104": {
+   "hogares": 11630,
+   "viviendas": 13001,
+   "poblacion": 27137
+  },
+  "021105": {
+   "hogares": 18380,
+   "viviendas": 21227,
+   "poblacion": 45587
+  },
+  "021201": {
+   "hogares": 21459,
+   "viviendas": 26151,
+   "poblacion": 49850
+  },
+  "021202": {
+   "hogares": 13613,
+   "viviendas": 16532,
+   "poblacion": 38652
+  },
+  "021203": {
+   "hogares": 8503,
+   "viviendas": 10492,
+   "poblacion": 20607
+  },
+  "021204": {
+   "hogares": 3188,
+   "viviendas": 3559,
+   "poblacion": 7900
+  },
+  "021301": {
+   "hogares": 12627,
+   "viviendas": 15143,
+   "poblacion": 33885
+  },
+  "021302": {
+   "hogares": 3921,
+   "viviendas": 6275,
+   "poblacion": 9102
+  },
+  "021303": {
+   "hogares": 4794,
+   "viviendas": 5654,
+   "poblacion": 11258
+  },
+  "021304": {
+   "hogares": 5467,
+   "viviendas": 6478,
+   "poblacion": 15327
+  },
+  "021305": {
+   "hogares": 9347,
+   "viviendas": 12196,
+   "poblacion": 25148
+  },
+  "021306": {
+   "hogares": 4480,
+   "viviendas": 5561,
+   "poblacion": 12490
+  },
+  "021307": {
+   "hogares": 1653,
+   "viviendas": 1946,
+   "poblacion": 5526
+  },
+  "021401": {
+   "hogares": 10376,
+   "viviendas": 11497,
+   "poblacion": 27711
+  },
+  "021402": {
+   "hogares": 8913,
+   "viviendas": 10378,
+   "poblacion": 23530
+  },
+  "021501": {
+   "hogares": 3306,
+   "viviendas": 4112,
+   "poblacion": 12595
+  },
+  "021502": {
+   "hogares": 2849,
+   "viviendas": 3595,
+   "poblacion": 10105
+  },
+  "021601": {
+   "hogares": 5022,
+   "viviendas": 5843,
+   "poblacion": 15763
+  },
+  "021602": {
+   "hogares": 1656,
+   "viviendas": 1952,
+   "poblacion": 6611
+  },
+  "021701": {
+   "hogares": 6817,
+   "viviendas": 9144,
+   "poblacion": 17463
+  },
+  "021702": {
+   "hogares": 3631,
+   "viviendas": 4447,
+   "poblacion": 9164
+  },
+  "021703": {
+   "hogares": 1474,
+   "viviendas": 1534,
+   "poblacion": 7525
+  },
+  "021801": {
+   "hogares": 3484,
+   "viviendas": 5292,
+   "poblacion": 9217
+  },
+  "021802": {
+   "hogares": 2888,
+   "viviendas": 4652,
+   "poblacion": 6649
+  },
+  "021803": {
+   "hogares": 881,
+   "viviendas": 1238,
+   "poblacion": 2052
+  },
+  "021901": {
+   "hogares": 2956,
+   "viviendas": 4036,
+   "poblacion": 6805
+  },
+  "021902": {
+   "hogares": 1695,
+   "viviendas": 1930,
+   "poblacion": 5351
+  },
+  "022001": {
+   "hogares": 21081,
+   "viviendas": 23854,
+   "poblacion": 59676
+  },
+  "022002": {
+   "hogares": 4491,
+   "viviendas": 5083,
+   "poblacion": 10585
+  },
+  "030101": {
+   "hogares": 212273,
+   "viviendas": 257462,
+   "poblacion": 665505
+  },
+  "030201": {
+   "hogares": 7123,
+   "viviendas": 10716,
+   "poblacion": 23123
+  },
+  "030202": {
+   "hogares": 1753,
+   "viviendas": 2032,
+   "poblacion": 6475
+  },
+  "030203": {
+   "hogares": 1920,
+   "viviendas": 2557,
+   "poblacion": 6700
+  },
+  "030301": {
+   "hogares": 8442,
+   "viviendas": 11726,
+   "poblacion": 21815
+  },
+  "030302": {
+   "hogares": 5081,
+   "viviendas": 6349,
+   "poblacion": 14720
+  },
+  "030303": {
+   "hogares": 7511,
+   "viviendas": 9204,
+   "poblacion": 19608
+  },
+  "030401": {
+   "hogares": 4030,
+   "viviendas": 5271,
+   "poblacion": 11273
+  },
+  "030402": {
+   "hogares": 3362,
+   "viviendas": 4399,
+   "poblacion": 7335
+  },
+  "030403": {
+   "hogares": 10848,
+   "viviendas": 14631,
+   "poblacion": 29375
+  },
+  "030404": {
+   "hogares": 1856,
+   "viviendas": 2399,
+   "poblacion": 4987
+  },
+  "030501": {
+   "hogares": 4241,
+   "viviendas": 5987,
+   "poblacion": 11183
+  },
+  "030502": {
+   "hogares": 3606,
+   "viviendas": 5560,
+   "poblacion": 8409
+  },
+  "030601": {
+   "hogares": 3900,
+   "viviendas": 6071,
+   "poblacion": 10632
+  },
+  "030602": {
+   "hogares": 4226,
+   "viviendas": 5711,
+   "poblacion": 10750
+  },
+  "030701": {
+   "hogares": 6991,
+   "viviendas": 9371,
+   "poblacion": 19427
+  },
+  "030702": {
+   "hogares": 3008,
+   "viviendas": 4325,
+   "poblacion": 7940
+  },
+  "030703": {
+   "hogares": 1319,
+   "viviendas": 1581,
+   "poblacion": 3980
+  },
+  "030801": {
+   "hogares": 6338,
+   "viviendas": 8424,
+   "poblacion": 21155
+  },
+  "030802": {
+   "hogares": 2572,
+   "viviendas": 3168,
+   "poblacion": 7382
+  },
+  "030803": {
+   "hogares": 2516,
+   "viviendas": 3575,
+   "poblacion": 8687
+  },
+  "030901": {
+   "hogares": 49171,
+   "viviendas": 58675,
+   "poblacion": 166741
+  },
+  "030902": {
+   "hogares": 17824,
+   "viviendas": 22082,
+   "poblacion": 55908
+  },
+  "030903": {
+   "hogares": 17932,
+   "viviendas": 21451,
+   "poblacion": 61840
+  },
+  "030904": {
+   "hogares": 17058,
+   "viviendas": 20723,
+   "poblacion": 56064
+  },
+  "030905": {
+   "hogares": 19190,
+   "viviendas": 22460,
+   "poblacion": 66505
+  },
+  "031001": {
+   "hogares": 69313,
+   "viviendas": 83945,
+   "poblacion": 219092
+  },
+  "031002": {
+   "hogares": 8493,
+   "viviendas": 11242,
+   "poblacion": 21846
+  },
+  "031003": {
+   "hogares": 41951,
+   "viviendas": 50246,
+   "poblacion": 93747
+  },
+  "031101": {
+   "hogares": 9638,
+   "viviendas": 12845,
+   "poblacion": 24666
+  },
+  "031201": {
+   "hogares": 5351,
+   "viviendas": 8109,
+   "poblacion": 14821
+  },
+  "031202": {
+   "hogares": 3705,
+   "viviendas": 5455,
+   "poblacion": 11865
+  },
+  "031203": {
+   "hogares": 4853,
+   "viviendas": 6881,
+   "poblacion": 12258
+  },
+  "031204": {
+   "hogares": 10557,
+   "viviendas": 12788,
+   "poblacion": 27521
+  },
+  "031205": {
+   "hogares": 25497,
+   "viviendas": 30056,
+   "poblacion": 64595
+  },
+  "031206": {
+   "hogares": 18178,
+   "viviendas": 20055,
+   "poblacion": 45780
+  },
+  "031301": {
+   "hogares": 6879,
+   "viviendas": 9419,
+   "poblacion": 19896
+  },
+  "031302": {
+   "hogares": 1867,
+   "viviendas": 2270,
+   "poblacion": 5244
+  },
+  "031303": {
+   "hogares": 1278,
+   "viviendas": 1649,
+   "poblacion": 3512
+  },
+  "031304": {
+   "hogares": 2644,
+   "viviendas": 4630,
+   "poblacion": 8056
+  },
+  "031401": {
+   "hogares": 11318,
+   "viviendas": 15016,
+   "poblacion": 35248
+  },
+  "031402": {
+   "hogares": 3262,
+   "viviendas": 4972,
+   "poblacion": 8599
+  },
+  "031403": {
+   "hogares": 4327,
+   "viviendas": 6482,
+   "poblacion": 13054
+  },
+  "031404": {
+   "hogares": 485,
+   "viviendas": 708,
+   "poblacion": 1287
+  },
+  "031405": {
+   "hogares": 1057,
+   "viviendas": 1224,
+   "poblacion": 3822
+  },
+  "031501": {
+   "hogares": 3211,
+   "viviendas": 4346,
+   "poblacion": 8282
+  },
+  "031601": {
+   "hogares": 6678,
+   "viviendas": 10771,
+   "poblacion": 18475
+  },
+  "031602": {
+   "hogares": 10431,
+   "viviendas": 12497,
+   "poblacion": 27172
+  },
+  "040101": {
+   "hogares": 96123,
+   "viviendas": 132976,
+   "poblacion": 298350
+  },
+  "040102": {
+   "hogares": 7972,
+   "viviendas": 10913,
+   "poblacion": 22850
+  },
+  "040103": {
+   "hogares": 3844,
+   "viviendas": 4702,
+   "poblacion": 9997
+  },
+  "040104": {
+   "hogares": 5464,
+   "viviendas": 6925,
+   "poblacion": 15764
+  },
+  "040201": {
+   "hogares": 13543,
+   "viviendas": 20007,
+   "poblacion": 35427
+  },
+  "040202": {
+   "hogares": 2326,
+   "viviendas": 3410,
+   "poblacion": 5161
+  },
+  "040301": {
+   "hogares": 4667,
+   "viviendas": 7925,
+   "poblacion": 16101
+  },
+  "040302": {
+   "hogares": 671,
+   "viviendas": 1199,
+   "poblacion": 2504
+  },
+  "040401": {
+   "hogares": 1987,
+   "viviendas": 3525,
+   "poblacion": 6683
+  },
+  "040402": {
+   "hogares": 1760,
+   "viviendas": 3053,
+   "poblacion": 5803
+  },
+  "040501": {
+   "hogares": 1192,
+   "viviendas": 1686,
+   "poblacion": 4011
+  },
+  "040502": {
+   "hogares": 1055,
+   "viviendas": 1244,
+   "poblacion": 4231
+  },
+  "040503": {
+   "hogares": 352,
+   "viviendas": 703,
+   "poblacion": 1517
+  },
+  "040504": {
+   "hogares": 173,
+   "viviendas": 249,
+   "poblacion": 875
+  },
+  "040505": {
+   "hogares": 873,
+   "viviendas": 924,
+   "poblacion": 3882
+  },
+  "040601": {
+   "hogares": 3662,
+   "viviendas": 4625,
+   "poblacion": 9189
+  },
+  "040602": {
+   "hogares": 1769,
+   "viviendas": 2619,
+   "poblacion": 4251
+  },
+  "040603": {
+   "hogares": 1450,
+   "viviendas": 2452,
+   "poblacion": 3666
+  },
+  "040701": {
+   "hogares": 6423,
+   "viviendas": 8505,
+   "poblacion": 20118
+  },
+  "040702": {
+   "hogares": 2176,
+   "viviendas": 2849,
+   "poblacion": 6120
+  },
+  "040801": {
+   "hogares": 5969,
+   "viviendas": 7893,
+   "poblacion": 15934
+  },
+  "040802": {
+   "hogares": 1275,
+   "viviendas": 2096,
+   "poblacion": 3197
+  },
+  "040901": {
+   "hogares": 3855,
+   "viviendas": 5267,
+   "poblacion": 15504
+  },
+  "040902": {
+   "hogares": 357,
+   "viviendas": 402,
+   "poblacion": 1406
+  },
+  "040903": {
+   "hogares": 1105,
+   "viviendas": 1854,
+   "poblacion": 2355
+  },
+  "041001": {
+   "hogares": 4732,
+   "viviendas": 6244,
+   "poblacion": 12202
+  },
+  "041101": {
+   "hogares": 1936,
+   "viviendas": 2792,
+   "poblacion": 5335
+  },
+  "041201": {
+   "hogares": 2285,
+   "viviendas": 4716,
+   "poblacion": 6311
+  },
+  "041202": {
+   "hogares": 1099,
+   "viviendas": 1674,
+   "poblacion": 3061
+  },
+  "041301": {
+   "hogares": 2648,
+   "viviendas": 4556,
+   "poblacion": 6637
+  },
+  "041401": {
+   "hogares": 4639,
+   "viviendas": 6785,
+   "poblacion": 13502
+  },
+  "041501": {
+   "hogares": 283,
+   "viviendas": 415,
+   "poblacion": 1262
+  },
+  "041502": {
+   "hogares": 329,
+   "viviendas": 464,
+   "poblacion": 1140
+  },
+  "041503": {
+   "hogares": 257,
+   "viviendas": 369,
+   "poblacion": 1129
+  },
+  "041601": {
+   "hogares": 2722,
+   "viviendas": 4687,
+   "poblacion": 5996
+  },
+  "050101": {
+   "hogares": 67379,
+   "viviendas": 78713,
+   "poblacion": 218702
+  },
+  "050102": {
+   "hogares": 9796,
+   "viviendas": 11428,
+   "poblacion": 28942
+  },
+  "050103": {
+   "hogares": 4191,
+   "viviendas": 4986,
+   "poblacion": 12253
+  },
+  "050104": {
+   "hogares": 1221,
+   "viviendas": 1847,
+   "poblacion": 3121
+  },
+  "050201": {
+   "hogares": 8437,
+   "viviendas": 10632,
+   "poblacion": 22768
+  },
+  "050202": {
+   "hogares": 5658,
+   "viviendas": 6959,
+   "poblacion": 16021
+  },
+  "050203": {
+   "hogares": 16017,
+   "viviendas": 19793,
+   "poblacion": 41686
+  },
+  "050204": {
+   "hogares": 3032,
+   "viviendas": 3725,
+   "poblacion": 8220
+  },
+  "050301": {
+   "hogares": 10921,
+   "viviendas": 13586,
+   "poblacion": 31904
+  },
+  "050302": {
+   "hogares": 3482,
+   "viviendas": 4644,
+   "poblacion": 9285
+  },
+  "050303": {
+   "hogares": 5181,
+   "viviendas": 6154,
+   "poblacion": 14366
+  },
+  "050401": {
+   "hogares": 6497,
+   "viviendas": 7417,
+   "poblacion": 16363
+  },
+  "050402": {
+   "hogares": 6880,
+   "viviendas": 9949,
+   "poblacion": 16909
+  },
+  "050403": {
+   "hogares": 12538,
+   "viviendas": 14677,
+   "poblacion": 32641
+  },
+  "050404": {
+   "hogares": 6181,
+   "viviendas": 7205,
+   "poblacion": 14532
+  },
+  "050405": {
+   "hogares": 8438,
+   "viviendas": 10789,
+   "poblacion": 21011
+  },
+  "050501": {
+   "hogares": 11303,
+   "viviendas": 15028,
+   "poblacion": 28416
+  },
+  "050502": {
+   "hogares": 4192,
+   "viviendas": 5683,
+   "poblacion": 10714
+  },
+  "050601": {
+   "hogares": 11224,
+   "viviendas": 13226,
+   "poblacion": 29221
+  },
+  "050602": {
+   "hogares": 3880,
+   "viviendas": 6153,
+   "poblacion": 10184
+  },
+  "050701": {
+   "hogares": 6779,
+   "viviendas": 9210,
+   "poblacion": 17205
+  },
+  "050702": {
+   "hogares": 3517,
+   "viviendas": 4901,
+   "poblacion": 8458
+  },
+  "050801": {
+   "hogares": 15876,
+   "viviendas": 19891,
+   "poblacion": 45590
+  },
+  "050802": {
+   "hogares": 3751,
+   "viviendas": 4791,
+   "poblacion": 9610
+  },
+  "050901": {
+   "hogares": 4165,
+   "viviendas": 6618,
+   "poblacion": 12740
+  },
+  "050902": {
+   "hogares": 657,
+   "viviendas": 892,
+   "poblacion": 1621
+  },
+  "051001": {
+   "hogares": 1111,
+   "viviendas": 1750,
+   "poblacion": 3150
+  },
+  "051002": {
+   "hogares": 324,
+   "viviendas": 434,
+   "poblacion": 1025
+  },
+  "051003": {
+   "hogares": 690,
+   "viviendas": 1111,
+   "poblacion": 1936
+  },
+  "051101": {
+   "hogares": 6251,
+   "viviendas": 10251,
+   "poblacion": 16389
+  },
+  "051102": {
+   "hogares": 4643,
+   "viviendas": 6048,
+   "poblacion": 12999
+  },
+  "051103": {
+   "hogares": 4203,
+   "viviendas": 5786,
+   "poblacion": 14338
+  },
+  "051201": {
+   "hogares": 13134,
+   "viviendas": 16915,
+   "poblacion": 35318
+  },
+  "051202": {
+   "hogares": 3317,
+   "viviendas": 4891,
+   "poblacion": 7845
+  },
+  "051203": {
+   "hogares": 5286,
+   "viviendas": 5926,
+   "poblacion": 14654
+  },
+  "051204": {
+   "hogares": 2607,
+   "viviendas": 3715,
+   "poblacion": 5819
+  },
+  "051301": {
+   "hogares": 1457,
+   "viviendas": 2112,
+   "poblacion": 3666
+  },
+  "051302": {
+   "hogares": 1831,
+   "viviendas": 2735,
+   "poblacion": 4471
+  },
+  "051401": {
+   "hogares": 1856,
+   "viviendas": 2791,
+   "poblacion": 4187
+  },
+  "051402": {
+   "hogares": 742,
+   "viviendas": 942,
+   "poblacion": 1546
+  },
+  "051501": {
+   "hogares": 14433,
+   "viviendas": 17031,
+   "poblacion": 49340
+  },
+  "051601": {
+   "hogares": 667,
+   "viviendas": 1213,
+   "poblacion": 2126
+  },
+  "060101": {
+   "hogares": 72709,
+   "viviendas": 90000,
+   "poblacion": 238749
+  },
+  "060201": {
+   "hogares": 5649,
+   "viviendas": 8065,
+   "poblacion": 17817
+  },
+  "060202": {
+   "hogares": 10626,
+   "viviendas": 12279,
+   "poblacion": 36970
+  },
+  "060301": {
+   "hogares": 27308,
+   "viviendas": 31559,
+   "poblacion": 97634
+  },
+  "060302": {
+   "hogares": 4684,
+   "viviendas": 5727,
+   "poblacion": 15559
+  },
+  "060303": {
+   "hogares": 14040,
+   "viviendas": 17454,
+   "poblacion": 46071
+  },
+  "060401": {
+   "hogares": 4916,
+   "viviendas": 6843,
+   "poblacion": 15923
+  },
+  "060402": {
+   "hogares": 1530,
+   "viviendas": 2112,
+   "poblacion": 4754
+  },
+  "060501": {
+   "hogares": 9336,
+   "viviendas": 12907,
+   "poblacion": 30346
+  },
+  "060502": {
+   "hogares": 3240,
+   "viviendas": 4515,
+   "poblacion": 9523
+  },
+  "060601": {
+   "hogares": 6216,
+   "viviendas": 8150,
+   "poblacion": 20864
+  },
+  "070101": {
+   "hogares": 453158,
+   "viviendas": 516057,
+   "poblacion": 1610982
+  },
+  "070102": {
+   "hogares": 27833,
+   "viviendas": 33880,
+   "poblacion": 106603
+  },
+  "070103": {
+   "hogares": 6642,
+   "viviendas": 8151,
+   "poblacion": 23126
+  },
+  "070104": {
+   "hogares": 40267,
+   "viviendas": 46065,
+   "poblacion": 147726
+  },
+  "070105": {
+   "hogares": 16612,
+   "viviendas": 19564,
+   "poblacion": 55697
+  },
+  "070201": {
+   "hogares": 40597,
+   "viviendas": 47809,
+   "poblacion": 151248
+  },
+  "070202": {
+   "hogares": 2896,
+   "viviendas": 3504,
+   "poblacion": 10665
+  },
+  "070301": {
+   "hogares": 17760,
+   "viviendas": 19666,
+   "poblacion": 67103
+  },
+  "070302": {
+   "hogares": 4447,
+   "viviendas": 5210,
+   "poblacion": 15239
+  },
+  "070303": {
+   "hogares": 2897,
+   "viviendas": 3234,
+   "poblacion": 8842
+  },
+  "070401": {
+   "hogares": 3776,
+   "viviendas": 4832,
+   "poblacion": 13651
+  },
+  "070402": {
+   "hogares": 5523,
+   "viviendas": 6522,
+   "poblacion": 18942
+  },
+  "070403": {
+   "hogares": 20075,
+   "viviendas": 23641,
+   "poblacion": 57794
+  },
+  "070404": {
+   "hogares": 2957,
+   "viviendas": 3388,
+   "poblacion": 10200
+  },
+  "070501": {
+   "hogares": 11607,
+   "viviendas": 13008,
+   "poblacion": 40974
+  },
+  "070502": {
+   "hogares": 12970,
+   "viviendas": 14750,
+   "poblacion": 54495
+  },
+  "070503": {
+   "hogares": 5348,
+   "viviendas": 7400,
+   "poblacion": 18763
+  },
+  "070601": {
+   "hogares": 5445,
+   "viviendas": 6392,
+   "poblacion": 20743
+  },
+  "070602": {
+   "hogares": 5957,
+   "viviendas": 7434,
+   "poblacion": 17999
+  },
+  "070603": {
+   "hogares": 1533,
+   "viviendas": 1939,
+   "poblacion": 6007
+  },
+  "070701": {
+   "hogares": 1569,
+   "viviendas": 1978,
+   "poblacion": 5946
+  },
+  "070702": {
+   "hogares": 9548,
+   "viviendas": 11152,
+   "poblacion": 38420
+  },
+  "070703": {
+   "hogares": 8291,
+   "viviendas": 9883,
+   "poblacion": 32961
+  },
+  "070704": {
+   "hogares": 1261,
+   "viviendas": 1433,
+   "poblacion": 5335
+  },
+  "070705": {
+   "hogares": 3626,
+   "viviendas": 4111,
+   "poblacion": 14389
+  },
+  "070706": {
+   "hogares": 9305,
+   "viviendas": 11053,
+   "poblacion": 32285
+  },
+  "070707": {
+   "hogares": 1385,
+   "viviendas": 1603,
+   "poblacion": 5612
+  },
+  "070801": {
+   "hogares": 6197,
+   "viviendas": 9451,
+   "poblacion": 17249
+  },
+  "070802": {
+   "hogares": 795,
+   "viviendas": 948,
+   "poblacion": 2359
+  },
+  "070803": {
+   "hogares": 991,
+   "viviendas": 1688,
+   "poblacion": 2793
+  },
+  "070804": {
+   "hogares": 606,
+   "viviendas": 897,
+   "poblacion": 1806
+  },
+  "070805": {
+   "hogares": 749,
+   "viviendas": 973,
+   "poblacion": 2015
+  },
+  "070901": {
+   "hogares": 4052,
+   "viviendas": 5838,
+   "poblacion": 11843
+  },
+  "070902": {
+   "hogares": 3050,
+   "viviendas": 3991,
+   "poblacion": 9692
+  },
+  "070903": {
+   "hogares": 4310,
+   "viviendas": 5556,
+   "poblacion": 12735
+  },
+  "070904": {
+   "hogares": 787,
+   "viviendas": 845,
+   "poblacion": 3086
+  },
+  "071001": {
+   "hogares": 33384,
+   "viviendas": 38096,
+   "poblacion": 126886
+  },
+  "071002": {
+   "hogares": 4358,
+   "viviendas": 4919,
+   "poblacion": 16598
+  },
+  "071003": {
+   "hogares": 6194,
+   "viviendas": 7155,
+   "poblacion": 23110
+  },
+  "071004": {
+   "hogares": 3438,
+   "viviendas": 4093,
+   "poblacion": 14610
+  },
+  "071005": {
+   "hogares": 3775,
+   "viviendas": 4483,
+   "poblacion": 15246
+  },
+  "071101": {
+   "hogares": 9407,
+   "viviendas": 11307,
+   "poblacion": 30118
+  },
+  "071102": {
+   "hogares": 3941,
+   "viviendas": 4563,
+   "poblacion": 14888
+  },
+  "071103": {
+   "hogares": 14448,
+   "viviendas": 16857,
+   "poblacion": 44909
+  },
+  "071104": {
+   "hogares": 1475,
+   "viviendas": 1565,
+   "poblacion": 6364
+  },
+  "071105": {
+   "hogares": 2433,
+   "viviendas": 2715,
+   "poblacion": 8541
+  },
+  "071106": {
+   "hogares": 6551,
+   "viviendas": 7848,
+   "poblacion": 25258
+  },
+  "071201": {
+   "hogares": 4145,
+   "viviendas": 4851,
+   "poblacion": 15378
+  },
+  "071301": {
+   "hogares": 5754,
+   "viviendas": 7604,
+   "poblacion": 17195
+  },
+  "071302": {
+   "hogares": 1989,
+   "viviendas": 2467,
+   "poblacion": 6048
+  },
+  "071401": {
+   "hogares": 4859,
+   "viviendas": 5922,
+   "poblacion": 17417
+  },
+  "071402": {
+   "hogares": 4954,
+   "viviendas": 5876,
+   "poblacion": 17974
+  },
+  "071403": {
+   "hogares": 2433,
+   "viviendas": 2831,
+   "poblacion": 8816
+  },
+  "071501": {
+   "hogares": 10803,
+   "viviendas": 12854,
+   "poblacion": 34079
+  },
+  "071502": {
+   "hogares": 1640,
+   "viviendas": 1882,
+   "poblacion": 6555
+  },
+  "071503": {
+   "hogares": 6454,
+   "viviendas": 7625,
+   "poblacion": 17290
+  },
+  "080101": {
+   "hogares": 32445,
+   "viviendas": 36530,
+   "poblacion": 128589
+  },
+  "080102": {
+   "hogares": 2071,
+   "viviendas": 2229,
+   "poblacion": 7913
+  },
+  "080201": {
+   "hogares": 27442,
+   "viviendas": 31619,
+   "poblacion": 110302
+  },
+  "080202": {
+   "hogares": 10891,
+   "viviendas": 12860,
+   "poblacion": 42031
+  },
+  "080301": {
+   "hogares": 3417,
+   "viviendas": 4092,
+   "poblacion": 11478
+  },
+  "080302": {
+   "hogares": 13051,
+   "viviendas": 15201,
+   "poblacion": 45798
+  },
+  "080303": {
+   "hogares": 2755,
+   "viviendas": 3210,
+   "poblacion": 11122
+  },
+  "080304": {
+   "hogares": 6875,
+   "viviendas": 8096,
+   "poblacion": 21240
+  },
+  "080401": {
+   "hogares": 4295,
+   "viviendas": 4880,
+   "poblacion": 18088
+  },
+  "080402": {
+   "hogares": 1455,
+   "viviendas": 1613,
+   "poblacion": 8012
+  },
+  "080501": {
+   "hogares": 5391,
+   "viviendas": 6671,
+   "poblacion": 21584
+  },
+  "080601": {
+   "hogares": 1053,
+   "viviendas": 1239,
+   "poblacion": 4269
+  },
+  "080602": {
+   "hogares": 5270,
+   "viviendas": 5820,
+   "poblacion": 15570
+  },
+  "080701": {
+   "hogares": 1485,
+   "viviendas": 1686,
+   "poblacion": 6808
+  },
+  "080702": {
+   "hogares": 1504,
+   "viviendas": 1746,
+   "poblacion": 5489
+  },
+  "080703": {
+   "hogares": 305,
+   "viviendas": 327,
+   "poblacion": 1091
+  },
+  "080801": {
+   "hogares": 2959,
+   "viviendas": 3349,
+   "poblacion": 12785
+  },
+  "080802": {
+   "hogares": 2064,
+   "viviendas": 2324,
+   "poblacion": 7488
+  },
+  "080803": {
+   "hogares": 1018,
+   "viviendas": 1140,
+   "poblacion": 4630
+  },
+  "080901": {
+   "hogares": 922,
+   "viviendas": 997,
+   "poblacion": 3973
+  },
+  "090101": {
+   "hogares": 15564,
+   "viviendas": 19732,
+   "poblacion": 55114
+  },
+  "090102": {
+   "hogares": 2230,
+   "viviendas": 2547,
+   "poblacion": 9353
+  },
+  "090103": {
+   "hogares": 802,
+   "viviendas": 1037,
+   "poblacion": 2437
+  },
+  "090104": {
+   "hogares": 1235,
+   "viviendas": 1596,
+   "poblacion": 3630
+  },
+  "090201": {
+   "hogares": 1989,
+   "viviendas": 2575,
+   "poblacion": 7367
+  },
+  "090202": {
+   "hogares": 612,
+   "viviendas": 664,
+   "poblacion": 3518
+  },
+  "090203": {
+   "hogares": 2514,
+   "viviendas": 3132,
+   "poblacion": 8045
+  },
+  "090301": {
+   "hogares": 1965,
+   "viviendas": 2075,
+   "poblacion": 12431
+  },
+  "090302": {
+   "hogares": 1850,
+   "viviendas": 1946,
+   "poblacion": 9832
+  },
+  "090303": {
+   "hogares": 2875,
+   "viviendas": 3324,
+   "poblacion": 10522
+  },
+  "090401": {
+   "hogares": 860,
+   "viviendas": 1159,
+   "poblacion": 2889
+  },
+  "090402": {
+   "hogares": 649,
+   "viviendas": 731,
+   "poblacion": 2600
+  },
+  "090501": {
+   "hogares": 489,
+   "viviendas": 658,
+   "poblacion": 1598
+  },
+  "090502": {
+   "hogares": 708,
+   "viviendas": 821,
+   "poblacion": 2511
+  },
+  "090503": {
+   "hogares": 601,
+   "viviendas": 661,
+   "poblacion": 2347
+  }
+ }
+}
