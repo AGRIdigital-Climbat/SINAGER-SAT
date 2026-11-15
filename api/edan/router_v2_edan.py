@@ -326,11 +326,15 @@ def desconsolidar_endpoint(id_localidad: int, db: Session = Depends(get_db), _us
 
 
 @router.put("/localidades/{id_localidad}/estado", tags=[TAG_EDAN_LOCALIDADES],
-            dependencies=[Depends(require_rol(*ROLES_LOCALES))], summary="Cambiar estado de localidad (por id_edan_localidad)")
+            dependencies=[Depends(require_rol(*ROLES_LOCALES))], summary="Cambiar estado de localidad (por id_edan_localidad)",
+            description="Cuerpo: `{\"id_edan_localidad_estado\": int, \"observacion_estado\": str|null}`.\n"
+                        "`observacion_estado` = motivo del cambio; OBLIGATORIA si el destino es 'Rechazado UGR'\n"
+                        "(422 si falta); si no se envía en otros cambios se conserva la anterior.")
 def cambiar_estado_localidad_endpoint(id_localidad: int, data: LocalidadEstadoUpdate,
                                        db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
-        result = service.cambiar_estado_localidad(db, id_localidad, data.id_edan_localidad_estado)
+        result = service.cambiar_estado_localidad(db, id_localidad, data.id_edan_localidad_estado,
+                                                  data.observacion_estado)
     except HTTPException:
         raise
     except Exception as e:

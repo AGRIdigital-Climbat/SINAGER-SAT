@@ -460,6 +460,7 @@ class LocalidadDocumentoResponse(BaseModel):
     es_huerfana: bool = True
     id_tipo_localidad: int | None = None
     id_edan_localidad_estado: int | None = None
+    observacion_estado: str | None = Field(None, description="Motivo del último cambio de estado (p. ej. del rechazo)")
     tipo_localidad: dict | None = None
     id_tipo_evento: int | None = None
     tipo_evento: dict | None = None
@@ -602,6 +603,10 @@ class LocalidadEstadoUpdateV2(BaseModel):
     id_edan_localidad_estado: int = Field(..., ge=1, le=6,
         description="Estado: 1=Borrador, 2=Enviado UGR, 3=Aprobado UGR, 4=Rechazado UGR, 5=Aprobado Ajuste UGR, 6=En revisión UGR",
         json_schema_extra={"example": 2})
+    observacion_estado: str | None = Field(None,
+        description="Motivo/observación del cambio de estado. OBLIGATORIA si el destino es "
+                    "'Rechazado UGR' (422 si falta); si no se envía en otros cambios se conserva la anterior.",
+        json_schema_extra={"example": "Falta la sección de daños en vivienda"})
 
 
 class LocalidadNestedResponse(BaseModel):
@@ -628,6 +633,8 @@ class LocalidadNestedResponse(BaseModel):
     es_huerfana: bool = True
     id_tipo_localidad: int | None = None
     id_edan_localidad_estado: int | None = None
+    observacion_estado: str | None = Field(None,
+        description="Motivo/observación del último cambio de estado (p. ej. motivo del rechazo); NULL = sin observación")
     id_tipo_evento: int | None = None
     id_departamento: int | None = None
     id_provincia: int | None = None
@@ -837,6 +844,8 @@ class AprobacionesEdanResponse(BaseModel):
 class LocalidadUpdate(BaseModel):
     id_tipo_localidad: int | None = None
     id_edan_localidad_estado: int | None = None
+    observacion_estado: str | None = Field(None, description="Motivo del cambio de estado; OBLIGATORIA si el destino "
+                                                             "es 'Rechazado UGR'. Si no se envía, se conserva la anterior")
     tipo_localidad: str | None = None
     id_tipo_evento: int | None = None
     id_departamento: int | None = None
@@ -1060,6 +1069,10 @@ class EdanSyncIn(BaseModel):
 
 class LocalidadEstadoUpdate(BaseModel):
     id_edan_localidad_estado: int
+    observacion_estado: str | None = Field(None,
+        description="Motivo/observación del cambio de estado. OBLIGATORIA si el destino es "
+                    "'Rechazado UGR' (422 si falta); si no se envía en otros cambios se conserva la anterior.",
+        json_schema_extra={"example": "Falta la sección de daños en vivienda"})
 
 
 class ConsolidarIn(BaseModel):

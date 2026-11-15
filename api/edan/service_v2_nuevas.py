@@ -859,7 +859,7 @@ def list_formularios_estados(db: Session, user: dict, skip: int, limit: int, tod
     qp = dict(params) if todos else {**params, "limit": limit, "skip": skip}
     rows = db.execute(text(f"""
         SELECT l.id_edan_localidad, l.uuid_edan_localidad, l.localidad,
-               l.id_edan_localidad_estado, l.id_edan, l.id_usuario,
+               l.id_edan_localidad_estado, l.observacion_estado, l.id_edan, l.id_usuario,
                l.version, l.pendiente_actualizacion, l.pendiente_eliminacion,
                l.fecha_modificacion,
                {", ".join(f"l.{c}" for c in sorted(SECCION_FLAG))},

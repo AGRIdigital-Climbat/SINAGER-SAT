@@ -35,6 +35,8 @@ def _require_rol(*roles):
 
 def _db_error(exc: Exception) -> HTTPException:
     """Traduce errores de BD a mensajes limpios sin filtrar el SQL."""
+    if isinstance(exc, HTTPException):
+        return exc
     try:
         code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
     except AttributeError:
@@ -551,11 +553,15 @@ def deshacer_edan(
                                 "- 'borrador' (creación inicial)\n"
                                 "- 'revision' (en revisión por UGR)\n"
                                 "- 'aprobado' (aprobada para consolidar)\n"
-                                "- 'rechazado' (rechazada por UGR)")
+                                "- 'rechazado' (rechazada por UGR)\n\n"
+                                "Cuerpo: `{\"id_edan_localidad_estado\": int, \"observacion_estado\": str|null}`.\n"
+                                "- `observacion_estado`: motivo/observación del cambio. OBLIGATORIA si el destino\n"
+                                "  es 'rechazado' (422 si falta); si no se envía, se conserva la anterior.")
 def cambiar_estado_localidad(id_localidad: int, data: LocalidadEstadoUpdate,
                              db: Session = Depends(get_db), _user=Depends(get_current_user)):
     try:
-        result = service.cambiar_estado_localidad(db, id_localidad, data.id_edan_localidad_estado)
+        result = service.cambiar_estado_localidad(db, id_localidad, data.id_edan_localidad_estado,
+                                                  data.observacion_estado)
     except HTTPException:
         db.rollback()
         raise

@@ -700,11 +700,15 @@ for _reg in SECCIONES_1TO1:
                         "- 4: Rechazado UGR\n"
                         "- 5: Aprobado Ajuste UGR\n"
                         "- 6: En revisión UGR\n\n"
-                        "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).")
+                        "**Roles permitidos:** 6 (UGR municipio), 7 (Responsable local).\n\n"
+                        "Cuerpo adicional: `observacion_estado` (str|null) = motivo del cambio;\n"
+                        "OBLIGATORIA si el destino es 'Rechazado UGR' (422 si falta); si no se\n"
+                        "envía en otros cambios se conserva la anterior.")
 def cambiar_estado_localidad(data: LocalidadEstadoUpdateV2, db: Session = Depends(get_db),
                               _user=Depends(get_current_user)):
     try:
-        result = service.cambiar_estado_localidad_por_id_local(db, data.id_local, data.id_edan_localidad_estado)
+        result = service.cambiar_estado_localidad_por_id_local(db, data.id_local, data.id_edan_localidad_estado,
+                                                               data.observacion_estado)
     except HTTPException:
         raise
     except Exception as e:

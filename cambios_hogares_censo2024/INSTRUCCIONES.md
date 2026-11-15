@@ -9,6 +9,10 @@
 > Fecha del cambio: **2026-11-14** · Rama: **`feature/censo2024-hogares`** (esta carpeta
 > versionada: instrucciones + análisis de NULLs + datos fuente). El **código** de §3 vive en el
 > servidor de prueba aún sin commitear; la lista de §3 es la definitiva para replicar.
+>
+> **Nota:** esta carpeta también documenta otro cambio del mismo patrón de handoff —
+> **`observacion_estado`** en EDAN localidades: ver [`EDAN_observacion_estado.md`](EDAN_observacion_estado.md)
+> (migración v2.64.0).
 
 ---
 

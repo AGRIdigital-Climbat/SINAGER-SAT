@@ -255,6 +255,7 @@ def _build_localidad(db: Session, id_localidad: int, solo_con_datos: bool = Fals
         "es_huerfana": True,
         "id_tipo_localidad": None,
         "id_edan_localidad_estado": None,
+        "observacion_estado": None,
         "id_tipo_evento": None,
         "id_departamento": None,
         "id_provincia": None,
@@ -662,7 +663,7 @@ def _get_resumen_localidades(db: Session, id_edan: int) -> list:
     rows = _rows(db, """
         SELECT l.id_edan_localidad, l.localidad,
                l.total_poblacion_afectada, l.total_familias_afectadas,
-               l.total_familias_damnificadas,
+               l.total_familias_damnificadas, l.observacion_estado,
                t.nombre AS tipo_localidad, es.nombre AS estado_localidad
         FROM edan.edan_localidades l
         LEFT JOIN edan.tipo_localidad t ON t.id_tipo_localidad = l.id_tipo_localidad
@@ -1374,15 +1375,28 @@ def delete_localidad(db: Session, id_localidad: int) -> bool:
 
 
 def update_localidad(db: Session, id_localidad: int, data: dict) -> dict | None:
-    parent = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
+    parent = _row(db, "SELECT id_edan, id_edan_localidad_estado FROM edan.edan_localidades"
+                      " WHERE id_edan_localidad = :id",
                   {"id": id_localidad})
     if not parent:
         return None
+    nuevo_estado = data.get("id_edan_localidad_estado")
+    obs = data.get("observacion_estado")
+    obs = obs.strip() if obs and obs.strip() else None
+    # Misma regla que cambiar_estado_localidad: rechazar exige motivo. Solo si el
+    # estado CAMBIA (el sync pre-llena el actual → no dispara 422 en re-sincronizar).
+    if nuevo_estado is not None and nuevo_estado != parent["id_edan_localidad_estado"]:
+        st = _row(db, "SELECT nombre FROM edan.edan_localidades_estado"
+                      " WHERE id_edan_localidad_estado = :id", {"id": nuevo_estado})
+        if st and str(st["nombre"]).lower().startswith("rechazado") and not obs:
+            raise HTTPException(status_code=422,
+                                detail="Para rechazar debe enviar la observacion_estado (motivo del rechazo)")
     _inherit_localidad_header(db, data, parent["id_edan"])
     db.execute(text("""
         UPDATE edan.edan_localidades SET
                 id_tipo_localidad = :id_tipo_localidad,
                 id_edan_localidad_estado = :id_edan_localidad_estado,
+                observacion_estado = COALESCE(:observacion_estado, observacion_estado),
                 localidad = :localidad,
                 grup_poblacion = :imp_poblacion, grup_salud = :imp_salud,
                 grup_infraestructura = :imp_infraestructura, grup_servicios = :imp_servicios,
@@ -1403,6 +1417,7 @@ def update_localidad(db: Session, id_localidad: int, data: dict) -> dict | None:
             "id": id_localidad,
             "id_tipo_localidad": _resolve_tipo_localidad(db, data),
             "id_edan_localidad_estado": data.get("id_edan_localidad_estado"),
+            "observacion_estado": obs,
             "localidad": data.get("localidad", ""),
             "imp_poblacion": data.get("imp_poblacion", False),
             "imp_salud": data.get("imp_salud", False),
@@ -2724,43 +2739,60 @@ def list_localidades_sync(db: Session, id_usuario: int, fecha_desde: str | None 
 #  ESTADO DE LOCALIDAD Y CONSOLIDACIÓN
 # ============================================================================
 
-def cambiar_estado_localidad(db: Session, id_localidad: int, id_estado: int) -> dict | None:
+def cambiar_estado_localidad(db: Session, id_localidad: int, id_estado: int,
+                             observacion_estado: str | None = None) -> dict | None:
     """Cambia el estado de una localidad (borrador/enviado/aprobado/rechazado/cerrado).
-    Estados libres: la API no impone transiciones (el frontend las gestiona)."""
-    st = _row(db, "SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado"
+    Estados libres: la API no impone transiciones (el frontend las gestiona).
+
+    `observacion_estado`: motivo del cambio. OBLIGATORIA si el destino es
+    "Rechazado" (422 si falta o viene vacía). Si no se envía, se conserva la
+    observación anterior (COALESCE en el UPDATE)."""
+    st = _row(db, "SELECT id_edan_localidad_estado, nombre FROM edan.edan_localidades_estado"
                   " WHERE id_edan_localidad_estado = :id", {"id": id_estado})
     if not st:
         raise HTTPException(status_code=404, detail="Estado de localidad no encontrado")
+    obs = observacion_estado.strip() if observacion_estado and observacion_estado.strip() else None
+    if str(st["nombre"]).lower().startswith("rechazado") and not obs:
+        raise HTTPException(status_code=422,
+                            detail="Para rechazar debe enviar la observacion_estado (motivo del rechazo)")
     cur = _row(db, "SELECT id_edan FROM edan.edan_localidades WHERE id_edan_localidad = :id",
                {"id": id_localidad})
     if not cur:
         return None
     db.execute(text("""
         UPDATE edan.edan_localidades SET id_edan_localidad_estado = :est,
+            observacion_estado = COALESCE(:obs, observacion_estado),
             fecha_modificacion = NOW(), pendiente_actualizacion = TRUE
         WHERE id_edan_localidad = :id
-    """), {"est": id_estado, "id": id_localidad})
+    """), {"est": id_estado, "obs": obs, "id": id_localidad})
     if cur["id_edan"] is not None:
         _bump_edan_fecha(db, cur["id_edan"])
     db.commit()
     return _build_localidad(db, id_localidad)
 
 
-def cambiar_estado_localidad_por_id_local(db: Session, id_local: str, id_estado: int) -> dict | None:
-    """Cambia el estado de una localidad usando id_local (clave offline del móvil)."""
-    st = _row(db, "SELECT id_edan_localidad_estado FROM edan.edan_localidades_estado"
+def cambiar_estado_localidad_por_id_local(db: Session, id_local: str, id_estado: int,
+                                          observacion_estado: str | None = None) -> dict | None:
+    """Cambia el estado de una localidad usando id_local (clave offline del móvil).
+    Misma regla de `observacion_estado` que `cambiar_estado_localidad`."""
+    st = _row(db, "SELECT id_edan_localidad_estado, nombre FROM edan.edan_localidades_estado"
                   " WHERE id_edan_localidad_estado = :id", {"id": id_estado})
     if not st:
         raise HTTPException(status_code=404, detail="Estado de localidad no encontrado")
+    obs = observacion_estado.strip() if observacion_estado and observacion_estado.strip() else None
+    if str(st["nombre"]).lower().startswith("rechazado") and not obs:
+        raise HTTPException(status_code=422,
+                            detail="Para rechazar debe enviar la observacion_estado (motivo del rechazo)")
     cur = _row(db, "SELECT id_edan_localidad, id_edan FROM edan.edan_localidades WHERE id_local = :id_local",
                {"id_local": id_local})
     if not cur:
         return None
     db.execute(text("""
         UPDATE edan.edan_localidades SET id_edan_localidad_estado = :est,
+            observacion_estado = COALESCE(:obs, observacion_estado),
             fecha_modificacion = NOW(), pendiente_actualizacion = TRUE
         WHERE id_local = :id_local
-    """), {"est": id_estado, "id_local": id_local})
+    """), {"est": id_estado, "obs": obs, "id_local": id_local})
     if cur["id_edan"] is not None:
         _bump_edan_fecha(db, cur["id_edan"])
     db.commit()
@@ -3710,6 +3742,7 @@ def list_mis_localidades_estados(db: Session, uid: int | None = None, id_departa
     rows = _rows(db, f"""
         SELECT l.id_edan_localidad, l.id_local, l.localidad,
                l.id_edan_localidad_estado,
+               l.observacion_estado,
                l.id_edan, l.pendiente_actualizacion,
                l.fecha_modificacion,
                l.grup_poblacion, l.grup_salud, l.grup_infraestructura,
