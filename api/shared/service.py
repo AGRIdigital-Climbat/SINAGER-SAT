@@ -561,7 +561,8 @@ TABLAS_CENSO = ("manzanos", "comunidades")
 # Columnas de datos (codigo_ine, nombre, id_municipio se tratan aparte;
 # id_departamento/id_provincia se derivan de la jerarquia geografica)
 UNIDAD_CENSO_COLUMNAS = [
-    "tipo_unidad", "personas", "viviendas", "lat", "lon", "area_oficial",
+    "tipo_unidad", "personas", "viviendas", "hogares", "lat", "lon",
+    "area_oficial",
 ]
 
 
@@ -584,6 +585,10 @@ def _sql_unidad_censo(tabla: str) -> str:
     _validar_tabla_censo(tabla)
     return f"""
         SELECT a.codigo_ine, a.nombre, a.tipo_unidad, a.personas, a.viviendas,
+               a.hogares,
+               CASE WHEN a.hogares > 0
+                    THEN CAST(ROUND(a.personas::numeric / a.hogares) AS integer)
+                    ELSE NULL END AS personas_por_hogar,
                a.lat, a.lon, a.area_oficial, a.id_municipio,
                a.id_departamento, a.id_provincia,
                mu.id as mu_id, mu.codigo_ine as mu_codigo_ine, mu.nombre as mu_nombre
@@ -720,6 +725,10 @@ _SQL_GEOJSON_UNIDAD = """
             'tipo_unidad', a.tipo_unidad,
             'personas', a.personas,
             'viviendas', a.viviendas,
+            'hogares', a.hogares,
+            'personas_por_hogar', CASE WHEN a.hogares > 0
+                THEN CAST(ROUND(a.personas::numeric / a.hogares) AS integer)
+                ELSE NULL END,
             'area_oficial', a.area_oficial,
             'lat', a.lat,
             'lon', a.lon,
@@ -800,7 +809,7 @@ def get_unidad_censo_geojson(db: Session, tabla: str, codigo_ine: str):
     return dict(row)["feature"]
 
 
-# ── CENSO 2024: Poblacion y viviendas (resumenes agregados) ──
+# ── CENSO 2024: Poblacion, viviendas y hogares (resumenes agregados) ──
 # Las agregaciones suman manzanos + comunidades (unidades disjuntas del CPV-2024).
 
 _NIVELES_CENSO = {"departamento", "provincia", "municipio"}
@@ -808,13 +817,17 @@ _NIVELES_CENSO = {"departamento", "provincia", "municipio"}
 _CTE_UNIDADES = """
     WITH m AS (
         SELECT {key} k, count(*) n,
-               COALESCE(sum(personas), 0) pers, COALESCE(sum(viviendas), 0) viv
+               COALESCE(sum(personas), 0) pers, COALESCE(sum(viviendas), 0) viv,
+               COALESCE(sum(hogares), 0) hog, count(hogares) hog_n,
+               COALESCE(sum(personas) FILTER (WHERE hogares IS NOT NULL), 0) pers_hog
         FROM shared.manzanos
         GROUP BY {key}
     ),
     c AS (
         SELECT {key} k, count(*) n,
-               COALESCE(sum(personas), 0) pers, COALESCE(sum(viviendas), 0) viv
+               COALESCE(sum(personas), 0) pers, COALESCE(sum(viviendas), 0) viv,
+               COALESCE(sum(hogares), 0) hog, count(hogares) hog_n,
+               COALESCE(sum(personas) FILTER (WHERE hogares IS NOT NULL), 0) pers_hog
         FROM shared.comunidades
         GROUP BY {key}
     )
@@ -824,12 +837,35 @@ _SEL_RESUMEN = """
     COALESCE(m.n, 0) manzanos, COALESCE(c.n, 0) comunidades,
     COALESCE(m.n, 0) + COALESCE(c.n, 0) unidades_censales,
     COALESCE(m.pers, 0) + COALESCE(c.pers, 0) poblacion,
-    COALESCE(m.viv, 0) + COALESCE(c.viv, 0) viviendas
+    COALESCE(m.viv, 0) + COALESCE(c.viv, 0) viviendas,
+    CASE WHEN COALESCE(m.hog_n, 0) + COALESCE(c.hog_n, 0) = 0 THEN NULL
+         ELSE COALESCE(m.hog, 0) + COALESCE(c.hog, 0) END hogares,
+    COALESCE(m.hog_n, 0) + COALESCE(c.hog_n, 0) unidades_con_hogares,
+    COALESCE(m.pers_hog, 0) + COALESCE(c.pers_hog, 0) poblacion_con_hogares
+"""
+
+# Hogares INE exactos por jerarquia geografica (suma de los municipios
+# cargados desde el tabulado oficial "Vivienda y hogar"); NULL si no hay.
+_SQL_HOGARES_INE = """
+    (SELECT CASE WHEN count(*) = 0 THEN NULL ELSE sum(h.hogares) END
+       FROM shared.municipio m2
+       JOIN shared.censo2024_hogares_municipio h ON h.id_municipio = m2.id
+      WHERE {filtro})
 """
 
 
+def _personas_por_hogar(poblacion, *bases):
+    """Redondeo normal (media hacia arriba: 3,5->4; 3,2->3) de poblacion/base,
+    con la primera base no nula y > 0 (mas oficial)."""
+    for base in bases:
+        if base:
+            p, b = int(poblacion), int(base)
+            return (2 * p + b) // (2 * b)
+    return None
+
+
 def resumen_censo_nacional(db: Session) -> dict:
-    """Totales del pais: personas, viviendas y conteo de unidades (manz+com)."""
+    """Totales del pais: personas, viviendas, hogares y conteo de unidades."""
     sql = """
         SELECT
             (SELECT count(*) FROM shared.manzanos) AS manzanos,
@@ -837,9 +873,18 @@ def resumen_censo_nacional(db: Session) -> dict:
             (SELECT COALESCE(sum(personas), 0) FROM shared.manzanos) AS personas_m,
             (SELECT COALESCE(sum(personas), 0) FROM shared.comunidades) AS personas_c,
             (SELECT COALESCE(sum(viviendas), 0) FROM shared.manzanos) AS viviendas_m,
-            (SELECT COALESCE(sum(viviendas), 0) FROM shared.comunidades) AS viviendas_c
+            (SELECT COALESCE(sum(viviendas), 0) FROM shared.comunidades) AS viviendas_c,
+            (SELECT COALESCE(sum(hogares), 0) FROM shared.manzanos)
+          + (SELECT COALESCE(sum(hogares), 0) FROM shared.comunidades) AS hogares_u,
+            (SELECT count(hogares) FROM shared.manzanos)
+          + (SELECT count(hogares) FROM shared.comunidades) AS hogares_n,
+            (SELECT CASE WHEN count(*) = 0 THEN NULL ELSE sum(hogares) END
+               FROM shared.censo2024_hogares_municipio) AS hogares_ine
     """
     row = db.execute(text(sql)).mappings().first()
+    poblacion = row["personas_m"] + row["personas_c"]
+    hogares_ine = row["hogares_ine"]
+    hogares = row["hogares_u"] if row["hogares_n"] else None
     return {
         "nivel": "nacional",
         "id_departamento": None,
@@ -850,8 +895,12 @@ def resumen_censo_nacional(db: Session) -> dict:
         "manzanos": row["manzanos"],
         "comunidades": row["comunidades"],
         "unidades_censales": row["manzanos"] + row["comunidades"],
-        "poblacion": row["personas_m"] + row["personas_c"],
+        "poblacion": poblacion,
         "viviendas": row["viviendas_m"] + row["viviendas_c"],
+        "hogares": hogares,
+        "unidades_con_hogares": row["hogares_n"],
+        "hogares_ine": hogares_ine,
+        "personas_por_hogar": _personas_por_hogar(poblacion, hogares_ine, hogares),
     }
 
 
@@ -889,6 +938,7 @@ def resumen_censo_por_nivel(db: Session, nivel: str,
                    g.codigo_ine, g.nombre,
         """
         from_sql = " FROM shared.departamento g"
+        filtro_ine = "m2.id_departamento = g.id"
     elif nivel == "provincia":
         select = """
             SELECT 'provincia' AS nivel, g.id_departamento,
@@ -896,17 +946,20 @@ def resumen_censo_por_nivel(db: Session, nivel: str,
                    g.codigo_ine, g.nombre,
         """
         from_sql = " FROM shared.provincia g"
+        filtro_ine = "m2.id_provincia = g.id"
     else:
         select = """
             SELECT 'municipio' AS nivel, g.id_departamento, g.id_provincia,
                    g.id AS id_municipio, g.codigo_ine, g.nombre,
         """
         from_sql = " FROM shared.municipio g"
+        filtro_ine = "m2.id = g.id"
 
     sql = f"""
         {_CTE_UNIDADES.format(key=key)}
         {select}
-        {_SEL_RESUMEN}
+        {_SEL_RESUMEN},
+        {_SQL_HOGARES_INE.format(filtro=filtro_ine)} hogares_ine
         {from_sql}
         LEFT JOIN m ON m.k = g.id
         LEFT JOIN c ON c.k = g.id
@@ -914,16 +967,136 @@ def resumen_censo_por_nivel(db: Session, nivel: str,
         ORDER BY g.id
     """
     rows = db.execute(text(sql), params).mappings().all()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        item = dict(r)
+        # Base mas oficial: hogares_ine (tabulado INE, cobertura completa) con
+        # toda la poblacion; si no existe, la suma de unidades con la poblacion
+        # que efectivamente vive en esas unidades con ficha.
+        base_ine = item.get("hogares_ine")
+        if base_ine:
+            item["personas_por_hogar"] = _personas_por_hogar(
+                item["poblacion"], base_ine)
+        else:
+            item["personas_por_hogar"] = _personas_por_hogar(
+                item.get("poblacion_con_hogares"), item.get("hogares"))
+        item.pop("poblacion_con_hogares", None)
+        result.append(item)
+    return result
 
 
 def get_poblacion_unidad(db: Session, tabla: str, codigo_ine: str):
-    """Personas y viviendas directamente de un manzano o comunidad."""
+    """Personas, viviendas y hogares directamente de un manzano o comunidad."""
     _validar_tabla_censo(tabla)
     row = db.execute(
         text(f"SELECT codigo_ine, tipo_unidad, nombre, "
-             f"personas AS poblacion, viviendas "
+             f"personas AS poblacion, viviendas, hogares, "
+             f"CASE WHEN hogares > 0 "
+             f"     THEN CAST(ROUND(personas::numeric / hogares) AS integer) "
+             f"     ELSE NULL END AS personas_por_hogar "
              f"FROM shared.{tabla} WHERE codigo_ine = :c"),
         {"c": codigo_ine},
     ).mappings().first()
     return dict(row) if row else None
+
+
+def _pph_municipios(db: Session, ids_municipio: list[int]) -> dict[int, int | None]:
+    """Promedio oficial de personas por hogar por municipio: ROUND(poblacion_total / hogares_ine).
+    Fallback: ROUND(poblacion_con_hogares_unidades / hogares_unidades)."""
+    if not ids_municipio:
+        return {}
+    rows = db.execute(text("""
+        SELECT m.id AS id_municipio,
+               (SELECT COALESCE(SUM(mz.personas), 0) FROM shared.manzanos mz WHERE mz.id_municipio = m.id) +
+               (SELECT COALESCE(SUM(c.personas), 0) FROM shared.comunidades c WHERE c.id_municipio = m.id)
+                   AS pob_total,
+               h.hogares AS hogares_ine,
+               (SELECT COALESCE(SUM(mz.personas), 0) FROM shared.manzanos mz
+                  WHERE mz.id_municipio = m.id AND mz.hogares IS NOT NULL) +
+               (SELECT COALESCE(SUM(c.personas), 0) FROM shared.comunidades c
+                  WHERE c.id_municipio = m.id AND c.hogares IS NOT NULL)
+                   AS pob_con_hog,
+               (SELECT COALESCE(SUM(mz.hogares), 0) FROM shared.manzanos mz
+                  WHERE mz.id_municipio = m.id AND mz.hogares IS NOT NULL) +
+               (SELECT COALESCE(SUM(c.hogares), 0) FROM shared.comunidades c
+                  WHERE c.id_municipio = m.id AND c.hogares IS NOT NULL)
+                   AS hog_unid
+        FROM shared.municipio m
+        LEFT JOIN shared.censo2024_hogares_municipio h ON h.id_municipio = m.id
+        WHERE m.id = ANY(:ids)
+    """), {"ids": ids_municipio}).mappings().all()
+    out = {}
+    for r in rows:
+        if r["hogares_ine"]:
+            out[r["id_municipio"]] = _personas_por_hogar(r["pob_total"], r["hogares_ine"])
+        else:
+            out[r["id_municipio"]] = _personas_por_hogar(r["pob_con_hog"], r["hog_unid"])
+    return out
+
+
+def get_manzanos_por_nombre(db: Session,
+                            id_departamento: int | None = None,
+                            id_provincia: int | None = None,
+                            id_municipio: int | None = None,
+                            q: str | None = None) -> list[dict]:
+    """Manzanos agrupados por nombre comun DENTRO de cada municipio.
+
+    Los manzanos no tienen nombre unico (el mas repetido es el del propio
+    municipio); el grupo funciona como una "comunidad de manzanos" respetando
+    la jerarquia departamento -> provincia -> municipio. Devuelve poblacion,
+    viviendas, hogares e integrantes por hogar (redondeo normal).
+
+    Si el ratio del grupo supera 20 pers/hogar (caso extremo por población en
+    viviendas colectivas a nivel de unidad), se reemplaza por el promedio
+    oficial del municipio (población total / hogares_ine) para evitar valores
+    no representativos; los valores reales por unidad se mantienen en los
+    endpoints de acceso directo. Ver INFORME_CASOS_EXTREMOS_PPH.md.
+    """
+    where = []
+    params = {}
+    if id_departamento:
+        where.append("a.id_departamento = :id_departamento")
+        params["id_departamento"] = id_departamento
+    if id_provincia:
+        where.append("a.id_provincia = :id_provincia")
+        params["id_provincia"] = id_provincia
+    if id_municipio:
+        where.append("a.id_municipio = :id_municipio")
+        params["id_municipio"] = id_municipio
+    if q:
+        where.append("a.nombre ILIKE :q")
+        params["q"] = f"%{q}%"
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(text(f"""
+        SELECT a.id_departamento, a.id_provincia, a.id_municipio,
+               mu.nombre AS municipio, a.nombre,
+               count(*) AS manzanos,
+               COALESCE(sum(a.personas), 0) AS poblacion,
+               COALESCE(sum(a.viviendas), 0) AS viviendas,
+               COALESCE(sum(a.hogares), 0) AS hogares,
+               count(a.hogares) AS unidades_con_hogares,
+               COALESCE(sum(a.personas) FILTER (WHERE a.hogares IS NOT NULL), 0)
+                   AS poblacion_con_hogares
+        FROM shared.manzanos a
+        LEFT JOIN shared.municipio mu ON a.id_municipio = mu.id
+        {where_sql}
+        GROUP BY a.id_departamento, a.id_provincia, a.id_municipio,
+                 mu.nombre, a.nombre
+        ORDER BY a.id_municipio, a.nombre
+    """), params).mappings().all()
+    result = []
+    for r in rows:
+        item = dict(r)
+        item["personas_por_hogar"] = _personas_por_hogar(
+            item["poblacion_con_hogares"], item["hogares"])
+        result.append(item)
+    # Casos extremos (>20): reemplazar por promedio oficial del municipio
+    muni_extremos = list({item["id_municipio"] for item in result
+                          if item["personas_por_hogar"] is not None
+                          and item["personas_por_hogar"] > 20})
+    if muni_extremos:
+        muni_pph = _pph_municipios(db, muni_extremos)
+        for item in result:
+            if item["personas_por_hogar"] is not None and item["personas_por_hogar"] > 20:
+                item["personas_por_hogar"] = muni_pph.get(item["id_municipio"])
+    return result

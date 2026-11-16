@@ -14,6 +14,7 @@ from .schemas import (
     ManzanoCreate, ManzanoUpdate, ManzanoResponse,
     ComunidadCreate, ComunidadUpdate, ComunidadResponse,
     ResumenPoblacion, ResumenPoblacionUnidad,
+    ManzanosPorNombreResponse,
 )
 from . import service
 
@@ -415,7 +416,7 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
         @router.get(f"/{tabla}/{{codigo_ine}}/poblacion",
                     response_model=DataItemResponse[ResumenPoblacionUnidad],
                     tags=[tag_crud],
-                    summary=f"{nombre_recurso}: personas y viviendas")
+                    summary=f"{nombre_recurso}: personas, viviendas y hogares")
         def poblacion_unidad_censo(codigo_ine: str, db: Session = Depends(get_db)):
             result = service.get_poblacion_unidad(db, tabla, codigo_ine)
             if not result:
@@ -466,14 +467,14 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
         schema_response=ComunidadResponse,
     )
 
-    # ── CENSO 2024: Poblacion y viviendas (resumenes agregados) ──
+    # ── CENSO 2024: Poblacion, viviendas y hogares (resumenes agregados) ──
 
     TAG_CENSO_POB = "Censo 2024 > Población y Viviendas"
 
     @router.get("/censo/poblacion/nacional",
                 response_model=DataItemResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Totales nacionales de población y viviendas")
+                summary="Totales nacionales de población, viviendas y hogares")
     def resumen_poblacion_nacional(db: Session = Depends(get_db)):
         return SuccessResponse(message="Operación exitosa",
                                data=service.resumen_censo_nacional(db))
@@ -481,7 +482,7 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
     @router.get("/censo/poblacion/departamentos",
                 response_model=DataListResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Población y viviendas por departamento")
+                summary="Población, viviendas y hogares por departamento")
     def resumen_poblacion_departamentos(
         id_departamento: int | None = Query(None, description="Filtrar por departamento"),
         db: Session = Depends(get_db),
@@ -493,7 +494,7 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
     @router.get("/censo/poblacion/provincias",
                 response_model=DataListResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Población y viviendas por provincia")
+                summary="Población, viviendas y hogares por provincia")
     def resumen_poblacion_provincias(
         id_departamento: int | None = Query(None, description="Filtrar por departamento"),
         id_provincia: int | None = Query(None, description="Filtrar por provincia"),
@@ -507,7 +508,7 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
     @router.get("/censo/poblacion/municipios",
                 response_model=DataListResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Población y viviendas por municipio")
+                summary="Población, viviendas y hogares por municipio")
     def resumen_poblacion_municipios(
         id_departamento: int | None = Query(None, description="Filtrar por departamento"),
         id_provincia: int | None = Query(None, description="Filtrar por provincia"),
@@ -523,7 +524,7 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
     @router.get("/censo/poblacion/departamento/{id}",
                 response_model=DataItemResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Población y viviendas de un departamento")
+                summary="Población, viviendas y hogares de un departamento")
     def resumen_poblacion_departamento(id: int, db: Session = Depends(get_db)):
         items = service.resumen_censo_por_nivel(db, "departamento", id_departamento=id)
         if not items:
@@ -533,7 +534,7 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
     @router.get("/censo/poblacion/provincia/{id}",
                 response_model=DataItemResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Población y viviendas de una provincia")
+                summary="Población, viviendas y hogares de una provincia")
     def resumen_poblacion_provincia(id: int, db: Session = Depends(get_db)):
         items = service.resumen_censo_por_nivel(db, "provincia", id_provincia=id)
         if not items:
@@ -543,12 +544,45 @@ def create_shared_router(open_writes: bool = False) -> APIRouter:
     @router.get("/censo/poblacion/municipio/{id}",
                 response_model=DataItemResponse[ResumenPoblacion],
                 tags=[TAG_CENSO_POB],
-                summary="Población y viviendas de un municipio")
+                summary="Población, viviendas y hogares de un municipio")
     def resumen_poblacion_municipio(id: int, db: Session = Depends(get_db)):
         items = service.resumen_censo_por_nivel(db, "municipio", id_municipio=id)
         if not items:
             raise HTTPException(status_code=404, detail="Municipio sin datos censales")
         return SuccessResponse(message="Operación exitosa", data=items[0])
+
+    @router.get("/censo/manzanos/por-nombre",
+                response_model=DataListResponse[ManzanosPorNombreResponse],
+                tags=[TAG_CENSO_POB],
+                summary="Manzanos agrupados por nombre común dentro de cada municipio")
+    def manzanos_por_nombre(
+        id_departamento: int | None = Query(None, description="Filtrar por departamento"),
+        id_provincia: int | None = Query(None, description="Filtrar por provincia"),
+        id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+        q: str | None = Query(None, description="Buscar nombre de grupo parcial"),
+        db: Session = Depends(get_db),
+    ):
+        """Agrega los manzanos que comparten nombre DENTRO de un municipio.
+
+        Los manzanos no tienen nombre único (cada manzano repite el nombre de
+        su municipio o localidad), así que el grupo funciona como una
+        "comunidad de manzanos". Respeta la jerarquía geográfica
+        (`id_departamento` → `id_provincia` → `id_municipio`, apilables).
+
+        - `poblacion` / `viviendas` / `hogares`: sumas del grupo.
+        - `unidades_con_hogares`: manzanos del grupo con ficha INE (cobertura).
+        - `poblacion_con_hogares`: población de esos manzanos con ficha.
+        - `personas_por_hogar`: redondeo normal (poblacion_con_hogares / hogares);
+          NULL si el grupo no tiene hogares. **Si el ratio del grupo es > 20** (caso
+          extremo por población en viviendas colectivas a nivel de unidad), se reemplaza
+          por el promedio oficial del municipio (`ROUND(población total / hogares_ine)`).
+          Los valores reales por unidad se mantienen en `/manzanos/{codigo_ine}`.
+        - Sin paginación (consulta puntual, como `/censo/poblacion/*`).
+        """
+        items = service.get_manzanos_por_nombre(
+            db, id_departamento=id_departamento, id_provincia=id_provincia,
+            id_municipio=id_municipio, q=q)
+        return SuccessResponse(message="Operación exitosa", data=items, total=len(items))
 
     return router
 

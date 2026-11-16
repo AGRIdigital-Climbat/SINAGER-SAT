@@ -61,9 +61,14 @@ Catálogo SINB: `grupo`, `indicador_natural`, `caracteristica`, `comportamiento`
 | `GET /api/v2/shared/censo/poblacion/provincias` | Por las 113 provincias |
 | `GET /api/v2/shared/censo/poblacion/municipios` | Por los 343 municipios |
 | `GET /api/v2/shared/censo/poblacion/{departamento\|provincia\|municipio}/{id}` | Detalle jerárquico |
+| `GET /api/v2/shared/censo/manzanos/por-nombre` | Manzanos agrupados por nombre común dentro de cada municipio (filtros `id_departamento`, `id_provincia`, `id_municipio`, `q`). Si el ratio del grupo `personas_por_hogar` > 20 (extremo por viviendas colectivas) se usa el promedio oficial del municipio; los valores reales por unidad se mantienen en `/manzanos/{codigo_ine}` |
 | `GET /api/v2/shared/municipios/geojson` / `/geom` / `/ubicacion` | Límites GeoJSON, WKT y coordenada → municipio |
 
-Fuentes: `shared.manzanos` y `shared.comunidades` (Censo 2024, migraciones `v2.15.0` y `v2.16.0`).
+Campos de los resúmenes: además de `poblacion` y `viviendas`, todos llevan `hogares` (suma de unidades con ficha INE), `unidades_con_hogares` (cobertura), `hogares_ine` (tabulado INE exacto por municipio; suma de municipios en niveles superiores) y `personas_por_hogar` = `ROUND(poblacion / hogares_ine)` (redondeo normal: 3,5→4; 3,2→3).
+
+El listado de `/manzanos` y `/comunidades` (y sus GeoJSON) incluye `hogares` y `personas_por_hogar` por unidad; `hogares = NULL` indica unidad sin ficha (reserva estadística INE). El concepto de "familias" del CPV-2024 equivale a **hogares** (viviendas particulares ocupadas con personas presentes). Casos extremos de ratio por unidad (>20) están documentados en `../cambios_hogares_censo2024/INFORME_CASOS_EXTREMOS_PPH.md`.
+
+Fuentes: `shared.manzanos`, `shared.comunidades` y `shared.censo2024_hogares_municipio` (Censo 2024, migraciones `v2.15.0`, `v2.16.0` y `v2.17.0`; carga con `scripts/cargar_hogares_censo2024.py`).
 
 ## 6. Indicadores RIDA
 

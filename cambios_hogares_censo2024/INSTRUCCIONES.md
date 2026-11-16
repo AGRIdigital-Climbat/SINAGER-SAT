@@ -214,6 +214,12 @@ Esperado: **ningún campo existente desaparece ni cambia de tipo**; los nuevos s
   `personas` (población **total** de la unidad/municipio, incluye colectivas y calle); el INE
   calcula su 3,07 solo con población **en viviendas particulares** (11.134.130). Detalle y
   impacto cuantificado en **§7.2 (D2)**.
+- **Casos extremos por unidad (>20 pers/hogar)**: en manzanas/comunidades con viviendas
+  colectivas el ratio puede ser alto (p.ej. 77, 363) y no representa tamaño de familia.
+  Se **mantiene el valor real** en acceso directo/listados por unidad (`/manzanos/{codigo}`,
+  `/comunidades/{codigo}`, `/manzanos`, `/comunidades`). En `GET /censo/manzanos/por-nombre`,
+  si el ratio del grupo es **> 20** se reemplaza por el **promedio oficial del municipio**
+  (`ROUND(población total / hogares_ine)`). Informe completo: **[`INFORME_CASOS_EXTREMOS_PPH.md`](INFORME_CASOS_EXTREMOS_PPH.md)**.
 - **Cobertura de fichas**: 91,7 % de los hogares del país; las unidades sin ficha (sobre todo
   en algunos municipios rurales) quedan en `NULL` y se reflejan en `unidades_con_hogares`.
 - **El tabulado tiene 3 columnas por bloque** (2001 / 2012 / **2024**): el cargador lee

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any
 
 
@@ -195,6 +195,7 @@ class _UnidadCensoBase(BaseModel):
     tipo_unidad: str = "Manzano"
     personas: int = 0
     viviendas: int = 0
+    hogares: int | None = None
     lat: float | None = None
     lon: float | None = None
     area_oficial: str | None = None
@@ -207,6 +208,7 @@ class ManzanoCreate(BaseModel):
     tipo_unidad: str = "Manzano"
     personas: int = 0
     viviendas: int = 0
+    hogares: int | None = None
     lat: float | None = None
     lon: float | None = None
     area_oficial: str | None = None
@@ -218,6 +220,7 @@ class ManzanoUpdate(BaseModel):
     tipo_unidad: str | None = None
     personas: int | None = None
     viviendas: int | None = None
+    hogares: int | None = None
     lat: float | None = None
     lon: float | None = None
     area_oficial: str | None = None
@@ -227,6 +230,7 @@ class ManzanoResponse(_UnidadCensoBase):
     codigo_ine: str
     id_departamento: int | None = None
     id_provincia: int | None = None
+    personas_por_hogar: int | None = None
     municipio: MunicipioLite | None = None
 
     class Config:
@@ -261,6 +265,10 @@ class ResumenPoblacion(BaseModel):
     unidades_censales: int = 0
     poblacion: int = 0
     viviendas: int = 0
+    hogares: int | None = None
+    unidades_con_hogares: int = 0
+    hogares_ine: int | None = None
+    personas_por_hogar: int | None = None
 
 
 class ResumenPoblacionUnidad(BaseModel):
@@ -269,3 +277,27 @@ class ResumenPoblacionUnidad(BaseModel):
     nombre: str
     poblacion: int = 0
     viviendas: int = 0
+    hogares: int | None = None
+    personas_por_hogar: int | None = None
+
+
+class ManzanosPorNombreResponse(BaseModel):
+    """Agregado de manzanos que comparten nombre dentro de un municipio."""
+
+    id_departamento: int
+    id_provincia: int
+    id_municipio: int
+    municipio: str
+    nombre: str
+    manzanos: int = 0
+    poblacion: int = 0
+    viviendas: int = 0
+    hogares: int = 0
+    unidades_con_hogares: int = 0
+    poblacion_con_hogares: int = 0
+    personas_por_hogar: int | None = Field(
+        None,
+        description="ROUND(poblacion_con_hogares/hogares). Si el ratio del grupo es >20 "
+                    "(caso extremo por población en viviendas colectivas), se reemplaza por el "
+                    "promedio oficial del municipio para evitar valores no representativos."
+    )
