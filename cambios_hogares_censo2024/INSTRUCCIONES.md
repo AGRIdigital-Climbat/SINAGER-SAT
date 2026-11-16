@@ -82,11 +82,13 @@ Validaciones que ya pasaron (las repite el script en cada corrida):
 |---|---|
 | `database/migrations/v2.17.0_shared_censo2024_hogares.sql` | Migración idempotente (BEGIN/COMMIT, `IF NOT EXISTS`): columna `hogares integer CHECK (hogares IS NULL OR hogares >= 0)` en `shared.manzanos` **y** `shared.comunidades` (+ COMMENT), y tabla `shared.censo2024_hogares_municipio (id_municipio PK/FK → shared.municipio, hogares NOT NULL CHECK ≥ 0, fuente DEFAULT 'INE tabulado Vivienda y hogar', actualizado_en DEFAULT now())` |
 | `despliegue/migraciones/v2.17.0_shared_censo2024_hogares.sql` | **Copia textual** de la anterior (obligatoria: `despliegue/scripts/actualizar.sh` aplica esta carpeta) |
-| `scripts/cargar_hogares_censo2024.py` | Cargador nuevo: `--simular` (default) / `--importar`, `DATABASE_URL` env (mismo default que `cargar_censo2024_shared.py`), idempotente. Busca fuentes en `cambios_hogares_censo2024/datos/` → `datos_censo2024/fuentes/` → descarga. Fase A (pyarrow, unidades) y Fase B (openpyxl, 343 municipios), con reporte de cruce y cobertura |
-| `cambios_hogares_censo2024/INSTRUCCIONES.md` | Este documento |
-| `cambios_hogares_censo2024/ANALISIS_NULLS.md` | Análisis completo de los `NULL` de `hogares`: cifras exactas, dónde están (depto/grupos/municipios), por qué no hay otra fuente (reserva estadística INE), estimación evaluada y descartada, comportamiento de la API y SQL de reproducción |
+| `scripts/cargar_hogares_censo2024.py` | Cargador: `--simular` (default) / `--importar`, `DATABASE_URL` env, idempotente. Busca fuentes en `cambios_hogares_censo2024/datos/` → `datos_censo2024/fuentes/` → descarga. Fase A (pyarrow, unidades) y Fase B (openpyxl, 343 municipios), con reporte de cruce y cobertura |
+| `cambios_hogares_censo2024/INSTRUCCIONES.md` | Este documento (índice/replicación) |
+| `cambios_hogares_censo2024/ANALISIS_NULLS.md` | Análisis de los `NULL` de `hogares` (cifras, ubicación, fuentes, decisión “mantener NULL”) |
+| `cambios_hogares_censo2024/INFORME_CASOS_EXTREMOS_PPH.md` | 106 unidades con `personas_por_hogar` > 20 (viviendas colectivas): informe y regla API (`por-nombre` usa promedio municipal; acceso directo mantiene valor real) |
+| `cambios_hogares_censo2024/EDAN_observacion_estado.md` | Cambio EDAN: `observacion_estado` (v2.64.0) |
 | `cambios_hogares_censo2024/datos/ficha.parquet` + `…/tabulado_vivienda_hogar.xlsx` | Copias de los datos fuente (`git add -f`) |
-| `cambios_hogares_censo2024/datos/verificacion_microdata_ine.json` | Fixture de verificación (343 municipios con hogares/viviendas/población agregados desde la microdata oficial INE 413 MB + URL/sha256); **no es dato de carga**, solo regresión (§7) |
+| `cambios_hogares_censo2024/datos/verificacion_microdata_ine.json` | Fixture de verificación (§7), no dato de carga |
 
 ### 3.2 Archivos MODIFICADOS (solo se agregan campos/resúmenes; nada se elimina)
 
