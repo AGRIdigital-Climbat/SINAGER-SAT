@@ -66,7 +66,7 @@ Catálogo SINB: `grupo`, `indicador_natural`, `caracteristica`, `comportamiento`
 
 Campos de los resúmenes: además de `poblacion` y `viviendas`, todos llevan `hogares` (suma de unidades con ficha INE), `unidades_con_hogares` (cobertura), `hogares_ine` (tabulado INE exacto por municipio; suma de municipios en niveles superiores) y `personas_por_hogar` = `ROUND(poblacion / hogares_ine)` (redondeo normal: 3,5→4; 3,2→3).
 
-El listado de `/manzanos` y `/comunidades` (y sus GeoJSON) incluye `hogares` y `personas_por_hogar` por unidad; `hogares = NULL` indica unidad sin ficha (reserva estadística INE). El concepto de "familias" del CPV-2024 equivale a **hogares** (viviendas particulares ocupadas con personas presentes). Casos extremos de ratio por unidad (>20) están documentados en `../cambios_hogares_censo2024/INFORME_CASOS_EXTREMOS_PPH.md`.
+El listado de `/manzanos` y `/comunidades` (y sus GeoJSON) incluye `hogares` y `personas_por_hogar` por unidad; `hogares = NULL` indica unidad sin ficha (reserva estadística INE). El concepto de "familias" del CPV-2024 equivale a **hogares** (viviendas particulares ocupadas con personas presentes). Casos extremos de ratio por unidad (>20) están documentados en `../cambios_replicacion/INFORME_CASOS_EXTREMOS_PPH.md`.
 
 Fuentes: `shared.manzanos`, `shared.comunidades` y `shared.censo2024_hogares_municipio` (Censo 2024, migraciones `v2.15.0`, `v2.16.0` y `v2.17.0`; carga con `scripts/cargar_hogares_censo2024.py`).
 

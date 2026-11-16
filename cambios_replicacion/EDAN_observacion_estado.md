@@ -42,7 +42,7 @@ Hoy solo existía `id_edan_localidad_estado`; no quedaba registro del porqué.
 |---|---|
 | `database/migrations/v2.64.0_edan_localidades_observacion_estado.sql` | Migración idempotente (BEGIN/COMMIT, `ADD COLUMN IF NOT EXISTS`): `observacion_estado TEXT` + COMMENT en `edan.edan_localidades` |
 | `despliegue/migraciones/v2.64.0_edan_localidades_observacion_estado.sql` | **Copia textual** (obligatoria: `despliegue/scripts/actualizar.sh` aplica esta carpeta) |
-| `cambios_hogares_censo2024/EDAN_observacion_estado.md` | Este documento |
+| `cambios_replicacion/EDAN_observacion_estado.md` | Este documento |
 
 ### 2.2 MODIFICADOS
 

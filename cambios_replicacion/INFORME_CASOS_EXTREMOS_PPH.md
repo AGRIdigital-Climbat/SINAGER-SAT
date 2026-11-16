@@ -3,7 +3,7 @@
 > **Alcance:** unidades (manzanos y comunidades) con `hogares > 0` y razón  
 > `(personas / hogares) > 20` (umbral acordado).  
 > **Fecha de extracción:** 2026-11-15 (BD de prueba)  
-> **Fuente:** `shared.manzanos` / `shared.comunidades` + `cambios_hogares_censo2024/datos/ficha.parquet` (INE CPV-2024)
+> **Fuente:** `shared.manzanos` / `shared.comunidades` + `cambios_replicacion/datos/ficha.parquet` (INE CPV-2024)
 
 ## 1. Resumen
 

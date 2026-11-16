@@ -11,7 +11,7 @@ poblacion/viviendas). Unidades sin ficha del INE quedan con hogares = NULL
 (reserva estadistica).
 
 Fuentes (en orden de busqueda):
-  1. cambios_hogares_censo2024/datos/            (carpeta de cambios, version copiada)
+  1. cambios_replicacion/datos/            (carpeta de cambios, version copiada)
   2. datos_censo2024/fuentes/                    (descarga normal del pipeline)
   3. descarga desde internet (si faltan):
        ficha.parquet         -> release data-fichas-v1.0.0 (lab-tecnosocial/censosbo)
@@ -40,7 +40,7 @@ import unicodedata
 import urllib.request
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DIR_CAMBIOS = os.path.join(BASE_DIR, "cambios_hogares_censo2024", "datos")
+DIR_CAMBIOS = os.path.join(BASE_DIR, "cambios_replicacion", "datos")
 DIR_FUENTES = os.path.join(BASE_DIR, "datos_censo2024", "fuentes")
 
 ARCH_FICHA = "ficha.parquet"
@@ -81,7 +81,7 @@ def sha256(path):
 
 
 def resolver_fuente(archivo, url):
-    """Busca el archivo en cambios_hogares_censo2024/ y luego en fuentes/; si
+    """Busca el archivo en cambios_replicacion/ y luego en fuentes/; si
     falta, lo descarga a fuentes/."""
     p_cambios = os.path.join(DIR_CAMBIOS, archivo)
     p_fuentes = os.path.join(DIR_FUENTES, archivo)

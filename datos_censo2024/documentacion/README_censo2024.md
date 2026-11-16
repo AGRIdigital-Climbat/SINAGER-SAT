@@ -447,3 +447,47 @@ Rurrenabaque 08, San Ramón 07, Oruro 04, Villa Abecia 01, Exaltación 08, Colpa
 
 Todas las gráficas nombran las dos clasificaciones con sus términos (`Manzano`/`Comunidad` ·
 `Urbana`/`Rural`/`Mixto`) para que la lectura no dependa del contexto.
+
+## 12. Hogares (dato oficial de "familias")
+
+El CPV-2024 **no publica "familias por comunidad"**; el equivalente oficial es **hogares** =
+viviendas particulares ocupadas con personas presentes (`viv_tipo_presentes`), la misma base
+sobre la que el INE calcula la tipología del hogar y el promedio de personas por hogar.
+**No se divide población/viviendas** (las viviendas incluyen desocupadas: promedio real
+3,1 nacional / 2,8 rural / 3,2 urbano, vs 2,5 si se divide).
+
+**Fuentes cargadas** (en `cambios_replicacion/datos/`, también en `fuentes/`):
+
+| Archivo | URL | Uso |
+|---|---|---|
+| `ficha.parquet` (14,7 MB, 150.744 unidades) | `github.com/lab-tecnosocial/censosbo/releases/download/data-fichas-v1.0.0/ficha.parquet` | `hogares` por unidad = `viv_tipo_presentes` (validado: `Σ hogar_* = viv_tipo_presentes` en el 100 % de las filas) |
+| `tabulado_vivienda_hogar.xlsx` (8,7 MB) | `nube.ine.gob.bo/index.php/s/6H760RRaNemfydX/download` | Cuadro 19, columna 2024, fila total por municipio → `shared.censo2024_hogares_municipio` (343 filas; suma 3.623.711 = total Bolivia) |
+
+**Carga:** `scripts/cargar_hogares_censo2024.py --simular | --importar`
+(valida por unidad `0 ≤ hogares ≤ viviendas` y solo actualiza si pasa; 343/343 municipios
+mapeados por nombre dep/prov/mun; imprime cruce y cobertura).
+
+**Resultado tras la carga:**
+
+| Indicador | Valor |
+|---|---|
+| Unidades con `hogares` | 150.744 (131.801 manzanos + 18.943 comunidades) |
+| Sin ficha INE → `hogares = NULL` | 117.860 unidades (reserva estadística) |
+| `SUM(hogares)` de unidades | 3.322.402 = 91,7 % del total INE |
+| `hogares_ine` por municipio (exacto) | 3.623.711 (343/343) |
+| `personas_por_hogar` nacional | ROUND(11.365.333 / 3.623.711) = 3 (redondeo normal; el INE publica 3,07 → también 3) |
+
+**Verificación cruzada** (2026-11-14; procedimiento completo en
+`cambios_replicacion/INSTRUCCIONES.md` §7):
+
+| Fuente independiente | Resultado |
+|---|---|
+| **Microdata oficial INE** (CSV 413 MB, SHA-256 verificado vs publicado) vs BD | **343/343** hogares, viviendas y poblaciones **exactos** por municipio; nacionales exactos: 3.623.711 hogares / 4.480.201 viviendas / 11.365.333 personas / 11.134.130 en viviendas particulares |
+| Tabulado cuadro 19 vs **cuadro 6** | 343/343 idénticos; sumas departamentales 9/9 |
+| Fichas vs BD por unidad | 0 desajustes en 150.744 unidades (personas y viviendas) |
+| Notas de prensa INE (ago-2025) | Población 11.365.333 ✓ · viviendas 4.480.201 ✓ · promedio 3,1 ✓ |
+
+Fixture reproducible sin bajar la microdata:
+`cambios_replicacion/datos/verificacion_microdata_ine.json` (343 municipios).
+Discrepancias diagnosticadas (cobertura NULL, base del ratio 3,14 vs 3,07, anomalías de
+unidad en la fuente): ver INSTRUCCIONES §7.2.

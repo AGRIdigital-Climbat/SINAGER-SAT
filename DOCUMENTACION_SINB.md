@@ -204,14 +204,17 @@ Base geográfica y de catálogos usada por todos los módulos.
 | `departamento` | `id` | 9 departamentos de Bolivia (`codigo_ine`, `nombre`) | 9 |
 | `provincia` | `id` | 113 provincias, FK a `departamento` | 113 |
 | `municipio` | `id` | 343 municipios, FK dep/prov, **`geom geometry(MultiPolygon,4326)`** con índice GiST | 343 |
-| `comunidades` | `codigo_ine` | Unidades del Censo 2024 tipo Comunidad; `personas`, `viviendas`, `lat/lon`, `area_oficial`, FK `id_municipio`, **`geom (Point,4326)`** | 21.175 |
-| `manzanos` | `codigo_ine` | Unidades del Censo 2024 tipo Manzano; mismas columnas, **`geom (MultiPolygon,4326)`** | 247.429 |
+| `comunidades` | `codigo_ine` | Unidades del Censo 2024 tipo Comunidad; `personas`, `viviendas`, `hogares` (INE, NULL sin ficha), `lat/lon`, `area_oficial`, FK `id_municipio`, **`geom (Point,4326)`** | 21.175 |
+| `manzanos` | `codigo_ine` | Unidades del Censo 2024 tipo Manzano; mismas columnas (incluye `hogares`), **`geom (MultiPolygon,4326)`** | 247.429 |
+| `censo2024_hogares_municipio` | `id_municipio` | Hogares **exactos por municipio** según tabulado oficial INE "Vivienda y hogar" (cuadro 19); fuente y `actualizado_en` | 343 |
 | `cultivo` | `id` | Catálogo de cultivos (SIIP) con `grupo` CHECK (7 grupos) | 73 |
 | `pecuario` | `id` | Catálogo de especies pecuarias con `grupo` CHECK (6 grupos) | 29 |
 
-Origen del DDL: `database/edan_db_backup.sql`, `database/migration_v1.3.1.sql` (cultivos), `database/migration_v1.3.2.sql` (pecuario), `database/migration_v1.5.0.sql` (PostGIS en `municipio`), `database/migrations/v2.15.0_shared_censo2024.sql` y `v2.16.0_shared_censo2024_estandar.sql` (manzanos/comunidades).
+Origen del DDL: `database/edan_db_backup.sql`, `database/migration_v1.3.1.sql` (cultivos), `database/migration_v1.3.2.sql` (pecuario), `database/migration_v1.5.0.sql` (PostGIS en `municipio`), `database/migrations/v2.15.0_shared_censo2024.sql`, `v2.16.0_shared_censo2024_estandar.sql` (manzanos/comunidades) y `v2.17.0_shared_censo2024_hogares.sql` (columna `hogares` + tabla `censo2024_hogares_municipio`).
 
 **Nota semántica importante del Censo 2024:** `tipo_unidad` (Manzano/Comunidad) es una clasificación **cartográfica**, mientras que `area_oficial` (Urbana/Rural/Mixto) es la **clasificación oficial del INE a nivel municipio**. Para reportar población urbana/rural debe usarse `area_oficial` (`datos_censo2024/documentacion/README_censo2024.md:235-299`).
+
+**Nota de hogares ("familias"):** el INE CPV-2024 no publica "familias por comunidad"; el equivalente oficial es **hogares** = viviendas particulares ocupadas con personas presentes (`viv_tipo_presentes` de la ficha del geoportal). Unidades sin ficha quedan con `hogares = NULL` (reserva estadística); los agregados exponen `unidades_con_hogares` como indicador de cobertura. `personas_por_hogar` = `ROUND(poblacion / hogares)` (redondeo normal: 3,5→4; 3,2→3); a nivel agregado la base preferente es `hogares_ine` (tabulado INE, cobertura 343/343).
 
 ### 4.3 Esquema `usuarios` (7 tablas)
 
@@ -558,14 +561,14 @@ Rutas generadas por una factoría (`_definir_rutas_censo`, `api/shared/router.py
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/manzanos` y `/comunidades` | Listado con filtros `id_municipio`, `codigo_ine`, `q`, `area_oficial`, paginación |
-| GET | `/…/geojson` | GeoJSON con `bbox` (operador `&&` sobre índice GiST; límite 50.000) |
+| GET | `/manzanos` y `/comunidades` | Listado con filtros `id_municipio`, `codigo_ine`, `q`, `area_oficial`, paginación; incluye `hogares` y `personas_por_hogar` |
+| GET | `/…/geojson` | GeoJSON con `bbox` (operador `&&` sobre índice GiST; límite 50.000); `properties` incluye `hogares` y `personas_por_hogar` |
 | GET | `/{codigo_ine}` | Unidad por código INE |
 | GET | `/{codigo_ine}/geojson` | Geometría de la unidad |
-| GET | `/{codigo_ine}/poblacion` | Personas y viviendas de la unidad |
-| POST / PUT / DELETE | `/…` | Escritura (v1: permiso SISTEMA; v2: autenticado) |
+| GET | `/{codigo_ine}/poblacion` | Personas, viviendas y hogares de la unidad (+ `personas_por_hogar`) |
+| POST / PUT / DELETE | `/…` | Escritura (v1: permiso SISTEMA; v2: autenticado); `hogares` aceptado en create/update |
 
-### 6.5 Resúmenes de población
+### 6.5 Resúmenes de población y hogares
 
 | Ruta | Calcula |
 |---|---|
@@ -574,8 +577,13 @@ Rutas generadas por una factoría (`_definir_rutas_censo`, `api/shared/router.py
 | `GET /censo/poblacion/provincias` | Resumen por provincia |
 | `GET /censo/poblacion/municipios` | Resumen por municipio |
 | `GET /censo/poblacion/departamento/{id}` · `/provincia/{id}` · `/municipio/{id}` | Resumen de un territorio concreto (404 si sin datos) |
+| `GET /censo/manzanos/por-nombre` | **Manzanos agrupados por nombre común dentro de cada municipio** (filtros `id_departamento` → `id_provincia` → `id_municipio`, `q`; sin paginación) |
 
 Implementación: CTE que agrupa `manzanos` y `comunidades` por el nivel pedido y los suma (`api/shared/service.py:808-917`). Los territorios sin unidades aparecen con ceros.
+
+Campos de todos los resúmenes (`ResumenPoblacion`): además de `poblacion`/`viviendas`, llevan **`hogares`** (suma de unidades con ficha; `NULL` si ninguna), **`unidades_con_hogares`** (cobertura), **`hogares_ine`** (tabulado INE exacto; en provincia/departamento/nacional es la suma de sus municipios) y **`personas_por_hogar`** = `ROUND(poblacion / hogares_ine)` (redondeo normal; si `hogares_ine` no está cargado, usa la población cubierta y `hogares`).
+
+El endpoint agrupado (`/censo/manzanos/por-nombre`) devuelve por grupo: `manzanos` (conteo), `poblacion`, `viviendas`, `hogares`, `unidades_con_hogares`, `poblacion_con_hogares` y `personas_por_hogar` = `ROUND(poblacion_con_hogares / hogares)` (los manzanos no tienen nombre único; el más repetido es el del municipio, p. ej. 20.775 manzanos "SANTA CRUZ DE LA SIERRA"). Los 343 municipios → 2.942 grupos.
 
 **Totales nacionales actuales (Censo 2024):**
 
@@ -585,6 +593,8 @@ Implementación: CTE que agrupa `manzanos` y `comunidades` por el nivel pedido y
 | Comunidades | 21.175 |
 | Población total | 11.365.333 |
 | Viviendas totales | 4.480.201 |
+| Hogares INE (tabulado, 343 municipios) | 3.623.711 |
+| Hogares por unidades con ficha (cobertura 91,7 %) | 3.322.402 (150.744 unidades) |
 
 ### 6.6 Pipeline del Censo 2024 (carga de datos)
 
@@ -595,6 +605,8 @@ flowchart LR
     P2 --> P3["scripts/03_generar_graficas.py<br/>PNG/CSV de control"]
     P2 --> C["scripts/cargar_censo2024_shared.py<br/>COPY temporal + UPSERT ON CONFLICT"]
     C --> DB[("shared.manzanos<br/>shared.comunidades<br/>+ geom WKB→PostGIS")]
+    F2["cambios_replicacion/datos/<br/>ficha.parquet + tabulado INE xlsx"] --> H["scripts/cargar_hogares_censo2024.py<br/>validaciones + UPSERT"]
+    H --> DB2[("shared.*.hogares<br/>shared.censo2024_hogares_municipio")]
 ```
 
 | Etapa | Archivo | Resultado |
@@ -603,6 +615,7 @@ flowchart LR
 | Proceso | `datos_censo2024/scripts/02_procesar_universo.py` | CSV (`manzanos_censo2024.csv`, `comunidades_censo2024.csv`, …) y GeoPackage con 3 capas |
 | Gráficas | `datos_censo2024/scripts/03_generar_graficas.py` | 12 PNG + 3 CSV de control |
 | Carga | `scripts/cargar_censo2024_shared.py` | `COPY` a tabla temporal → `INSERT … ON CONFLICT (codigo_ine) DO UPDATE` → `ST_GeomFromWKB`; transaccional e idempotente (`--simular` / `--importar`) |
+| Carga hogares | `scripts/cargar_hogares_censo2024.py` | Fichas (`viv_tipo_presentes`, valida `Σ hogar_*`) → `shared.*.hogares` (150.744 unidades, solo si `hogares ≤ viviendas`); tabulado INE cuadro 19 → `censo2024_hogares_municipio` (343 filas exactas, suma = total Bolivia); cruces y cobertura impresos; `--simular` / `--importar`, idempotente |
 
 Documentación complementaria: `datos_censo2024/documentacion/README_censo2024.md` y `POSTGRES_censo2024.md`.
 
@@ -922,8 +935,9 @@ Conjunto de endpoints pensados para consumo de tableros, reportes y consultorios
 | | `GET /api/v2/sinb/verificacion/pendientes` | Pronósticos pendientes de verificación |
 | | `GET /api/v2/sinb/mapa/{comunidades,municipios,manzanos,pronosticos}/geojson` | Capas geográficas |
 | | `GET /api/v2/sinb/galeria/indicadores-destacados` | Indicadores destacados por evidencias |
-| **Población** | `GET /api/v2/shared/censo/poblacion/{nacional,departamentos,provincias,municipios,…}` | Totales y resúmenes del Censo 2024 |
-| | `GET /api/v2/shared/{manzanos,comunidades}/{codigo_ine}/poblacion` | Población de una unidad |
+| **Población** | `GET /api/v2/shared/censo/poblacion/{nacional,departamentos,provincias,municipios,…}` | Totales y resúmenes del Censo 2024 (población, viviendas y hogares) |
+| | `GET /api/v2/shared/censo/manzanos/por-nombre` | Manzanos agrupados por nombre común (población, viviendas, hogares, personas/hogar) |
+| | `GET /api/v2/shared/{manzanos,comunidades}/{codigo_ine}/poblacion` | Población, viviendas y hogares de una unidad |
 | **Geo** | `GET /api/v2/shared/municipios/geojson`, `/geom`, `/ubicacion` | Cartografía y consulta punto-polígono |
 | **Pronóstico digital** | `GET /api/v2/sinb/pronostico-digital/{diario,mapa,consultar}` | Serie de 16 días por municipio |
 | **NDVI (propuesta)** | `GET /api/v2/ndvi/{alertas,estadisticas/resumen,geojson/mapa-calor}` | Ver capítulo 11 |
@@ -1001,6 +1015,7 @@ Inventario de los scripts reales que cargan o migran datos hacia la base del sis
 |---|---|---|---|
 | `scripts/cargar_municipios_343.py` | `MUNICIPIOS_343.zip` → `shared.departamento/provincia/municipio` | 9/113/343 municipios con geometría PostGIS; control de calidad (conteos, `ST_IsValid`, huérfanos) | En repo |
 | `scripts/cargar_censo2024_shared.py` | `datos_censo2024/procesado/*.csv` + GeoPackage → `shared.manzanos`, `shared.comunidades` | UPSERT por `codigo_ine` + geometría WKB; `--simular`/`--importar` | En repo |
+| `scripts/cargar_hogares_censo2024.py` | `cambios_replicacion/datos/` (ficha INE + tabulado INE) → `shared.*.hogares`, `shared.censo2024_hogares_municipio` | Carga de hogares con validaciones (Σ hogar_*, 343 municipios, cruces); `--simular`/`--importar`, idempotente | En repo |
 | `datos_censo2024/scripts/01..03_*.py` | Geoportal INE → CSV/GeoPackage/PNG | Descarga, procesado y gráficas de control del Censo 2024 | En repo |
 | `scripts/migrate_pronostico_largo.py` | `SINB/sinb_20260714.sql` (MariaDB legado) → `sinb.*` | Migración de pronósticos de largo plazo desde el SINB legado | Sin commitear |
 | `scripts/migrate_pronostico_largo_relacional.py` | Idem → `categoria_pronostico`, `escenario`, `escenario_estacional` | Catálogos relacionales del pronóstico largo | Sin commitear |
