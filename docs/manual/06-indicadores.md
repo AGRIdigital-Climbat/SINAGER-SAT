@@ -20,10 +20,20 @@
 | `GET /api/v2/shared/censo/poblacion/departamento/{id}` | Detalle de un departamento |
 | `GET /api/v2/shared/censo/poblacion/provincia/{id}` | Detalle de una provincia |
 | `GET /api/v2/shared/censo/poblacion/municipio/{id}` | Detalle de un municipio |
+| `GET /api/v2/shared/censo/manzanos/por-nombre` | Manzanos agrupados por nombre común (población, viviendas, hogares, personas por hogar) |
+
+Cada resumen incluye `poblacion`, `viviendas`, `hogares` (hogares INE; "familias" del censo), `unidades_con_hogares`, `hogares_ine` (cifra exacta del tabulado INE) y `personas_por_hogar` (redondeo normal: 3,5→4; 3,2→3). `hogares = NULL` o `personas_por_hogar = NULL` significa "sin dato oficial" (reserva estadística del INE).
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8000/api/v2/shared/censo/poblacion/departamentos"
+```
+
+Agrupación de manzanos por nombre (respeta la jerarquía geográfica):
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v2/shared/censo/manzanos/por-nombre?id_municipio=10101"
 ```
 
 ## 3. Indicadores de daños (EDAN)

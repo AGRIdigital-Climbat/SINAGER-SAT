@@ -273,6 +273,7 @@ PGPASSWORD=12345678 psql -h 127.0.0.1 -U sinagersat -d db_sinagersat \
 |--------|-------------|
 | `scripts/importar_bdlimpia.py` | Importar datos desde Excel BD Limpia |
 | `scripts/cargar_censo2024_shared.py` | Cargar Censo 2024 al esquema shared |
+| `scripts/cargar_hogares_censo2024.py` | Cargar hogares INE (Censo 2024, equivalente de familias) a manzanos/comunidades y municipios |
 | `scripts/cron_ndvi_ingest.py` | Ingesta diaria de NDVI (CRON 06:00) |
 
 ---

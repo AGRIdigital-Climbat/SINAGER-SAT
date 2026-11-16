@@ -686,6 +686,13 @@ POST /{id_solicitud}/cerrar            → aprueba 'cierre' → solicitud CERRAD
 > El nivel `determinacion` se aprueba con `PUT /{id}/aprobacion/determinacion`
 > (§5.3) una vez revisados los artículos del motor. Los pasos sin endpoint
 > propio usan siempre el `PUT` genérico del motor.
+>
+> **Compatibilidad (shim v2.60.0):** los antiguos `POST
+> /rida/solicitudes/{id}/revisar|/validar|/observar|/corregir` siguen
+> disponibles como adaptadores. En AH, `revisar`/`validar` desde `ENVIADA`
+> ejecutan `POST /{id}/iniciar` (motor AH); desde `EN_APROBACION` aprueban el
+> nivel accionable; `observar` lo devuelve (motivo ≥ 10); `corregir` responde
+> 409. Ver `APROBACIONES_RIDA.md` §"Endpoints de etapa".
 
 ### 5.5 Catálogos
 

@@ -37,6 +37,8 @@ cat_tipo_rehabilitacion (5 tipos) ── 1:N ── cat_insumo_rehabilitacion (2
 - [ ] 2. Crear la necesidad en el formulario o en la familia.
 - [ ] 3. Asignar prioridad (1 = alta).
 - [ ] 4. Al completar la entrega, marcar `estado: true`.
+- [ ] 5. (Opcional) Configurar reglas del motor de necesidades y previsualizar
+      el cálculo en la solicitud de Ayuda Humanitaria (§7).
 
 ## 3. Catálogos
 
@@ -135,7 +137,47 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json
 
 Respuesta: `{"necesidades": [...], "errores": [...]}` — el lote **nunca falla completo**. Detalle: [Cap. 08](08-offline-y-sincronizacion.md).
 
-## 7. Relación con la modalidad de Rehabilitación
+## 7. Motor de necesidades (v2.61.0)
+
+Genera las necesidades de una familia a partir de **reglas** configurables, en
+lugar de cargarlas manualmente. Se ejecuta desde el expediente de Ayuda
+Humanitaria.
+
+| Endpoint | Método | Uso |
+|---|---|---|
+| `/api/v2/ayuda-humanitaria/reglas-necesidad` | GET / POST | Listado (filtros `activo`, `criterio_aplicacion`, `id_categoria_ayuda`) y alta |
+| `/api/v2/ayuda-humanitaria/reglas-necesidad/{id}` | GET / PUT / DELETE | Detalle/edición; DELETE → 409 si ya generó necesidades |
+| `/api/v2/ayuda-humanitaria/expedientes/{id}/motor-necesidades/preview` | POST | Evalúa y devuelve sin persistir (cualquier etapa) |
+| `/api/v2/ayuda-humanitaria/expedientes/{id}/motor-necesidades` | POST | Calcula y persiste; solo `ENVIADA`/`EN_APROBACION` |
+
+**Regla:**
+
+```json
+{
+  "nombre": "Kit gestante",
+  "id_categoria_ayuda": 7,
+  "id_articulo": 31,
+  "criterio_aplicacion": "POR_CONDICION_ESPECIAL",
+  "cantidad_base": 2,
+  "dias_duracion": 30,
+  "prioridad": 10,
+  "condiciones": {"gestante": true, "edad_max_dias": 3650},
+  "activo": true
+}
+```
+
+- `POR_FAMILIA`: aplica a todas las familias, sin condiciones.
+- `POR_INTEGRANTE`: cuenta los integrantes (con filtros opcionales).
+- `POR_CONDICION_ESPECIAL`: exige al menos una condición (`gestante`,
+  `discapacidad`, `edad_min_dias`, `edad_max_dias`, `sexo` `M`/`F`).
+- Fórmula: `ceil(cantidad_base × (dias_duracion or 1) × poblacion_familia)`,
+  sin mínimos ni máximos; la unidad se toma de `cat_articulo`.
+- Al persistir, **reemplaza** las necesidades manuales de las categorías
+  cubiertas por familia; las categorías sin regla se conservan.
+- La respuesta incluye `familias`, `articulos_distintos`, `unidades`,
+  `manuales_reemplazadas` y `motoras_eliminadas`.
+
+## 8. Relación con la modalidad de Rehabilitación
 
 Las necesidades registradas aquí alimentan las modalidades **3 · Rehabilitación-Insumos** y **4 · Rehabilitación-Reconstrucción** de las solicitudes ([Cap. 05](05-solicitudes-workflow.md)). Los catálogos de rehabilitación (`cat_tipos_rehabilitacion`, `cat_insumo_rehabilitacion`) describen los servicios e insumos disponibles:
 
@@ -147,13 +189,15 @@ Las necesidades registradas aquí alimentan las modalidades **3 · Rehabilitaci�
 | `VIAS_TALUDES` | *(según catálogo cargado)* |
 | `CUBIERTAS` | *(según catálogo cargado)* |
 
-## 8. Errores frecuentes
+## 9. Errores frecuentes
 
 | Error | Causa | Solución |
 |---|---|---|
 | `422 cantidad debe ser > 0` | Cantidad en cero o negativa | Usa valores positivos |
 | `400 La categoría no coincide con el artículo` | `id_categoria_ayuda` ≠ categoría real del artículo | Consulta `GET /cat-articulos/{id}` |
 | `403 Sin permiso: CREATE en RIDA` | Rol sin escritura | [Cap. 01 §3](01-acceso-y-roles.md) |
+| `422` en reglas de necesidad | Clave de `condiciones` desconocida o `POR_CONDICION_ESPECIAL` sin filtros | Revisa §7 |
+| `409` al persistir el motor | La solicitud no está en `ENVIADA`/`EN_APROBACION` | Usa `preview` o espera la etapa válida |
 
 ---
 

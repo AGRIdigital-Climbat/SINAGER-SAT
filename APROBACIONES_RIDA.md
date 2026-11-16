@@ -17,6 +17,8 @@ qué reglas aplica el servidor automáticamente y qué contrato expone la API.
 > - Se elimina `BORRADOR` y las acciones `enviar/revisar/observar/corregir/
 >   validar/iniciar-aprobacion/autorizar/cerrar`: la solicitud **nace en
 >   `ENVIADA`** y el motor se materializa en el mismo `POST` de creación.
+>   `revisar/validar/observar/corregir` se conservan como **shim de
+>   compatibilidad** que traduce al motor (ver §"Endpoints de etapa").
 > - Nivel 1 (`validacion`) corre sobre `ENVIADA`; al aprobarlo la solicitud pasa
 >   a `EN_APROBACION`. `revision_articulos` la lleva a `APROBADA`, `suministro`
 >   a `AUTORIZADA`, `despacho` a `DESPACHADA` y `entrega` a `ENTREGADA` con
@@ -515,10 +517,33 @@ gana si llegan ambos. La respuesta reutiliza el `data` del GET.
 | Endpoint | Efecto |
 |---|---|
 | `POST /{id}/rechazar` | `ENVIADA`/`EN_APROBACION` → `RECHAZADA`; congela las filas. |
-| `POST /{id}/enviar`, `/revisar`, `/observar`, `/corregir`, `/validar`, `/iniciar-aprobacion`, `/autorizar`, `/cerrar` | **ELIMINADOS (404).** El motor arranca al crear; `autorizar`/`cerrar` son reemplazados por los niveles `suministro`/`entrega` + cierre automático. |
+| `POST /{id}/revisar`, `/validar` | **Shim de compatibilidad.** Traducen al motor: en `ENVIADA` aprueban `validacion` (AH inicia su motor); en `EN_APROBACION` aprueban el nivel accionable. Aceptan JSON o multipart (el PDF adjunto se registra como informe en `validacion`). |
+| `POST /{id}/observar` | **Shim de compatibilidad.** Devuelve el nivel accionable al anterior (`motivo` ≥ 10 caracteres). |
+| `POST /{id}/corregir` | **Shim de compatibilidad: 409.** La devolución ya deja el nivel en espera de corrección. |
+| `POST /{id}/enviar`, `/iniciar-aprobacion`, `/autorizar`, `/cerrar` | **ELIMINADOS (404).** El motor arranca al crear; `autorizar`/`cerrar` son reemplazados por los niveles `suministro`/`entrega` + cierre automático. |
 | `PUT /{id}` (actualizar) | Solo en `ENVIADA`. |
 | `DELETE /{id}` | Solo en `ENVIADA` y sin niveles aprobados. |
 | `POST /{id}/documentos` | Solo en `ENVIADA`. |
+
+### Shim de compatibilidad (acciones de etapa retiradas)
+
+El frontend legado llamaba `POST /{id}/revisar|/validar|/observar|/corregir`.
+Se conservan como **adaptadores** al motor; **no** reactivan las etapas
+`EN_REVISION`/`OBSERVADA`/`VALIDADA` (siguen inactivas). Aceptan `application/json`
+o `multipart/form-data` (`archivo`, `nombre_documento`, `fecha_documento`).
+
+| Acción | Modalidad | Etapa | Efecto |
+|---|---|---|---|
+| `revisar`/`validar` | Ayuda Humanitaria (1) | `ENVIADA` | `iniciar_motor` (exige checklist instancia 1; 409 si falta). |
+| `revisar`/`validar` | Ayuda Humanitaria (1) | `EN_APROBACION` | Aprueba el nivel accionable (rol validado por el motor AH). |
+| `revisar`/`validar` | Otras | `ENVIADA` | Aprueba `validacion`; el informe PDF puede venir en el mismo request (409 si falta checklist o informe). |
+| `revisar`/`validar` | Otras | `EN_APROBACION`… | Aprueba el nivel accionable. |
+| `observar` | Cualquiera | motor activo | Devuelve el nivel accionable al anterior; `motivo` ≥ 10 (422 si falta). Sin nivel previo aprobado → 409 (usar `POST /{id}/rechazar`). |
+| `corregir` | Cualquiera | — | 409: la devolución ya deja el nivel en `espera_correccion`. |
+
+La respuesta usa el envelope habitual: `data` es la solicitud (incluye `etapa`)
+más `data.aprobacion` (mismo payload de `GET /{id}/aprobacion`). Errores de
+permiso/estado conservan los códigos del motor (403/404/409/422).
 
 ### `GET /{id}/bitacora` — auditoría, no es la máquina
 
@@ -565,7 +590,9 @@ en cada lectura de la máquina y antes de cada visado. Un `GET` de una solicitud
   - El `PUT` de aprobación es **multipart** y el informe es obligatorio en
     `validacion`.
   - Desaparecen los endpoints de etapa `enviar/revisar/observar/corregir/
-    validar/iniciar-aprobacion/autorizar/cerrar`.
+    validar/iniciar-aprobacion/autorizar/cerrar`. Por compatibilidad se
+    conserva un shim para `revisar/validar/observar/corregir` que traduce al
+    motor (no reabre `EN_REVISION`/`VALIDADA`/`OBSERVADA`).
   - La solicitud nace en `ENVIADA`; no hay `BORRADOR`.
 - **`observaciones` (cabecera) ≠ `observacion` (por nivel).**
 

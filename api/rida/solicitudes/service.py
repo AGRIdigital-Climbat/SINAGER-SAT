@@ -1354,3 +1354,170 @@ def rechazar_solicitud(db: Session, id_solicitud: int, id_usuario: int, observac
     _registrar_paso(db, id_solicitud, 1, "Rechazo de solicitud", "RECHAZAR", "RECHAZADA", observaciones, id_usuario)
     db.commit()
     return obtener_solicitud(db, id_solicitud)
+
+
+# ============================================================================
+#  Compatibilidad v2.60.0: acciones de etapa retiradas (shim)
+# ============================================================================
+# El frontend legado llamaba POST /{id}/revisar|/validar|/observar|/corregir.
+# Esos endpoints se retiraron en v2.60.0; este shim los traduce al motor nuevo
+# sin reabrir la máquina de estados anterior (EN_REVISION/VALIDADA/OBSERVADA).
+
+ACCIONES_LEGACY = ("revisar", "validar", "observar", "corregir")
+
+
+def _estados_niveles(db: Session, tabla: str, id_solicitud: int) -> dict:
+    filas = _rows(
+        db,
+        f"SELECT nivel, estado FROM {tabla} WHERE id_solicitud = :id",
+        {"id": id_solicitud},
+    )
+    return {f["nivel"]: f["estado"] for f in filas}
+
+
+def _nivel_actual(cadena: list[str], estados: dict) -> str | None:
+    for nivel in cadena:
+        if estados.get(nivel) != "aprobado":
+            return nivel
+    return None
+
+
+def _respuesta_legacy(db: Session, id_solicitud: int, message: str, aprobacion: dict):
+    sol = obtener_solicitud(db, id_solicitud) or {}
+    sol["aprobacion"] = aprobacion
+    return sol, message
+
+
+def _observacion_legacy(observacion: str | None) -> str:
+    obs = (observacion or "").strip()
+    if len(obs) < OBS_MIN_APROBACION:
+        raise HTTPException(
+            status_code=422,
+            detail=f"La observación es obligatoria y debe tener al menos "
+                   f"{OBS_MIN_APROBACION} caracteres (actual: {len(obs)})",
+        )
+    return obs
+
+
+def transicion_legacy(db: Session, id_solicitud: int, accion: str, id_usuario: int,
+                      user: dict, observacion: str | None = None,
+                      informe: dict | None = None):
+    """Traduce una acción de etapa legada al motor de aprobaciones v2.60.0.
+
+    - `revisar`/`validar`: aprueban el nivel accionable (o inician el motor AH
+      desde ENVIADA).
+    - `observar`: devuelve el nivel accionable al anterior (motivo >= 10).
+    - `corregir`: retirada; la devolución ya deja el nivel en espera_correccion.
+    """
+    if accion not in ACCIONES_LEGACY:
+        raise HTTPException(status_code=400, detail=f"Acción inválida: {accion}")
+    sol = _row(db, """
+        SELECT id_solicitud, id_modalidad, etapa
+        FROM rida.solicitud WHERE id_solicitud = :id
+    """, {"id": id_solicitud})
+    if not sol:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    validar_scope_solicitud(db, user, id_solicitud)
+
+    if accion == "corregir":
+        raise HTTPException(
+            status_code=409,
+            detail="La acción 'corregir' fue retirada en v2.60.0: la devolución "
+                   "deja el nivel en espera de corrección y se re-aprueba desde "
+                   "el mismo nivel.",
+        )
+
+    if sol["id_modalidad"] == MODALIDAD_AYUDA_HUMANITARIA:
+        from ...ayuda_humanitaria import service as ah
+
+        if accion in ("revisar", "validar"):
+            if sol["etapa"] == "ENVIADA":
+                data = ah.iniciar_motor(db, id_solicitud, id_usuario, user)
+                return _respuesta_legacy(
+                    db, id_solicitud, "Motor de ayuda humanitaria iniciado", data)
+            if sol["etapa"] != "EN_APROBACION":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Solo se puede validar desde ENVIADA o EN_APROBACION "
+                           f"(actual: {sol['etapa']})")
+            cadena = ah.asegurar_aprobaciones(db, id_solicitud, sol["id_modalidad"])
+            nivel = _nivel_actual(
+                cadena,
+                _estados_niveles(db, "rida.aprobaciones_ayuda_humanitaria", id_solicitud))
+            if not nivel:
+                raise HTTPException(status_code=409,
+                                    detail="La cadena de aprobación ya está completa")
+            data = ah.aprobar_nivel(db, id_solicitud, nivel, id_usuario, user)
+            return _respuesta_legacy(
+                db, id_solicitud, f"Aprobación {nivel} registrada", data)
+
+        # observar
+        if sol["etapa"] != "EN_APROBACION":
+            raise HTTPException(
+                status_code=409,
+                detail="Solo se puede observar en EN_APROBACION "
+                       f"(actual: {sol['etapa']}); desde ENVIADA use "
+                       f"POST /{id_solicitud}/rechazar")
+        cadena = ah.asegurar_aprobaciones(db, id_solicitud, sol["id_modalidad"])
+        nivel = _nivel_actual(
+            cadena,
+            _estados_niveles(db, "rida.aprobaciones_ayuda_humanitaria", id_solicitud))
+        if not nivel:
+            raise HTTPException(status_code=409,
+                                detail="La cadena de aprobación ya está completa")
+        if cadena.index(nivel) == 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Aún no hay un nivel aprobado que devolver; desde ENVIADA "
+                       f"use POST /{id_solicitud}/rechazar")
+        obs = _observacion_legacy(observacion)
+        data = ah.devolver_nivel(db, id_solicitud, nivel, obs, id_usuario, user)
+        return _respuesta_legacy(
+            db, id_solicitud, f"Devolución de {nivel} registrada", data)
+
+    # Modalidades con el motor de visaciones (no AH)
+    if accion in ("revisar", "validar"):
+        if sol["etapa"] == "ENVIADA":
+            data = aprobar_nivel(db, id_solicitud, "validacion", id_usuario,
+                                 user, informe=informe)
+            return _respuesta_legacy(
+                db, id_solicitud, "Aprobación validacion registrada", data)
+        if sol["etapa"] not in ETAPAS_MOTOR:
+            raise HTTPException(
+                status_code=409,
+                detail=f"El motor de visaciones exige etapa en {list(ETAPAS_MOTOR)} "
+                       f"(actual: {sol['etapa']})")
+        cadena = resolver_cadena(db, sol["id_modalidad"])
+        nivel = _nivel_actual(
+            cadena,
+            _estados_niveles(db, "rida.aprobaciones_solicitud", id_solicitud))
+        if not nivel:
+            raise HTTPException(status_code=409,
+                                detail="La cadena de aprobación ya está completa")
+        data = aprobar_nivel(db, id_solicitud, nivel, id_usuario, user)
+        return _respuesta_legacy(
+            db, id_solicitud, f"Aprobación {nivel} registrada", data)
+
+    # observar
+    if sol["etapa"] not in ETAPAS_MOTOR:
+        raise HTTPException(
+            status_code=409,
+            detail=f"El motor de visaciones exige etapa en {list(ETAPAS_MOTOR)} "
+                   f"(actual: {sol['etapa']}); desde ENVIADA use "
+                   f"POST /{id_solicitud}/rechazar")
+    cadena = resolver_cadena(db, sol["id_modalidad"])
+    nivel = _nivel_actual(
+        cadena,
+        _estados_niveles(db, "rida.aprobaciones_solicitud", id_solicitud))
+    if not nivel:
+        raise HTTPException(status_code=409,
+                            detail="La cadena de aprobación ya está completa")
+    if cadena.index(nivel) == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Aún no hay un nivel aprobado que devolver; desde ENVIADA "
+                   f"use POST /{id_solicitud}/rechazar")
+    obs = _observacion_legacy(observacion)
+    data = devolver_nivel(db, id_solicitud, nivel, obs, id_usuario, user)
+    return _respuesta_legacy(
+        db, id_solicitud, f"Devolución de {nivel} registrada", data)

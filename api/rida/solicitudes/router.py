@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Form, UploadFile, File
+from fastapi import (APIRouter, Depends, HTTPException, Query, Form,
+                     UploadFile, File, Request)
 from sqlalchemy.orm import Session
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from ...database import get_db
@@ -495,3 +496,122 @@ def rechazar(id_solicitud: int, body: TransicionRequest,
              db: Session = Depends(get_db), _user=Depends(get_current_user)):
     data = service.rechazar_solicitud(db, id_solicitud, _user["id_usuario"], body.observaciones, user=_user)
     return SuccessResponse(message="Solicitud rechazada", data=data)
+
+
+# ============================================================================
+#  Compatibilidad v2.60.0: acciones de etapa retiradas (shim)
+# ============================================================================
+# El frontend legado sigue llamando POST /{id}/revisar|/validar|/observar|
+# /corregir. Se mantienen como adaptadores al motor de 7 niveles para no romper
+# a los clientes antiguos; el contrato recomendado es
+# PUT /{id}/aprobacion/{nivel} y GET /{id}/aprobacion.
+
+DESC_LEGACY = (
+    "**Compatibilidad (v2.60.0).** Acción de etapa retirada que se traduce al "
+    "motor de 7 niveles: `revisar`/`validar` aprueban el nivel accionable (o "
+    "inician el motor de Ayuda Humanitaria desde ENVIADA); `observar` devuelve "
+    "el nivel accionable al anterior (motivo >= 10 caracteres); `corregir` ya "
+    "no aplica (409). Contrato recomendado: `PUT /{id_solicitud}/aprobacion/{nivel}`."
+)
+
+
+async def _payload_legacy(request: Request) -> dict:
+    """Acepta JSON o multipart/form-data (para adjuntar el informe PDF)."""
+    ctype = (request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" in ctype or "application/x-www-form-urlencoded" in ctype:
+        form = await request.form()
+        return {
+            "observacion": (form.get("motivo") or form.get("observacion")
+                            or form.get("observaciones")),
+            "archivo": form.get("archivo"),
+            "nombre_documento": form.get("nombre_documento"),
+            "fecha_documento": form.get("fecha_documento"),
+        }
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    return {
+        "observacion": (body.get("motivo") or body.get("observacion")
+                        or body.get("observaciones")),
+        "archivo": None,
+        "nombre_documento": body.get("nombre_documento"),
+        "fecha_documento": body.get("fecha_documento"),
+    }
+
+
+async def _transicion_legacy(id_solicitud: int, accion: str, request: Request,
+                             db: Session, _user: dict):
+    payload = await _payload_legacy(request)
+    informe = None
+    archivo = payload.get("archivo")
+    if (accion in ("revisar", "validar") and archivo is not None
+            and not isinstance(archivo, str)):
+        sol = service.obtener_solicitud(db, id_solicitud)
+        if not sol:
+            raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+        if (sol["id_modalidad"] != service.MODALIDAD_AYUDA_HUMANITARIA
+                and sol["etapa"] == "ENVIADA"):
+            fecha_dt = date.today()
+            if payload.get("fecha_documento"):
+                try:
+                    fecha_dt = datetime.strptime(
+                        payload["fecha_documento"], "%Y-%m-%d").date()
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="fecha_documento debe ser YYYY-MM-DD")
+            subfolder = f"rida/solicitudes/{id_solicitud}"
+            path, tamano, hash_sha, _ = await save_documento_pdf(
+                archivo, db, _user["id_usuario"], subfolder,
+                sol["id_municipio"])
+            informe = {
+                "path_archivo": path, "tamano": tamano, "hash_sha": hash_sha,
+                "nombre_original": archivo.filename or "informe.pdf",
+                "fecha_documento": fecha_dt,
+                "nombre_documento": (payload.get("nombre_documento")
+                                     or "Informe de validación departamental"),
+                "observaciones": None,
+            }
+    data, message = service.transicion_legacy(
+        db, id_solicitud, accion, _user["id_usuario"], _user,
+        observacion=payload.get("observacion"), informe=informe)
+    return SuccessResponse(message=message, data=data)
+
+
+@router.post("/{id_solicitud}/revisar", tags=[TAG_SOLICITUDES],
+             summary="[Compat] Revisar (→ aprobar validación / iniciar AH)",
+             description=DESC_LEGACY)
+async def revisar_legacy(id_solicitud: int, request: Request,
+                         db: Session = Depends(get_db),
+                         _user=Depends(get_current_user)):
+    return await _transicion_legacy(id_solicitud, "revisar", request, db, _user)
+
+
+@router.post("/{id_solicitud}/validar", tags=[TAG_SOLICITUDES],
+             summary="[Compat] Validar (→ aprobar nivel accionable)",
+             description=DESC_LEGACY)
+async def validar_legacy(id_solicitud: int, request: Request,
+                         db: Session = Depends(get_db),
+                         _user=Depends(get_current_user)):
+    return await _transicion_legacy(id_solicitud, "validar", request, db, _user)
+
+
+@router.post("/{id_solicitud}/observar", tags=[TAG_SOLICITUDES],
+             summary="[Compat] Observar (→ devolver nivel accionable)",
+             description=DESC_LEGACY)
+async def observar_legacy(id_solicitud: int, request: Request,
+                          db: Session = Depends(get_db),
+                          _user=Depends(get_current_user)):
+    return await _transicion_legacy(id_solicitud, "observar", request, db, _user)
+
+
+@router.post("/{id_solicitud}/corregir", tags=[TAG_SOLICITUDES],
+             summary="[Compat] Corregir (retirada: 409)",
+             description=DESC_LEGACY)
+async def corregir_legacy(id_solicitud: int, request: Request,
+                          db: Session = Depends(get_db),
+                          _user=Depends(get_current_user)):
+    return await _transicion_legacy(id_solicitud, "corregir", request, db, _user)

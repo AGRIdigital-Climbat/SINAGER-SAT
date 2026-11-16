@@ -25,12 +25,9 @@
 | A | `shared` / Censo 2024 (hogares) | Hogares oficiales INE (`hogares`, `personas_por_hogar`, `hogares_ine`, `/censo/manzanos/por-nombre`) + análisis NULLs + verificación | §A abajo · [ANALISIS_NULLS.md](ANALISIS_NULLS.md) · [INFORME_CASOS_EXTREMOS_PPH.md](INFORME_CASOS_EXTREMOS_PPH.md) | `v2.17.0_shared_censo2024_hogares.sql` (+ espejo despliegue) | docs+datos base `8a30496` (rama `feature/censo2024-hogares`); artefactos v2.17+script en `56e6ed4`; cambios API/shared originales listados en §A.3.2 |
 | B | `edan` / EDAN localidades | `observacion_estado` (motivo de rechazo, 422 al rechazar, conserva anterior, expuesto en lecturas/3 PUT estado + 2 PUT genéricos) | [EDAN_observacion_estado.md](EDAN_observacion_estado.md) | `v2.64.0_edan_localidades_observacion_estado.sql` (+ espejo) | código+migración+doc `8f992f7` (`feature/edan-observacion-estado`, pushed) |
 | C | `shared` / Censo 2024 (`por-nombre`) | Cap `personas_por_hogar` > 20 en `GET /censo/manzanos/por-nombre` → promedio oficial del municipio; acceso directo por unidad mantiene valor real (106 casos) | [INFORME_CASOS_EXTREMOS_PPH.md](INFORME_CASOS_EXTREMOS_PPH.md) | — (sin migración) | `e928ff9` + alineación `56e6ed4` (`feature/censo2024-pph-extremos`, pushed) |
-
-**Pendientes fuera de este paquete (no documentados aquí, no commiteados):** hay cambios
-locales ajenos (p.ej. `api/rida/solicitudes/*`, `requirements.txt`, docs/manuales RIDA/SINB/
-README/AYUDA_HUMANITARIA, `PROPUESTA_MOTOR_CALCULO_NECESIDADES.md`). Si deben replicarse,
-registrarlos como nuevas entradas con la misma convención (esquema/módulo, migración,
-APIs, pasos, verificación) sin mezclarlos con los anteriores.
+| D | `rida` / solicitudes | Shim compat v2.60.0: `POST /revisar|validar|observar|corregir` traducen al motor de 7 niveles/AH (sin reabrir etapas retiradas; `observar` motivo≥10→422, `corregir`→409) | [RIDA_shim_compat_solicitudes_v260.md](RIDA_shim_compat_solicitudes_v260.md) | — (sin migración; usa motor existente) | rama `migraciones` (pendiente push en este commit) |
+| E | `rida` / ayuda humanitaria (necesidades) | Motor de necesidades v2.61.0 (`regla_necesidad`, `necesidad.fuente/id_regla_necesidad`, endpoints reglas/motor) — alineación documental | [RIDA_motor_necesidades_v261.md](RIDA_motor_necesidades_v261.md) · `PROPUESTA_MOTOR_CALCULO_NECESIDADES.md` (raíz) | **Ya existe**: `v2.61.0_motor_necesidades.sql` + espejo `despliegue/migraciones/` (idempotente; si aplicada se ignora) | rama `migraciones` (doc alineada; API/motor ya en repo) |
+| F | `shared` / censo (docs/deps) | Alineación indicadores `por-nombre`/hogares, README script hogares y dependencia `pyarrow>=15` | [SHARED_censo_docs_dependencias.md](SHARED_censo_docs_dependencias.md) | — (v2.17.0 ya existe) | rama `migraciones` |
 
 ---
 
@@ -132,4 +129,4 @@ Microdata INE (413 MB, sha verificado) = 343/343 hogares/viviendas/población ex
 
 ---
 
-*Última alineación de este índice: 2026-11-16 (renombre a `cambios_replicacion/`, skill de alcance total BD/APIs, incluye EDAN v2.64.0 y cap PPH `por-nombre`).*
+*Última alineación de este índice: 2026-11-16 (renombre a `cambios_replicacion/`, skill alcance total BD/APIs; añade RIDA shim v2.60.0, motor necesidades v2.61.0 —migración ya existente— y alineación shared/docs/deps; rama `migraciones`).*

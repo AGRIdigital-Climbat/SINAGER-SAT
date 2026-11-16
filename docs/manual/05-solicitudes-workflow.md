@@ -55,6 +55,11 @@ POST ──► ENVIADA ──► EN_APROBACION ──► APROBADA ──► AUTO
 - Las etapas `BORRADOR`, `EN_REVISION`, `OBSERVADA`, `VALIDADA`,
   `EN_SUMINISTROS`, `DESPACHO_AUTORIZADO`, `EN_TRANSPORTE`, `RECIBIDA` y
   `EN_DISTRIBUCION` ya no son alcanzables.
+- **Compatibilidad:** `POST /{id}/revisar|/validar|/observar|/corregir` se
+  mantienen como *shim* que traduce al motor (`revisar`/`validar` aprueban el
+  nivel accionable, `observar` lo devuelve, `corregir` responde 409). No
+  reactivan las etapas retiradas. Detalle en `APROBACIONES_RIDA.md` §"Endpoints
+  de etapa".
 
 ## 4. Niveles de aprobación
 
@@ -63,6 +68,8 @@ POST ──► ENVIADA ──► EN_APROBACION ──► APROBADA ──► AUTO
   `puede_devolver` calculados para tu usuario.
 - `PUT /api/v2/rida/solicitudes/{id}/aprobacion/{nivel}` → **multipart/form-data**
   (`aprobado`, `observacion`, `archivo`, `nombre_documento`, `fecha_documento`).
+- Compatibilidad legada: `POST /{id}/revisar|/validar|/observar` (JSON o
+  multipart) delegan en el mismo motor; `/{id}/corregir` → 409.
 - `GET /api/v2/rida/solicitudes/cat-cadena-aprobacion` → niveles, roles,
   alcance y cadena por defecto (cachear en el frontend).
 
@@ -271,7 +278,8 @@ stateDiagram-v2
 | `409 Falta un cálculo operativo` | Modalidad con motor en `revision_articulos` | Ejecuta `POST /ayuda-humanitaria/calculos` en modo operativo |
 | `409 La modalidad Ayuda Humanitaria gestiona sus visaciones…` | Modalidad AH | Usa el flujo de Ayuda Humanitaria |
 | `409 El modo operativo exige etapa EN_APROBACION` | `/calculos` operativo antes de abrir el motor AH | Abre el motor o usa `modo:"previsualizacion"` |
-| `422` al aprobar/devolver | Falta `aprobado`, o la `observacion` al devolver tiene menos de 10 caracteres | Ver §4 |
+| `422` al aprobar/devolver | Falta `aprobado`, o la `observacion`/`motivo` al devolver tiene menos de 10 caracteres | Ver §4 |
+| `404 Not Found` en `POST /{id}/revisar\|/validar` | Cliente apunta a una versión anterior a este shim | Actualiza el backend o usa `PUT /{id}/aprobacion/{nivel}` |
 
 ---
 

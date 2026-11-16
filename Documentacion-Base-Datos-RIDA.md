@@ -212,9 +212,46 @@ stateDiagram-v2
 | `justificacion` | TEXT | |
 | `fecha_requerida` | DATE | |
 | `id_necesidad_off` | VARCHAR | Identificador offline |
+| `fuente` | VARCHAR(20) DEFAULT `'manual'` | Origen: `manual` o `motor` (v2.61.0) |
+| `id_regla_necesidad` | INTEGER FK → `rida.regla_necesidad` | Regla que generó la fila (solo `fuente='motor'`; `ON DELETE SET NULL`) |
 | `fecha_creacion` / `fecha_modificacion` | TIMESTAMP | |
 
-Índice: `idx_necesidad_id_necesidad_off` (parcial, **no único**).
+Índices: `idx_necesidad_id_necesidad_off` (parcial, **no único**);
+`idx_necesidad_id_regla_necesidad` (parcial, donde no es nulo).
+
+### 5.1.1 `rida.regla_necesidad` (v2.61.0)
+
+Motor de cálculo de necesidades por familia. Cada regla asocia un artículo a un
+criterio de aplicación y, opcionalmente, a condiciones sobre los integrantes.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id_regla_necesidad` | SERIAL PK | |
+| `nombre` | VARCHAR(100) NOT NULL | Nombre descriptivo |
+| `criterio_aplicacion` | VARCHAR(30) | `POR_FAMILIA`, `POR_INTEGRANTE` o `POR_CONDICION_ESPECIAL` |
+| `id_categoria_ayuda` | FK → `rida.cat_categoria_ayuda` | Categoría cubierta (`ON DELETE RESTRICT`) |
+| `id_articulo` | FK → `rida.cat_articulo` | Artículo a generar (`ON DELETE RESTRICT`) |
+| `cantidad_base` | NUMERIC(8,3) DEFAULT 0 | Cantidad por familia/integrante; CHECK ≥ 0 |
+| `dias_duracion` | INTEGER | Días cubiertos; CHECK > 0 (NULL = 1) |
+| `condiciones` | JSONB DEFAULT `{}` | Filtros: `gestante`, `discapacidad`, `edad_min_dias`, `edad_max_dias`, `sexo` (`M`/`F`) |
+| `prioridad` | INTEGER DEFAULT 100 | Orden de prelación (menor = antes) |
+| `orden` | INTEGER DEFAULT 0 | Desempate estable |
+| `activo` | BOOLEAN DEFAULT true | Reglas inactivas no se evalúan |
+| `fecha_creacion` / `fecha_modificacion` | TIMESTAMP | |
+
+Índices: `idx_regla_necesidad_activo`, `idx_regla_necesidad_categoria`.
+
+- `POR_FAMILIA`: la población es 1 por familia y `condiciones` debe ser `{}`.
+- `POR_INTEGRANTE`: la población son los integrantes (con filtros opcionales).
+- `POR_CONDICION_ESPECIAL`: igual que integrantes pero exige ≥ 1 condición;
+  claves desconocidas → 422.
+
+Fórmula: `ceil(cantidad_base × (dias_duracion or 1) × poblacion_familia)`, sin
+mínimos ni máximos. La unidad de medida se toma de `cat_articulo`. El motor solo
+persiste en `ENVIADA`/`EN_APROBACION`, reemplaza las necesidades manuales de las
+categorías cubiertas **por familia** y respeta las categorías sin regla. CRUD:
+`/api/v2/ayuda-humanitaria/reglas-necesidad`; preview/persistencia:
+`/api/v2/ayuda-humanitaria/expedientes/{id}/motor-necesidades[/preview]`.
 
 ### 5.2 Catálogos de ayuda y rehabilitación (v2.35.0)
 
@@ -459,6 +496,7 @@ Todos los catálogos usan `codigo VARCHAR UNIQUE` y `activo BOOLEAN`; varios tie
 | v2.33.0 | `v2.33.0_quitar_codigo_expediente_solicitud.sql` | Elimina `solicitud.codigo_expediente` |
 | v2.34.0 | `v2.34.0_workflow_solicitud.sql` | `cat_etapa_solicitud` + CHECK de 17 etapas |
 | v2.60.0 | `v2.60.0_motor_siete_niveles.sql` | Motor de 7 niveles: roles 15/16/17, `cat_modalidad.tiene_motor_calculo`, cadena default de 7 niveles, CHECKs de `nivel`/`orden`, etapas retiradas inactivas y remapeo a `ENVIADA` |
+| v2.61.0 | `v2.61.0_motor_necesidades.sql` | Motor de necesidades: tabla `regla_necesidad`, `necesidad.fuente`/`id_regla_necesidad`, índice único parcial por regla+familia+artículo |
 | v2.35.0 | `v2.35.0_separar_rehabilitacion.sql` | 7 categorías AH, `cat_tipo_rehabilitacion`, `cat_insumo_rehabilitacion` |
 | v2.48.0 | `v2.48.0_documentos_evento.sql` | `documentos.id_formulario_rida` → `id_evento_rida` (evento RIDA) |
 | v2.55.0 | `v2.55.0_ayuda_humanitaria.sql` | Work Queue VIDECI: `cat_estado_rida`, motor secuencial (cadena + instancias), `solicitud_evaluacion`, `cat_regla_calculo` + `solicitud_articulo` (motor de cálculo dinámico), `entrega` como orden/acta, rol 14 Almacén |
@@ -480,7 +518,10 @@ Orden de aplicación: `psql -f database/migrations/vX.Y.Z_*.sql` en orden ascend
 | RIDA > Ayuda Humanitaria | `/api/v2/ayuda-humanitaria` | `api/ayuda_humanitaria/router.py` (20 rutas; Work Queue pasos 4-9, motor secuencial, motor de cálculo por kits desde v2.57.0) |
 | Repositorio > Documentos | `/api/v2/repositorio/rida/eventos/{id}/documentos` | `api/repositorio/router.py:256,343` |
 
-**Total RIDA: 85 rutas / 124 operaciones** (verificado con `GET /openapi.v2.json`; incluye `cat-unidades-medida` desde v2.56.0).
+**Total RIDA: 93 rutas / 136 operaciones** (OpenAPI v2: `/api/v2/rida` +
+`/api/v2/ayuda-humanitaria` + `/api/v2/repositorio/rida`; incluye
+`motor-necesidades`, `reglas-necesidad` desde v2.61.0 y el shim de
+compatibilidad `revisar|validar|observar|corregir`).
 
 Documentación relacionada: [docs/01-componentes-y-arquitectura.md](docs/01-componentes-y-arquitectura.md), [docs/03-offline-y-sincronizacion.md](docs/03-offline-y-sincronizacion.md), [docs/manual/](docs/manual/README.md).
 
