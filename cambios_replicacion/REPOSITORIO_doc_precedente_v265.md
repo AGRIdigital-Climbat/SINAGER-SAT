@@ -99,6 +99,12 @@ curl -H "Authorization: Bearer $TOKEN" "$API/api/v2/repositorio/documentos?q=con
 # POST /repositorio/edan/{id_edan}/documentos  y  POST /repositorio/rida/eventos/{id_evento_rida}/documentos
 ```
 
+
+## 8.1 Regla edición/eliminación DOC_PRECEDENTE (solo tercera API)
+- Aplica **solo** a `origen = DOC_PRECEDENTE` (no a `EDAN`/`RIDA`).
+- `PUT /repositorio/documentos/{id}` y `DELETE /repositorio/documentos/{id}` (soft) y `/hard`: solo el **usuario que subió** (`id_usuario_subio`) y dentro de **72 horas** desde `fecha_subida`.
+- Fuera de esas condiciones responde **403**. Validación en `api/repositorio/router.py` (`_validar_permiso_doc_precedente`), sin migración adicional.
+
 ## 8. Notas
 - `observaciones` es texto libre opcional (sin restricción de contenido más allá del almacenamiento).
 - Los endpoints EDAN/RIDA mantienen URL, campos y respuesta; solo se etiqueta el origen internamente por ruta.
