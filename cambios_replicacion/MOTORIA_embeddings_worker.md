@@ -156,6 +156,12 @@ FROM motor_ia.uso_embeddings ORDER BY id DESC LIMIT 5;
   levantó a mano con `./start_api.sh` (4 workers uvicorn, proceso root). Al reiniciar de
   forma canónica usar `systemctl restart sinagersat-api` (unidad: 3 workers, usuario
   `prosuco`) **o** `./start_api.sh`, pero no ambos a la vez (puerto en uso).
+- **Permisos de `uploads/`**: al correr el API como root quedaron 90 archivos/dir
+  `root:root` (fotos de reportes y la prueba `DOC_PRECEDENTE`), que habrían impedido
+  escribir/borrar al servicio systemd (`User=prosuco`). Corregido con
+  `chown -R prosuco:prosuco uploads` (0 root-owned restantes; API y worker siguen 200).
+  En un servidor nuevo: asegurar que `uploads/`, `uploads/reports/`,
+  `uploads/repositorio/` y `MOTOR_IA_UPLOAD_DIR` pertenezcan al usuario de servicio.
 - El **LLM externo sigue sin proveedor dado de alta**: `motor_ia.proveedores_llm` está
   vacío y `POST /api/v2/motor-ia/chat` responde `No hay proveedores externos en la BD`.
   Queda pendiente cargar el proveedor Groq (API key del usuario) — se hará aparte.

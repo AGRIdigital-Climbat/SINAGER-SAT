@@ -211,6 +211,7 @@ Ejemplo de respuesta:
 ## 4. Notas
 - `observaciones` es **texto libre** (opcional) en subida y en actualización.
 - `DOC_PRECEDENTE`: solo el usuario que subió puede editar/eliminar (soft y hard) y dentro de 72 h desde la subida (403 si no). No aplica a `EDAN`/`RIDA`.
+- Verificado en dev (2026-11-17): subida municipal → `origen=DOC_PRECEDENTE`, mezcla en la vista nacional (`total` con EDAN/RIDA), filtros por departamento/provincia/municipio/tipo/fecha/`q`/`todos`, y `403` tanto a usuario distinto del dueño como al dueño pasadas las 72 h. Detalle en `cambios_replicacion/REPOSITORIO_doc_precedente_v265.md` §7.1.
 - La subida `DOC_PRECEDENTE` es **municipal** (vinculada al municipio enviado) y la consulta es de **vista nacional** con filtros geográficos.
 - Requiere migración `v2.65.0_repositorio_origen_doc_precedente.sql` (y su espejo en `despliegue/migraciones/`) aplicada en la BD.
 - Handoff técnico de replicación: `cambios_replicacion/REPOSITORIO_doc_precedente_v265.md`.
