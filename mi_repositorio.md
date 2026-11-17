@@ -112,17 +112,53 @@ curl -X POST "$API/api/v2/repositorio/documentos" \
 
 ---
 
-## 2. Consulta general — vista nacional (nueva)
+## 2. Consulta general — vista nacional (agrupada por expediente)
 
 `GET /api/v2/repositorio/documentos`
 
 Lista **EDAN + RIDA + DOC_PRECEDENTE** (vista nacional) con filtros geográficos.
-- **Orden:** más recientes primero (`fecha_documento DESC NULLS LAST, fecha_subida DESC`).
-- **Paginación (skill cantidad → paginación → todos → filtros):**
-  - `limit` (def. `50`, máx. `200`): cantidad de resultados (los más recientes).
-  - `skip` (def. `0`): offset, para paginar junto a `limit`.
-  - `todos=true`: devuelve el conjunto completo sin paginar (ignora `limit`/`skip`).
-- **Respuesta:** `{"success": true, "message": "Documentos listados", "data": [...], "total": N}` donde `total` es el total **sin paginar** con los mismos filtros.
+- **Por defecto `modo=agrupado`**: devuelve **un objeto por grupo/expediente**. Regla
+  de agrupación (fuente única en el servidor):
+  | tipo | agrupador | nota |
+  |---|---|---|
+  | `RIDA` | `id_evento_rida` | se mantiene RIDA aunque el documento herede `id_edan` (no se mezcla con el grupo EDAN) |
+  | `EDAN` | `id_edan` | formulario padre del municipio |
+  | `DOC_PRECEDENTE` | `codigo_documento` | expediente municipal; si faltara el código, el doc forma su propio grupo |
+- Cada grupo trae: `tipo`, `clave` (`EV-15`, `ED-79`, `RES-...`), `id_edan`,
+  `id_evento_rida`, `codigo_documento`, `etiqueta` (legible: p. ej.
+  `EDAN 070101/2026/003`, `EVENTO RIDA 15`, o el propio código), geografía del grupo,
+  **`total_documentos`**, `fecha_documento_max`, `fecha_subida_max`.
+- **`total` = nº de GRUPOS** sin paginar con los mismos filtros; `limit/skip` paginan grupos.
+- **`modo=plano`**: comportamiento clásico, lista de documentos individuales
+  (respuesta `Documentos listados`, `total` = nº de docs).
+- **Drill-down de un grupo** (sin endpoint nuevo): reenvía sus claves con `modo=plano`:
+  `?modo=plano&id_evento_rida=15`, `?modo=plano&id_edan=79`,
+  `?modo=plano&codigo_documento=RES-...` (o `GET /documentos/codigo/{código}`).
+- **Orden:** más recientes primero (grupos por su documento más nuevo).
+
+Ejemplo (respuesta `modo=agrupado`):
+```json
+{
+  "success": true, "message": "Grupos de documentos listados", "total": 3,
+  "data": [
+    {"tipo": "DOC_PRECEDENTE", "clave": "PRUEBA-AGRUP-2026-001",
+     "etiqueta": "PRUEBA-AGRUP-2026-001",
+     "id_edan": null, "id_evento_rida": null,
+     "codigo_documento": "PRUEBA-AGRUP-2026-001",
+     "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
+     "total_documentos": 2, "fecha_documento_max": "2026-11-17",
+     "fecha_subida_max": "2026-11-17T03:12:44"},
+    {"tipo": "RIDA", "clave": "EV-15", "etiqueta": "EVENTO RIDA 15",
+     "id_edan": 79, "id_evento_rida": 15, "codigo_documento": null,
+     "total_documentos": 2, "fecha_documento_max": "2026-10-09"},
+    {"tipo": "EDAN", "clave": "ED-79", "etiqueta": "EDAN 070101/2026/003",
+     "id_edan": 79, "id_evento_rida": null, "codigo_documento": null,
+     "total_documentos": 2, "fecha_documento_max": "2026-09-10"}
+  ]
+}
+```
+> Los 2 RIDA comparten `id_edan=79` con el grupo EDAN y aun así figuran **solo** como
+> RIDA: la agrupación prioriza `id_evento_rida`, como se acordó.
 
 ### Filtros opcionales
 
@@ -169,9 +205,17 @@ curl -H "Authorization: Bearer $TOKEN" \
 # 6) TODOS (sin paginar) los de un municipio
 curl -H "Authorization: Bearer $TOKEN" \
   "$API/api/v2/repositorio/documentos?id_municipio=20101&todos=true"
+
+# 7) Documentos sueltos (comportamiento clásico)
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v2/repositorio/documentos?modo=plano&limit=20"
+
+# 8) Drill-down de un grupo: anexos del mismo evento RIDA
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API/api/v2/repositorio/documentos?modo=plano&id_evento_rida=15"
 ```
 
-Ejemplo de respuesta:
+Ejemplo de respuesta (`modo=plano`; ver arriba el ejemplo de `modo=agrupado`):
 ```json
 {
   "success": true,

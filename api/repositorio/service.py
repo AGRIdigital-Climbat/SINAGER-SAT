@@ -533,3 +533,104 @@ def list_documentos_by_codigo(
     return list_documentos_filtrados(
         db, codigo_documento=cod, limit=limit, skip=skip, todos=todos,
     )
+
+
+_GRUPO_KEY_SQL = """
+    CASE
+        WHEN COALESCE(d.origen, CASE WHEN d.id_evento_rida IS NULL THEN 'EDAN' ELSE 'RIDA' END) = 'DOC_PRECEDENTE'
+            THEN COALESCE(d.codigo_documento, 'DOC-' || d.id_documento::text)
+        WHEN COALESCE(d.origen, CASE WHEN d.id_evento_rida IS NULL THEN 'EDAN' ELSE 'RIDA' END) = 'RIDA'
+            THEN 'EV-' || COALESCE(d.id_evento_rida::text, d.id_documento::text)
+        ELSE 'ED-' || COALESCE(d.id_edan::text, d.id_documento::text)
+    END
+"""
+
+
+def list_documentos_grupos(
+    db: Session,
+    origen: str | None = None,
+    codigo_documento: str | None = None,
+    id_edan: int | None = None,
+    id_evento_rida: int | None = None,
+    id_departamento: int | None = None,
+    id_provincia: int | None = None,
+    id_municipio: int | None = None,
+    id_tipo_documento: int | None = None,
+    id_usuario_subio: int | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    nombre_documento_like: str | None = None,
+    tiene_firma_digital: bool | None = None,
+    include_inactive: bool = False,
+    limit: int | None = 50,
+    skip: int = 0,
+    todos: bool = False,
+):
+    """Listado AGRUPADO del repositorio: un grupo por expediente/entidad padre.
+
+    Regla de agrupacion (unica fuente de verdad):
+      - origen RIDA        -> grupo por id_evento_rida (aunque herede id_edan:
+                              se mantiene como RIDA, no se mezcla con el EDAN)
+      - origen EDAN        -> grupo por id_edan
+      - origen DOC_PRECEDENTE -> grupo por codigo_documento (si faltara, el
+                              propio documento forma su grupo)
+
+    Cada fila: tipo, clave, id_edan, id_evento_rida, codigo_documento, etiqueta,
+    geo (minima del grupo), total_documentos, fecha_documento_max,
+    fecha_subida_max. `total` = nº de GRUPOS sin paginar con los mismos filtros.
+    """
+    where, params = _aplicar_filtros_documentos(
+        origen=origen,
+        codigo_documento=codigo_documento,
+        id_edan=id_edan,
+        id_evento_rida=id_evento_rida,
+        id_departamento=id_departamento,
+        id_provincia=id_provincia,
+        id_municipio=id_municipio,
+        id_tipo_documento=id_tipo_documento,
+        id_usuario_subio=id_usuario_subio,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        nombre_documento_like=nombre_documento_like,
+        tiene_firma_digital=tiene_firma_digital,
+        include_inactive=include_inactive,
+    )
+
+    tipo_expr = (
+        "COALESCE(d.origen, CASE WHEN d.id_evento_rida IS NULL THEN 'EDAN' ELSE 'RIDA' END)"
+    )
+
+    body = f"""
+        SELECT
+            {tipo_expr} AS tipo,
+            {_GRUPO_KEY_SQL} AS clave,
+            min(d.id_edan) AS id_edan,
+            min(d.id_evento_rida) AS id_evento_rida,
+            CASE WHEN {tipo_expr} = 'DOC_PRECEDENTE'
+                 THEN min(COALESCE(d.codigo_documento, 'DOC-' || d.id_documento::text))
+            END AS codigo_documento,
+            CASE {tipo_expr}
+                WHEN 'EDAN' THEN COALESCE('EDAN ' || min(ee.codigo_edan), 'EDAN ' || min(d.id_edan)::text)
+                WHEN 'RIDA' THEN 'EVENTO RIDA ' || min(d.id_evento_rida)::text
+                ELSE COALESCE(min(d.codigo_documento), 'DOC-' || min(d.id_documento)::text)
+            END AS etiqueta,
+            min(d.id_departamento) AS id_departamento,
+            min(d.id_provincia) AS id_provincia,
+            min(d.id_municipio) AS id_municipio,
+            count(*)::int AS total_documentos,
+            max(d.fecha_documento) AS fecha_documento_max,
+            max(d.fecha_subida) AS fecha_subida_max
+        FROM repositorio.documentos d
+        JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
+        LEFT JOIN edan.edan ee ON ee.id_edan = d.id_edan
+        WHERE {where}
+        GROUP BY {tipo_expr}, {_GRUPO_KEY_SQL}
+    """
+
+    total = _row(db, f"SELECT COUNT(*) AS total FROM ({body}) g", params)["total"]
+    page = "" if todos else " ORDER BY max(COALESCE(d.fecha_documento, d.fecha_subida::date)) DESC NULLS LAST, max(d.fecha_subida) DESC LIMIT :limit OFFSET :skip"
+    if todos:
+        page = " ORDER BY max(COALESCE(d.fecha_documento, d.fecha_subida::date)) DESC NULLS LAST, max(d.fecha_subida) DESC"
+    page_params = {} if todos else {"limit": limit, "skip": skip}
+    rows = _rows(db, body + page, {**params, **page_params})
+    return rows, total

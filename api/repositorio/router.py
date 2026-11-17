@@ -361,10 +361,19 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     )
 
     @router.get("/documentos", tags=[TAG_DOCS], response_model=DataListResponse[dict],
-                summary="Listar documentos (vista nacional, todos los orígenes)",
+                summary="Listar documentos (vista nacional, agrupado por expediente)",
                 description="Listado general del repositorio (EDAN + RIDA + DOC_PRECEDENTE), vista nacional.\n\n"
-                            "Orden: los más recientes primero (`fecha_documento` DESC, `fecha_subida` DESC).\n\n"
-                            "Filtros opcionales: `origen` (EDAN|RIDA|DOC_PRECEDENTE), geografía "
+                            "**Por defecto devuelve GRUPOS** (`modo=agrupado`): un grupo por entidad "
+                            "padre/expediente — RIDA por `id_evento_rida` (se mantiene como RIDA aunque "
+                            "herede `id_edan`), EDAN por `id_edan`, DOC_PRECEDENTE por `codigo_documento`— "
+                            "con `total_documentos`, etiqueta, geografía y fechas máximas. "
+                            "`data` es la lista de grupos y `total` el nº de **grupos** sin paginar.\n\n"
+                            "Con `modo=plano` devuelve los documentos individuales (contrato clásico "
+                            "reciente primero). Para el detalle de un grupo reenvíe sus claves como "
+                            "filtros con `modo=plano`: `?modo=plano&id_evento_rida=15`, "
+                            "`?modo=plano&id_edan=79` o `?modo=plano&codigo_documento=RES-...`.\n\n"
+                            "Orden: los más recientes primero. Filtros opcionales (aplican a ambos modos): "
+                            "`origen` (EDAN|RIDA|DOC_PRECEDENTE), geografía "
                             "(`id_departamento`, `id_provincia`, `id_municipio`), `id_edan`, `id_evento_rida`, "
                             "`codigo_documento` (expediente de respaldos, exacto, sin distinguir mayúsculas), "
                             "`id_tipo_documento`, `id_usuario_subio`, rango `fecha_desde`/`fecha_hasta` (YYYY-MM-DD), "
@@ -374,6 +383,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         limit: int = Query(50, ge=1, le=200, description="Cantidad a devolver (los más recientes primero)"),
         skip: int = Query(0, ge=0, description="Saltar registros (paginación, sólo con limit)"),
         todos: bool = Query(False, description="Devolver todos sin paginar (ignora limit/skip)"),
+        modo: Literal["agrupado", "plano"] = Query(
+            "agrupado", description="agrupado: un grupo por expediente/padre con total_documentos; plano: lista de documentos"),
         origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(
             None, description="Filtrar por origen: EDAN, RIDA o DOC_PRECEDENTE"),
         codigo_documento: str | None = Query(
@@ -393,7 +404,20 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Lista documentos con cantidad, paginación y filtros (vista nacional)."""
+        """Lista documentos (plano) o grupos por expediente (agrupado, default)."""
+        if modo == "agrupado":
+            data, total = service.list_documentos_grupos(
+                db, origen=origen, codigo_documento=codigo_documento,
+                id_edan=id_edan, id_evento_rida=id_evento_rida,
+                id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
+                id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
+                fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, nombre_documento_like=q,
+                tiene_firma_digital=tiene_firma_digital, include_inactive=include_inactive,
+                limit=limit, skip=skip, todos=todos,
+            )
+            return SuccessResponse(message="Grupos de documentos listados",
+                                   data=[dict(r) for r in data], total=total)
+
         data, total = service.list_documentos_filtrados(
             db, origen=origen, codigo_documento=codigo_documento,
             id_edan=id_edan, id_evento_rida=id_evento_rida,
