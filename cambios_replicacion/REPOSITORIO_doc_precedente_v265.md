@@ -1,0 +1,105 @@
+# REPOSITORIO — Tercera subida (DOC_PRECEDENTE) y consulta general (v2.65.0)
+
+> **Esquema/módulo:** `repositorio` / documentos PDF (`api/repositorio`).  
+> **Migración:** `v2.65.0_repositorio_origen_doc_precedente.sql` + **espejo** `despliegue/migraciones/v2.65.0_repositorio_origen_doc_precedente.sql` (idempotente).  
+> **Rama/commit:** `migraciones`.
+
+## 1. Objetivo
+Agregar una **tercera vía de subida** de documentos (respaldo **municipal**, fuera de EDAN/RIDA) sin modificar los contratos EDAN/RIDA en producción, y una **consulta general** de vista **nacional** (mezcla EDAN + RIDA + DOC_PRECEDENTE) con filtros geográficos.
+
+- **Subida = municipal** (documento vinculado a `id_departamento/provincia/municipio`).
+- **Consulta = vista nacional** (todos los orígenes, filtrable por departamento/provincia/municipio, etc.).
+- **Origen asignado automáticamente por la URL/ruta** de subida (no lo envía el cliente).
+
+## 2. Origen (etiqueta por ruta)
+
+| Ruta POST | Origen | Vínculo |
+|---|---|---|
+| `POST /api/v2/repositorio/edan/{id_edan}/documentos` (existente, **sin cambios**) | `EDAN` | `id_edan` |
+| `POST /api/v2/repositorio/rida/eventos/{id_evento_rida}/documentos` (existente, **sin cambios**) | `RIDA` | `id_evento_rida` + `id_edan` heredado |
+| `POST /api/v2/repositorio/documentos` (**nueva**) | `DOC_PRECEDENTE` | sin `id_edan`/`id_evento_rida` (respaldo municipal) |
+
+## 3. Base de datos
+`repositorio.documentos`:
+- Nueva columna explícita `origen varchar(20) NOT NULL DEFAULT 'EDAN'` con CHECK `('EDAN','RIDA','DOC_PRECEDENTE')`.
+- Backfill desde estado actual: `id_evento_rida NOT NULL -> RIDA`, resto -> `EDAN` (idempotente, solo donde `origen IS NULL`).
+- Constraint de consistencia `chk_documentos_origen_vinculos`: `RIDA` exige `id_evento_rida NOT NULL`; `EDAN` exige `id_evento_rida IS NULL`; `DOC_PRECEDENTE` exige `id_edan IS NULL` y `id_evento_rida IS NULL`.
+- Índices: `idx_documentos_origen`, `idx_documentos_id_municipio`, `idx_documentos_fecha_documento`.
+- Filas/contratos EDAN y RIDA existentes **no se modifican**.
+
+## 4. API
+
+### 4.1 Subidas (mismos campos multipart)
+Campos comunes: `file` (PDF, máx 50MB, validación MIME/extensión + firma AGETIC ≤20MB), `id_tipo_documento`, `id_departamento`, `id_provincia`, `id_municipio`, `fecha_documento` (YYYY-MM-DD), `nombre_documento`, `observaciones` (**texto libre, opcional**).
+
+- **EDAN (sin cambios):** `POST /api/v2/repositorio/edan/{id_edan}/documentos` → `origen=EDAN`.
+- **RIDA (sin cambios):** `POST /api/v2/repositorio/rida/eventos/{id_evento_rida}/documentos` → `origen=RIDA`.
+- **DOC_PRECEDENTE (nueva):** `POST /api/v2/repositorio/documentos` → `origen=DOC_PRECEDENTE`, `id_edan/id_evento_rida` NULL, vinculado al municipio del form y a `id_usuario_subio` (usuario autenticado). Subcarpeta: `uploads/repositorio/municipal/{id_municipio}/...`
+
+Respuesta: `SuccessResponse` con `data` = documento (incluye `origen`, `id_edan`, `id_evento_rida`, geo, `id_usuario_subio`, firma).
+
+### 4.2 Consulta general (vista nacional)
+`GET /api/v2/repositorio/documentos` — listado dinámico (EDAN + RIDA + DOC_PRECEDENTE).
+
+- Orden: más recientes primero (`fecha_documento DESC NULLS LAST, fecha_subida DESC`).
+- Parámetros: `limit` (default 50, 1..200), `skip` (≥0), `todos` (bool, ignora limit/skip).
+- Filtros: `origen` (EDAN|RIDA|DOC_PRECEDENTE), `id_departamento`, `id_provincia`, `id_municipio`, `id_edan`, `id_evento_rida`, `id_tipo_documento`, `id_usuario_subio`, `fecha_desde`/`fecha_hasta` (YYYY-MM-DD, sobre `fecha_documento`), `q` (ILIKE nombre_documento/nombre_original), `tiene_firma_digital`, `include_inactive`.
+- Respuesta: `SuccessResponse(message, data, total)` con `total` **sin paginar** y mismos filtros.
+
+Compatibilidad: `GET /repositorio/documentos/filtrar` y `GET /repositorio/documentos/buscar` mantienen contrato y ahora incluyen `DOC_PRECEDENTE`, aceptan `origen` extendido, filtros adicionales y devuelven `total` correcto. Listados por EDAN/evento RIDA sin cambios funcionales.
+
+## 5. Archivos (nuevos/modificados)
+
+| Archivo | Cambio |
+|---|---|
+| `database/migrations/v2.65.0_repositorio_origen_doc_precedente.sql` | **Nuevo**: columna `origen`, backfill, checks, índices, comentarios. |
+| `despliegue/migraciones/v2.65.0_repositorio_origen_doc_precedente.sql` | **Espejo**. |
+| `api/repositorio/service.py` | `origen` explícito (fallback), `upload_documento` con `origen`, filtros unificados (incl. `origen`, `id_usuario_subio`, `tiene_firma_digital`, `q`), `list/buscar/filtrar` con paginación y `total` correcto. |
+| `api/repositorio/router.py` | `POST /documentos` (DOC_PRECEDENTE, mismos campos, etiqueta por ruta), `GET /documentos` general (skill), origen automático EDAN/RIDA preservado, filtros/compat extendidos, `observaciones` texto libre. |
+| `api/repositorio/schemas.py` | `DocumentoResponse.origen` documentado (EDAN|RIDA|DOC_PRECEDENTE), `observaciones` texto libre. |
+
+## 6. Replicación
+
+```bash
+# 1) Código
+git pull
+# 2) Migración (idempotente, segura si ya aplicada)
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/v2.65.0_repositorio_origen_doc_precedente.sql
+# (o despliegue/scripts/actualizar.sh)
+# 3) Reiniciar API
+./stop.sh && ./start_api.sh
+```
+
+## 7. Verificación
+
+```sql
+-- columna/constraint
+SELECT column_name FROM information_schema.columns
+ WHERE table_schema='repositorio' AND table_name='documentos' AND column_name='origen';
+SELECT conname FROM pg_constraint
+ WHERE conrelid='repositorio.documentos'::regclass AND conname IN ('chk_documentos_origen','chk_documentos_origen_vinculos');
+-- backfill coherente
+SELECT origen, count(*) FROM repositorio.documentos GROUP BY origen;
+```
+
+```bash
+# 1) Subida DOC_PRECEDENTE (mismos campos; geo del municipio)
+curl -X POST "$API/api/v2/repositorio/documentos" -H "Authorization: Bearer $TOKEN" \
+  -F "file=@doc.pdf" -F "id_tipo_documento=1" \
+  -F "id_departamento=2" -F "id_provincia=201" -F "id_municipio=20101" \
+  -F "fecha_documento=2026-11-15" -F "nombre_documento=Convenio" -F "observaciones=Texto libre"
+
+# 2) Consulta general (vista nacional) con filtros geo/origen y paginación
+curl -H "Authorization: Bearer $TOKEN" "$API/api/v2/repositorio/documentos?limit=20&skip=0"
+curl -H "Authorization: Bearer $TOKEN" "$API/api/v2/repositorio/documentos?origen=DOC_PRECEDENTE&id_municipio=20101&limit=50"
+curl -H "Authorization: Bearer $TOKEN" "$API/api/v2/repositorio/documentos?id_departamento=2&todos=true"
+curl -H "Authorization: Bearer $TOKEN" "$API/api/v2/repositorio/documentos?q=convenio&id_municipio=20101&limit=20"
+
+# 3) EDAN/RIDA sin cambio de contrato
+# POST /repositorio/edan/{id_edan}/documentos  y  POST /repositorio/rida/eventos/{id_evento_rida}/documentos
+```
+
+## 8. Notas
+- `observaciones` es texto libre opcional (sin restricción de contenido más allá del almacenamiento).
+- Los endpoints EDAN/RIDA mantienen URL, campos y respuesta; solo se etiqueta el origen internamente por ruta.
+- `DOC_PRECEDENTE` exige geografía del municipio en la subida (para filtros) y queda asociado al usuario que sube.

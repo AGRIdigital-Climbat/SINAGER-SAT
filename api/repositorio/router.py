@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pathlib import Path
 import base64
 from datetime import datetime
+from typing import Literal
 
 from ..database import get_db
 from ..dependencies import get_current_user
@@ -111,11 +112,9 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     # ============================================================================
     #  SUBIR DOCUMENTOS (solo PDF, sin versionado)
     # ============================================================================
-    #  El repositorio es compartido por EDAN y RIDA. Estas dos rutas son
-    #  espejo: cambian solo la entidad de destino. Toda la logica comun
-    #  (validacion de PDF, validacion de firma AGETIC, persistencia) vive en
-    #  _procesar_subida, para que agregar un origen nuevo no obligue a
-    #  duplicar el bloque de firma digital.
+    #  El repositorio es compartido por EDAN, RIDA y DOC_PRECEDENTE. Las rutas
+    #  de EDAN/RIDA se mantienen (produccion). La etiqueta de origen se asigna
+    #  automaticamente segun la ruta de subida.
 
     _VALIDACIONES_UPLOAD = (
         "Validaciones:\n"
@@ -139,24 +138,27 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     ) -> dict:
         """Valida el PDF, valida la firma y persiste. Devuelve el documento.
 
-        'destino' viene de service.resolver_destino_documento() y ya trae los ids
-        resueltos, asi que la misma funcion sirve para EDAN y para RIDA.
+        'destino' trae ids resueltos y 'origen' (EDAN|RIDA|DOC_PRECEDENTE)
+        segun la ruta que atendio la subida.
         """
         tipo = service.get_tipo_documento(db, id_tipo_documento)
         if not tipo or not tipo["activo"]:
             raise HTTPException(status_code=400, detail="Tipo de documento no válido o inactivo")
 
-        id_edan = destino["id_edan"]
-        id_evento_rida = destino["id_evento_rida"]
+        id_edan = destino.get("id_edan")
+        id_evento_rida = destino.get("id_evento_rida")
+        origen = destino.get("origen")
 
-        # La carpeta de destino la decide el origen del documento.
-        if id_evento_rida is not None:
+        # Carpeta de destino segun origen (asignado por la ruta)
+        if origen == "RIDA" and id_evento_rida is not None:
             subfolder = f"rida/documentos/{id_evento_rida}"
-        else:
+        elif origen == "EDAN" and id_edan is not None:
             subfolder = f"edan/documentos/{id_edan}"
+        else:
+            subfolder = f"repositorio/municipal/{id_municipio}"
 
         file_path, size, hash_sha256, contents = await save_documento_pdf(
-            file, db, _user["id_usuario"], subfolder, destino["id_municipio"]
+            file, db, _user["id_usuario"], subfolder, id_municipio
         )
 
         tiene_firma = False
@@ -194,10 +196,9 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         id_doc = service.upload_documento(
             db=db,
             id_edan=id_edan,
-            id_evento_rida=id_evento_rida,
             id_tipo_documento=id_tipo_documento,
             file_path=file_path,
-            nombre_original=file.filename,
+            nombre_original=file.filename or "documento.pdf",
             tamano_bytes=size,
             id_usuario=_user["id_usuario"],
             id_municipio=id_municipio,
@@ -210,6 +211,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             tiene_firma_digital=tiene_firma,
             resultado_firma=resultado_firma,
             fecha_validacion_firma=fecha_validacion_firma,
+            id_evento_rida=id_evento_rida,
+            origen=origen,
         )
 
         return dict(service.get_documento(db, id_doc))
@@ -219,14 +222,12 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                  description="Sube un archivo PDF, crea una fila en `repositorio.documentos` y **valida la "
                              "firma digital automáticamente** (si el PDF ≤ 20 MB), guardando los metadatos "
                              "de validación (`tiene_firma_digital`, `resultado_firma`, `fecha_validacion_firma`).\n\n"
-                             "Si AGETIC no está disponible o el PDF supera 20 MB la validación se omite, el "
-                             "documento se guarda igual y `resultado_firma` registra el motivo.\n\n"
+                             "Origen asignado automáticamente por la ruta: **EDAN**. Contrato sin cambios.\n\n"
                              "**Multipart**: `file` (PDF, max 50MB) + form fields.\n\n"
                              + _VALIDACIONES_UPLOAD +
                              "- El EDAN debe existir en `edan.edan`\n\n"
-                             "Path de almacenamiento: `/uploads/edan/documentos/{id_edan}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`\n\n"
-                             "Para subir un documento de RIDA usar `POST /repositorio/rida/eventos/{id_evento_rida}/documentos`.")
-    async def subir_documento(
+                             "Path de almacenamiento: `/uploads/edan/documentos/{id_edan}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`")
+    async def subir_documento_edan(
         id_edan: int,
         file: UploadFile = File(...),
         id_tipo_documento: int = Form(...),
@@ -235,7 +236,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         id_municipio: int = Form(...),
         fecha_documento: str = Form(..., description="YYYY-MM-DD"),
         nombre_documento: str = Form(...),
-        observaciones: str | None = Form(None),
+        observaciones: str | None = Form(None, description="Texto libre (opcional)"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
@@ -256,16 +257,11 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     @router.post("/rida/eventos/{id_evento_rida}/documentos", status_code=201, tags=[TAG_DOCS],
                  summary="Subir PDF al repositorio de un evento RIDA",
                  description="Sube un archivo PDF a un evento RIDA, crea la fila en "
-                             "`repositorio.documentos` y **valida la firma digital automáticamente** "
-                             "(si el PDF ≤ 20 MB).\n\n"
-                             "La fila se guarda con `id_evento_rida` y **también con el `id_edan` que el "
-                             "propio evento ya tiene** (`rida.evento_rida.id_edan`), para que el "
-                             "documento quede vinculado a las dos tablas y se vea también desde la pantalla "
-                             "del EDAN. El cliente solo envía `id_evento_rida`.\n\n"
+                             "`repositorio.documentos` y **valida la firma digital automáticamente**.\n\n"
+                             "Origen asignado automáticamente por la ruta: **RIDA**. Contrato sin cambios.\n\n"
                              "**Multipart**: `file` (PDF, max 50MB) + form fields.\n\n"
                              + _VALIDACIONES_UPLOAD +
-                             "- El evento debe existir en `rida.evento_rida`\n\n"
-                             "Path de almacenamiento: `/uploads/rida/documentos/{id_evento_rida}/doc_{codigo_ine}_{id_usuario}_{ts}.pdf`")
+                             "- El evento debe existir en `rida.evento_rida`")
     async def subir_documento_rida(
         id_evento_rida: int,
         file: UploadFile = File(...),
@@ -275,18 +271,54 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         id_municipio: int = Form(...),
         fecha_documento: str = Form(..., description="YYYY-MM-DD"),
         nombre_documento: str = Form(...),
-        observaciones: str | None = Form(None),
+        observaciones: str | None = Form(None, description="Texto libre (opcional)"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
         """Sube un nuevo PDF al repositorio del evento RIDA y valida su firma al vuelo."""
         destino = service.resolver_destino_documento(db, id_evento_rida=id_evento_rida)
         if destino is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Evento RIDA {id_evento_rida} no encontrado",
-            )
+            raise HTTPException(status_code=404, detail=f"Evento RIDA {id_evento_rida} no encontrado")
 
+        doc = await _procesar_subida(
+            db=db, _user=_user, file=file, destino=destino,
+            id_tipo_documento=id_tipo_documento, id_departamento=id_departamento,
+            id_provincia=id_provincia, id_municipio=id_municipio,
+            fecha_documento=fecha_documento, nombre_documento=nombre_documento,
+            observaciones=observaciones,
+        )
+        return SuccessResponse(message="Documento subido correctamente", data=doc)
+
+    @router.post("/documentos", status_code=201, tags=[TAG_DOCS],
+                 summary="Subir PDF de respaldo municipal (DOC_PRECEDENTE)",
+                 description="Tercera vía de subida (respaldo municipal). Sube un PDF general fuera de EDAN/RIDA.\n\n"
+                             "Origen asignado automáticamente por la ruta: **DOC_PRECEDENTE**. Subida municipal, "
+                             "con vista/consulta a nivel nacional mediante filtros geográficos.\n\n"
+                             "**Multipart** (mismos campos que EDAN/RIDA): `file` (PDF, max 50MB), "
+                             "`id_tipo_documento`, `id_departamento`, `id_provincia`, `id_municipio`, "
+                             "`fecha_documento` (YYYY-MM-DD), `nombre_documento`, `observaciones` (texto libre, opcional).\n\n"
+                             "No requiere `id_edan` ni `id_evento_rida`. El documento queda vinculado al municipio "
+                             "y al usuario autenticado que lo sube (`id_usuario_subio`).\n\n"
+                             + _VALIDACIONES_UPLOAD)
+    async def subir_documento_municipal(
+        file: UploadFile = File(...),
+        id_tipo_documento: int = Form(...),
+        id_departamento: int = Form(...),
+        id_provincia: int = Form(...),
+        id_municipio: int = Form(...),
+        fecha_documento: str = Form(..., description="YYYY-MM-DD"),
+        nombre_documento: str = Form(...),
+        observaciones: str | None = Form(None, description="Texto libre (opcional)"),
+        db: Session = Depends(get_db),
+        _user=Depends(get_current_user),
+    ):
+        """Sube un PDF de respaldo municipal (DOC_PRECEDENTE)."""
+        destino = {
+            "id_edan": None,
+            "id_evento_rida": None,
+            "id_municipio": id_municipio,
+            "origen": "DOC_PRECEDENTE",
+        }
         doc = await _procesar_subida(
             db=db, _user=_user, file=file, destino=destino,
             id_tipo_documento=id_tipo_documento, id_departamento=id_departamento,
@@ -299,36 +331,65 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     # ============================================================================
     #  CONSULTAR DOCUMENTOS
     # ============================================================================
-    #  Todas las lecturas incluyen, ademas de tiene_firma_digital, los dos campos
-    #  de resumen que se derivan de resultado_firma. Se documentan una sola vez
-    #  aca y se reaprovecha en las descripciones de las rutas.
+
     _CAMPOS_FIRMA = (
         "**Firmas digitales** (derivadas de `resultado_firma`):\n"
         "- `cantidad_firmas`: cuántas firmas tiene el documento\n"
-        "- `firma_validada`: `true` si AGETIC respondió, `false` si no se pudo validar "
-        "(AGETIC caído o PDF > 20 MB). Permite distinguir \"se validó y no tiene firma\" "
-        "de \"no se pudo validar\"\n"
-        "- `tiene_firma_digital`: sigue siendo `cantidad_firmas > 0`\n\n"
+        "- `firma_validada`: `true` si AGETIC respondió, `false` si no se pudo validar\n"
+        "- `tiene_firma_digital`: `cantidad_firmas > 0`\n\n"
     )
+
+    @router.get("/documentos", tags=[TAG_DOCS], response_model=DataListResponse[dict],
+                summary="Listar documentos (vista nacional, todos los orígenes)",
+                description="Listado general del repositorio (EDAN + RIDA + DOC_PRECEDENTE), vista nacional.\n\n"
+                            "Orden: los más recientes primero (`fecha_documento` DESC, `fecha_subida` DESC).\n\n"
+                            "Filtros opcionales: `origen` (EDAN|RIDA|DOC_PRECEDENTE), geografía "
+                            "(`id_departamento`, `id_provincia`, `id_municipio`), `id_edan`, `id_evento_rida`, "
+                            "`id_tipo_documento`, `id_usuario_subio`, rango `fecha_desde`/`fecha_hasta` (YYYY-MM-DD), "
+                            "`q` (búsqueda en nombre), `tiene_firma_digital`, `include_inactive`.\n\n"
+                            + _CAMPOS_FIRMA)
+    def listar_documentos(
+        limit: int = Query(50, ge=1, le=200, description="Cantidad a devolver (los más recientes primero)"),
+        skip: int = Query(0, ge=0, description="Saltar registros (paginación, sólo con limit)"),
+        todos: bool = Query(False, description="Devolver todos sin paginar (ignora limit/skip)"),
+        origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(
+            None, description="Filtrar por origen: EDAN, RIDA o DOC_PRECEDENTE"),
+        id_edan: int | None = Query(None, description="Filtrar por EDAN"),
+        id_evento_rida: int | None = Query(None, description="Filtrar por evento RIDA"),
+        id_departamento: int | None = Query(None, description="Filtrar por departamento"),
+        id_provincia: int | None = Query(None, description="Filtrar por provincia"),
+        id_municipio: int | None = Query(None, description="Filtrar por municipio"),
+        id_tipo_documento: int | None = Query(None, description="Filtrar por tipo de documento"),
+        id_usuario_subio: int | None = Query(None, description="Filtrar por usuario que subió"),
+        fecha_desde: str | None = Query(None, description="Fecha documento desde (YYYY-MM-DD)"),
+        fecha_hasta: str | None = Query(None, description="Fecha documento hasta (YYYY-MM-DD)"),
+        q: str | None = Query(None, description="Búsqueda por nombre (ILIKE)"),
+        tiene_firma_digital: bool | None = Query(None, description="Filtrar por firma digital"),
+        include_inactive: bool = Query(False, description="Incluir documentos inactivos"),
+        db: Session = Depends(get_db),
+        _user=Depends(get_current_user),
+    ):
+        """Lista documentos con cantidad, paginación y filtros (vista nacional)."""
+        data, total = service.list_documentos_filtrados(
+            db, origen=origen, id_edan=id_edan, id_evento_rida=id_evento_rida,
+            id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
+            id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
+            fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, nombre_documento_like=q,
+            tiene_firma_digital=tiene_firma_digital, include_inactive=include_inactive,
+            limit=limit, skip=skip, todos=todos,
+        )
+        return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
     @router.get("/edan/{id_edan}/documentos", tags=[TAG_DOCS],
                 summary="Listar documentos de un EDAN específico",
                 description="Retorna los PDFs del repositorio vinculados a `id_edan`.\n\n"
-                            "Cada documento de RIDA guarda también su `id_edan` (heredado de "
-                            "`rida.evento_rida.id_edan`), así que esta lista incluye los documentos de "
-                            "los eventos RIDA de ese EDAN. Usar `origen` para separarlos.\n\n"
                             "Filtros opcionales: `id_tipo_documento`, `include_inactive` y "
-                            "`origen` (`edan` = solo del EDAN, `rida` = solo de sus eventos RIDA).\n\n"
-                            + _CAMPOS_FIRMA)
+                            "`origen` (`EDAN` o `RIDA`).\n\n" + _CAMPOS_FIRMA)
     def listar_documentos_edan(
         id_edan: int,
         id_tipo_documento: int | None = Query(None, description="Filtrar por tipo de catálogo"),
         include_inactive: bool = Query(False, description="Incluir documentos con activo=FALSE"),
-        origen: str | None = Query(
-            None,
-            pattern="^(edan|rida)$",
-            description="Dejar vacío = todos (EDAN + RIDA). `edan` = solo los del EDAN. `rida` = solo los de sus eventos RIDA",
-        ),
+        origen: Literal["EDAN", "RIDA"] | None = Query(None, description="Filtrar origen (EDAN o RIDA)"),
         limit: int | None = Query(None, ge=1, description="Registros por página. Sin valor: sin límite"),
         skip: int = Query(0, ge=0, description="Registros a saltar"),
         todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
@@ -342,9 +403,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
 
     @router.get("/rida/eventos/{id_evento_rida}/documentos", tags=[TAG_DOCS],
                 summary="Listar documentos de un evento RIDA",
-                description="Retorna los PDFs del repositorio vinculados a `id_evento_rida` "
-                            "(origen `rida`).\n\n"
-                            "Filtros opcionales: `id_tipo_documento` e `include_inactive`.\n\n"
+                description="Retorna los PDFs del repositorio vinculados a `id_evento_rida` (origen RIDA).\n\n"
                             + _CAMPOS_FIRMA)
     def listar_documentos_rida(
         id_evento_rida: int,
@@ -364,64 +423,38 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
     @router.get("/documentos/filtrar", tags=[TAG_DOCS],
-                summary="Filtrar documentos por metadata estructurada",
-                description="Filtra documentos del repositorio combinando los parámetros:\n\n"
-                            "- **origen**: `edan` (documentos de EDAN) o `rida` (documentos de eventos RIDA). "
-                            "Sin este parámetro devuelve ambos\n"
-                            "- **id_edan**: documentos de un EDAN específico\n"
-                            "- **id_evento_rida**: documentos de un evento RIDA específico\n"
-                            "- **id_departamento/id_provincia/id_municipio**: por ubicación\n"
-                            "- **id_tipo_documento**: por tipo de catálogo\n"
-                            "- **fecha_desde/fecha_hasta**: rango sobre `fecha_documento` (YYYY-MM-DD)\n"
-                            "- **nombre_documento_like**: búsqueda parcial en `nombre_documento`\n\n"
-                            "`origen` se combina con los demás filtros, p. ej. "
-                            "`?origen=rida&id_municipio=1` devuelve solo los documentos RIDA de ese municipio.\n\n"
-                            "Cada documento trae el campo derivado `origen` más `id_edan` e "
-                            "`id_evento_rida`, para que el front no tenga que deducir el tipo.\n\n"
-                            + _CAMPOS_FIRMA +
-                            "Retorna `{data: [...], total: N}` con paginación `skip`/`limit`.")
+                summary="Filtrar documentos por metadata estructurada (compatibilidad)",
+                description="Listado con filtros (EDAN + RIDA + DOC_PRECEDENTE). Mantiene compatibilidad con clientes existentes.\n\n"
+                            "Se recomienda el endpoint general `GET /repositorio/documentos`.\n\n" + _CAMPOS_FIRMA)
     def filtrar_documentos(
-        origen: str | None = Query(
-            None,
-            pattern="^(edan|rida)$",
-            description="`edan` = solo documentos de EDAN, `rida` = solo de eventos RIDA, vacío = ambos",
-        ),
+        origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(None, description="Origen"),
         id_edan: int | None = Query(None, description="FK a edan.edan.id_edan"),
-        id_evento_rida: int | None = Query(
-            None, description="FK a rida.evento_rida.id_evento_rida"
-        ),
+        id_evento_rida: int | None = Query(None, description="FK a rida.evento_rida.id_evento_rida"),
         id_departamento: int | None = Query(None),
         id_provincia: int | None = Query(None),
         id_municipio: int | None = Query(None),
         id_tipo_documento: int | None = Query(None),
+        id_usuario_subio: int | None = Query(None),
         fecha_desde: str | None = Query(None, description="YYYY-MM-DD"),
         fecha_hasta: str | None = Query(None, description="YYYY-MM-DD"),
         nombre_documento_like: str | None = Query(None, description="ILIKE match"),
+        tiene_firma_digital: bool | None = Query(None),
+        include_inactive: bool = Query(False),
         skip: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=200),
         todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Filtra documentos por metadata estructurada (origen, ubicación, tipo, fecha, nombre).
-
-        `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
-        """
+        """Filtra documentos por metadata estructurada."""
         data, total = service.list_documentos_filtrados(
-            db,
-            origen=origen,
-            id_edan=id_edan,
-            id_evento_rida=id_evento_rida,
-            id_departamento=id_departamento,
-            id_provincia=id_provincia,
-            id_municipio=id_municipio,
-            id_tipo_documento=id_tipo_documento,
-            fecha_desde=fecha_desde,
-            fecha_hasta=fecha_hasta,
+            db, origen=origen, id_edan=id_edan, id_evento_rida=id_evento_rida,
+            id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
+            id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
+            fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
             nombre_documento_like=nombre_documento_like,
-            limit=limit,
-            skip=skip,
-            todos=todos,
+            tiene_firma_digital=tiene_firma_digital, include_inactive=include_inactive,
+            limit=limit, skip=skip, todos=todos,
         )
         return SuccessResponse(
             message="Documentos filtrados correctamente",
@@ -431,40 +464,26 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
 
     @router.get("/documentos/buscar", tags=[TAG_DOCS],
                 summary="Buscar documentos por nombre (ILIKE)",
-                description="Búsqueda parcial en `nombre_documento` y `nombre_original`.\n\n"
-                            "Filtros opcionales: `id_municipio` y `origen` (`edan` / `rida`).\n\n"
-                            "Retorna documentos activos ordenados por `fecha_documento` DESC.")
+                description="Búsqueda parcial en `nombre_documento` y `nombre_original` (EDAN, RIDA, DOC_PRECEDENTE).\n\n"
+                            "Filtros opcionales: `id_municipio` y `origen`.")
     def buscar_documentos(
         q: str = Query(..., description="Término a buscar en nombre_documento o nombre_original"),
         id_municipio: int | None = Query(None, description="Limitar búsqueda a un municipio"),
-        origen: str | None = Query(
-            None, pattern="^(edan|rida)$", description="Limitar la búsqueda a un origen"
-        ),
-        limit: int = Query(50, le=200, description="Máximo 200 resultados"),
+        origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(None, description="Limitar a un origen"),
+        limit: int = Query(50, ge=1, le=200, description="Máximo 200 resultados"),
         skip: int = Query(0, ge=0, description="Saltar registros (paginación)"),
         todos: bool = Query(False, description="true = devolver todos sin LIMIT/OFFSET"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Búsqueda por nombre (ILIKE sobre nombre_documento y nombre_original).
-
-        `limit`/`skip` paginan (los más recientes primero); `todos=true` devuelve todo.
-        """
-        data = service.buscar_documentos(db, q, id_municipio, limit, origen,
-                                         skip=skip, todos=todos)
-        return SuccessResponse(
-            message=f"Búsqueda: {q}",
-            data=[dict(r) for r in data],
-            total=len(data),
-        )
+        """Búsqueda por nombre (ILIKE)."""
+        data, total = service.buscar_documentos(db, q, id_municipio, limit, origen,
+                                                skip=skip, todos=todos)
+        return SuccessResponse(message=f"Búsqueda: {q}", data=[dict(r) for r in data], total=total)
 
     @router.get("/documentos/{id_documento}", tags=[TAG_DOCS],
             summary="Obtener metadata de un documento",
-            description="Retorna todos los campos del documento + datos del tipo (codigo, nombre).\n\n"
-                        + _CAMPOS_FIRMA +
-                        "El detalle completo de la validación (firmante, certificado, cadena de confianza) "
-                        "sigue disponible en `resultado_firma`.")
-
+            description="Retorna todos los campos del documento + datos del tipo.\n\n" + _CAMPOS_FIRMA)
     def obtener_documento(
         id_documento: int,
         db: Session = Depends(get_db),
@@ -478,8 +497,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
 
     @router.get("/documentos/{id_documento}/descargar", tags=[TAG_DOCS],
             summary="Descargar el PDF físico",
-            description="Retorna el archivo PDF con `Content-Type: application/pdf`.\n\n"
-                        "El documento debe existir y estar activo.")
+            description="Retorna el archivo PDF con `Content-Type: application/pdf`.")
     def descargar_documento(
         id_documento: int,
         db: Session = Depends(get_db),

@@ -61,17 +61,17 @@ class DocumentoCreate(BaseModel):
 
 
 class DocumentoUpdate(BaseModel):
-    observaciones: Optional[str] = None
+    observaciones: Optional[str] = Field(None, description="Texto libre (opcional)")
     activo: Optional[bool] = None
 
 
 class DocumentoResponse(BaseModel):
     id_documento: int
-    # Ambos pueden venir NULL segun el origen: un documento de EDAN no tiene
-    # evento RIDA, y uno de RIDA siempre hereda su EDAN del evento.
+    # Vínculos según origen: EDAN/RIDA pueden tener id_edan/id_evento_rida;
+    # DOC_PRECEDENTE (respaldo municipal) no tiene ninguno.
     id_edan: Optional[int] = None
     id_evento_rida: Optional[int] = None
-    # Derivado en SQL: 'edan' si id_evento_rida es NULL, 'rida' si no.
+    # Origen explícito (asignado por la ruta de subida): EDAN, RIDA, DOC_PRECEDENTE.
     origen: Optional[str] = None
     # Derivados de resultado_firma: cuantas firmas tiene y si se pudo validar.
     cantidad_firmas: int = 0

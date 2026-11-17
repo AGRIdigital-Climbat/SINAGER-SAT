@@ -28,6 +28,7 @@
 | D | `rida` / solicitudes | Shim compat v2.60.0: `POST /revisar|validar|observar|corregir` traducen al motor de 7 niveles/AH (sin reabrir etapas retiradas; `observar` motivo≥10→422, `corregir`→409) | [RIDA_shim_compat_solicitudes_v260.md](RIDA_shim_compat_solicitudes_v260.md) | — (sin migración; usa motor existente) | rama `migraciones` (pendiente push en este commit) |
 | E | `rida` / ayuda humanitaria (necesidades) | Motor de necesidades v2.61.0 (`regla_necesidad`, `necesidad.fuente/id_regla_necesidad`, endpoints reglas/motor) — alineación documental | [RIDA_motor_necesidades_v261.md](RIDA_motor_necesidades_v261.md) · `PROPUESTA_MOTOR_CALCULO_NECESIDADES.md` (raíz) | **Ya existe**: `v2.61.0_motor_necesidades.sql` + espejo `despliegue/migraciones/` (idempotente; si aplicada se ignora) | rama `migraciones` (doc alineada; API/motor ya en repo) |
 | F | `shared` / censo (docs/deps) | Alineación indicadores `por-nombre`/hogares, README script hogares y dependencia `pyarrow>=15` | [SHARED_censo_docs_dependencias.md](SHARED_censo_docs_dependencias.md) | — (v2.17.0 ya existe) | rama `migraciones` |
+| G | `repositorio` / documentos | 3ª subida **DOC_PRECEDENTE** (respaldo municipal, `POST /repositorio/documentos`, mismos campos, origen por ruta, `observaciones` libre) + consulta general vista nacional EDAN/RIDA/DOC_PRECEDENTE con filtros geográficos y paginación; EDAN/RIDA sin cambios | [REPOSITORIO_doc_precedente_v265.md](REPOSITORIO_doc_precedente_v265.md) | `v2.65.0_repositorio_origen_doc_precedente.sql` (+ espejo) | rama `migraciones` |
 
 ---
 
@@ -129,4 +130,4 @@ Microdata INE (413 MB, sha verificado) = 343/343 hogares/viviendas/población ex
 
 ---
 
-*Última alineación de este índice: 2026-11-16 (renombre a `cambios_replicacion/`, skill alcance total BD/APIs; añade RIDA shim v2.60.0, motor necesidades v2.61.0 —migración ya existente— y alineación shared/docs/deps; rama `migraciones`).*
+*Última alineación de este índice: 2026-11-16 (renombre a `cambios_replicacion/`, skill alcance total BD/APIs; añade RIDA shim v2.60.0, motor necesidades v2.61.0 —migración ya existente—, alineación shared/docs/deps y repositorio DOC_PRECEDENTE v2.65.0; rama `migraciones`).*
