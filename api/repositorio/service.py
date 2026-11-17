@@ -569,15 +569,19 @@ def list_documentos_grupos(
     """Listado AGRUPADO del repositorio: un grupo por expediente/entidad padre.
 
     Regla de agrupacion (unica fuente de verdad):
-      - origen RIDA        -> grupo por id_evento_rida (aunque herede id_edan:
-                              se mantiene como RIDA, no se mezcla con el EDAN)
-      - origen EDAN        -> grupo por id_edan
+      - origen RIDA           -> grupo por id_evento_rida (aunque herede id_edan:
+                                 se mantiene como RIDA, no se mezcla con el EDAN)
+      - origen EDAN           -> grupo por id_edan
       - origen DOC_PRECEDENTE -> grupo por codigo_documento (si faltara, el
-                              propio documento forma su grupo)
+                                 propio documento forma su grupo)
 
-    Cada fila: tipo, clave, id_edan, id_evento_rida, codigo_documento, etiqueta,
-    geo (minima del grupo), total_documentos, fecha_documento_max,
-    fecha_subida_max. `total` = nº de GRUPOS sin paginar con los mismos filtros.
+    Identificacion de copias EXACTAS (hash_sha256, sin apis nuevas): cada grupo
+    incluye `documentos_compartidos` (cuantos de sus documentos tienen el mismo
+    hash en OTRO grupo del repositorio, siempre contra todos los docs activos)
+    y `comparte_con` (grupos hermanos con los documentos comunes). Dos copias
+    dentro del MISMO grupo no cuentan (clave identica).
+
+    `total` = numero de GRUPOS sin paginar con los mismos filtros.
     """
     where, params = _aplicar_filtros_documentos(
         origen=origen,
@@ -600,7 +604,7 @@ def list_documentos_grupos(
         "COALESCE(d.origen, CASE WHEN d.id_evento_rida IS NULL THEN 'EDAN' ELSE 'RIDA' END)"
     )
 
-    body = f"""
+    grupo_sel = f"""
         SELECT
             {tipo_expr} AS tipo,
             {_GRUPO_KEY_SQL} AS clave,
@@ -610,9 +614,11 @@ def list_documentos_grupos(
                  THEN min(COALESCE(d.codigo_documento, 'DOC-' || d.id_documento::text))
             END AS codigo_documento,
             CASE {tipo_expr}
-                WHEN 'EDAN' THEN COALESCE('EDAN ' || min(ee.codigo_edan), 'EDAN ' || min(d.id_edan)::text)
+                WHEN 'EDAN' THEN COALESCE('EDAN ' || min(ee.codigo_edan),
+                                          'EDAN ' || min(d.id_edan)::text)
                 WHEN 'RIDA' THEN 'EVENTO RIDA ' || min(d.id_evento_rida)::text
-                ELSE COALESCE(min(d.codigo_documento), 'DOC-' || min(d.id_documento)::text)
+                ELSE COALESCE(min(d.codigo_documento),
+                              'DOC-' || min(d.id_documento)::text)
             END AS etiqueta,
             min(d.id_departamento) AS id_departamento,
             min(d.id_provincia) AS id_provincia,
@@ -627,10 +633,70 @@ def list_documentos_grupos(
         GROUP BY {tipo_expr}, {_GRUPO_KEY_SQL}
     """
 
-    total = _row(db, f"SELECT COUNT(*) AS total FROM ({body}) g", params)["total"]
-    page = "" if todos else " ORDER BY max(COALESCE(d.fecha_documento, d.fecha_subida::date)) DESC NULLS LAST, max(d.fecha_subida) DESC LIMIT :limit OFFSET :skip"
-    if todos:
-        page = " ORDER BY max(COALESCE(d.fecha_documento, d.fecha_subida::date)) DESC NULLS LAST, max(d.fecha_subida) DESC"
+    # CTEs de coincidencias por hash (siempre contra todo el repositorio activo,
+    # independientes de los filtros: el badge debe seguir siendo correcto).
+    hash_ctes = f"""
+        WITH docs AS (
+            SELECT d.id_documento, d.hash_sha256, d.nombre_documento,
+                   {tipo_expr} AS tipo,
+                   {_GRUPO_KEY_SQL} AS clave,
+                   CASE {tipo_expr}
+                       WHEN 'EDAN' THEN COALESCE('EDAN ' || ee.codigo_edan,
+                                                 'EDAN ' || d.id_edan::text)
+                       WHEN 'RIDA' THEN 'EVENTO RIDA ' || d.id_evento_rida::text
+                       ELSE COALESCE(d.codigo_documento,
+                                     'DOC-' || d.id_documento::text)
+                   END AS etiqueta
+              FROM repositorio.documentos d
+              LEFT JOIN edan.edan ee ON ee.id_edan = d.id_edan
+             WHERE d.activo = TRUE AND d.hash_sha256 IS NOT NULL
+        ), pares AS (
+            SELECT a.clave AS clave, a.id_documento AS doc_propio,
+                   b.clave AS dest_clave, b.tipo AS dest_tipo,
+                   b.etiqueta AS dest_etiqueta,
+                   b.id_documento AS dest_doc, b.nombre_documento AS dest_nombre,
+                   b.hash_sha256 AS dest_hash
+              FROM docs a
+              JOIN docs b
+                ON a.hash_sha256 = b.hash_sha256 AND a.clave <> b.clave
+        ), comp AS (
+            SELECT clave, count(DISTINCT doc_propio)::int AS documentos_compartidos
+              FROM pares GROUP BY clave
+        ), por_dest AS (
+            SELECT clave, dest_clave,
+                   min(dest_tipo) AS tipo, min(dest_etiqueta) AS etiqueta,
+                   count(DISTINCT dest_doc)::int AS documentos_comunes,
+                   jsonb_agg(DISTINCT jsonb_build_object(
+                       'id_documento', dest_doc,
+                       'nombre_documento', dest_nombre,
+                       'hash_sha256', left(dest_hash, 16))) AS documentos
+              FROM pares
+             GROUP BY clave, dest_clave
+        ), comp_con AS (
+            SELECT clave,
+                   jsonb_agg(jsonb_build_object(
+                       'tipo', tipo, 'clave', dest_clave, 'etiqueta', etiqueta,
+                       'documentos_comunes', documentos_comunes,
+                       'documentos', documentos)
+                       ORDER BY documentos_comunes DESC) AS comparte_con
+              FROM por_dest GROUP BY clave
+        )
+    """
+
+    total = _row(db, f"SELECT COUNT(*) AS total FROM ({grupo_sel}) g", params)["total"]
+
+    q_page = "" if todos else " LIMIT :limit OFFSET :skip"
     page_params = {} if todos else {"limit": limit, "skip": skip}
-    rows = _rows(db, body + page, {**params, **page_params})
+
+    rows = _rows(db, f"""
+        {hash_ctes}
+        SELECT g.*,
+               COALESCE(c.documentos_compartidos, 0) AS documentos_compartidos,
+               COALESCE(k.comparte_con, '[]'::jsonb) AS comparte_con
+          FROM ({grupo_sel}) g
+          LEFT JOIN comp c ON c.clave = g.clave
+          LEFT JOIN comp_con k ON k.clave = g.clave
+         ORDER BY g.fecha_documento_max DESC NULLS LAST, g.fecha_subida_max DESC
+         {q_page}
+    """, {**params, **page_params})
     return rows, total

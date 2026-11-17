@@ -128,6 +128,14 @@ Lista **EDAN + RIDA + DOC_PRECEDENTE** (vista nacional) con filtros geográficos
   `id_evento_rida`, `codigo_documento`, `etiqueta` (legible: p. ej.
   `EDAN 070101/2026/003`, `EVENTO RIDA 15`, o el propio código), geografía del grupo,
   **`total_documentos`**, `fecha_documento_max`, `fecha_subida_max`.
+- **Copias idénticas entre grupos (hash exacto, sin API extra)**: cada grupo incluye
+  `documentos_compartidos` (cuántos de sus documentos tienen el mismo `hash_sha256`
+  en OTRO grupo) y `comparte_con`: grupos hermanos con `tipo`, `clave`, `etiqueta`,
+  `documentos_comunes` y los `documentos` exactos (`id_documento`,
+  `nombre_documento`, `hash_sha256` de 16 caracteres). El mismo PDF subido a un EDAN
+  y a un expediente municipal queda identificado en ambos grupos; dos copias dentro
+  del MISMO grupo no cuentan. Se calcula contra todos los docs activos, aunque la
+  lista esté filtrada/paginada.
 - **`total` = nº de GRUPOS** sin paginar con los mismos filtros; `limit/skip` paginan grupos.
 - **`modo=plano`**: comportamiento clásico, lista de documentos individuales
   (respuesta `Documentos listados`, `total` = nº de docs).
@@ -147,7 +155,14 @@ Ejemplo (respuesta `modo=agrupado`):
      "codigo_documento": "PRUEBA-AGRUP-2026-001",
      "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
      "total_documentos": 2, "fecha_documento_max": "2026-11-17",
-     "fecha_subida_max": "2026-11-17T03:12:44"},
+     "fecha_subida_max": "2026-11-17T03:12:44",
+     "documentos_compartidos": 1,
+     "comparte_con": [
+       {"tipo": "EDAN", "clave": "ED-79", "etiqueta": "EDAN 070101/2026/003",
+        "documentos_comunes": 1,
+        "documentos": [{"id_documento": 373,
+                        "nombre_documento": "Declaratoria 034/2026 (copia EDAN)",
+                        "hash_sha256": "b4b2f45d041f9d89"}]} ]},
     {"tipo": "RIDA", "clave": "EV-15", "etiqueta": "EVENTO RIDA 15",
      "id_edan": 79, "id_evento_rida": 15, "codigo_documento": null,
      "total_documentos": 2, "fecha_documento_max": "2026-10-09"},

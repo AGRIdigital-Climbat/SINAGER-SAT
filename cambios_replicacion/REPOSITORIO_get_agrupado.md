@@ -66,6 +66,24 @@ lista plana de siempre debe enviar `modo=plano` (o usar `/documentos/filtrar`, q
 cambió). (Acordado con el usuario: el frontend aún no consume este endpoint; estamos
 en inicio.)
 
+## 4.1 Ampliación: copias idénticas entre grupos por hash (mismo commit, sin API nueva)
+
+Decisión del usuario: identificar documentos **iguales** (hash SHA-256 exacto)
+**dentro del mismo GET agrupado**, sin endpoints nuevos y **siempre activado**.
+
+- Cada grupo añade `documentos_compartidos` (int: nº de docs del grupo cuyo
+  `hash_sha256` aparece en OTRO grupo) y `comparte_con` (jsonb array de grupos
+  hermanos: `{tipo, clave, etiqueta, documentos_comunes, documentos:[{id_documento,
+  nombre_documento, hash_sha256(left 16)}]}`, ordenados por `documentos_comunes`
+  DESC; `[]` si no hay). Copias dentro del mismo grupo NO cuentan (unión con
+  `a.clave <> b.clave`).
+- Cálculo en `service.list_documentos_grupos` con CTEs `docs/pares/comp/por_dest/
+  comp_con` sobre **todos los documentos activos con hash** (independiente de los
+  filtros/paginación del listado, para que el badge sea siempre cierto). `total`
+  sigue siendo nº de grupos. `modo=plano` NO cambia (no añade campos).
+- El hash ya lo graban las 3 vías de subida (`save_documento_pdf`); no hubo
+  cambios de BD ni migración.
+
 ## 5. Verificación (dev 2026-11-17, resultados reales)
 
 Datos actuales: docs 18/19 (EDAN, `id_edan=79`) y 71/72 (RIDA, `id_evento_rida=15`,
@@ -79,6 +97,18 @@ heredan `id_edan=79`).
 6. Limpieza: hard delete de los 2 docs prueba (dueño, en plazo) → 200×2; BD volvió a 4 docs y `count(codigo_documento)=0`; grupos finales=2 ✓
 7. `python3 -m compileall -q api/repositorio` OK; API reiniciada (4 workers); protegidos intactos.
 
+Prueba de copias por hash (mismo PDF `sha256 b4b2f45d041f9d89…` subido a dos grupos):
+8. `POST /edan/79/documentos` (doc 373, admin) + `POST /documentos`
+   `codigo_documento=PRUEBA-CROSS-1` (doc 374, user 30) → GET agrupado: grupo
+   `PRUEBA-CROSS-1` con `documentos_compartidos=1` y `comparte_con=[{tipo:EDAN,
+   clave:ED-79, documentos_comunes:1, documentos:[{id_documento:373,
+   hash_sha256:"b4b2f45d041f9d89"}]}]`; el grupo `ED-79` muestra la contraparte
+   simétrica (doc 374) ✓
+9. Grupo sin gemelos (`EV-15`) → `documentos_compartidos=0`, `comparte_con=[]` ✓
+10. `modo=plano` inalterado (docs con `hash_sha256` propio, sin `comparte_con`) ✓
+11. Limpieza: hard-delete de 373 (admin) y 374 (dueño) → 200×2; BD volvió a 4 docs
+    y agrupado final = 2 grupos con `documentos_compartidos=0` ✓
+
 ## 6. Replicación en el gemelo
 Sin migración ni env nuevo:
 ```bash
@@ -87,6 +117,11 @@ git pull origin migraciones
 # verificar: GET /api/v2/repositorio/documentos -> message "Grupos de documentos listados"
 # y GET ...?modo=plano -> message "Documentos listados"
 ```
+
+## 6.1 Límite conocido (decisión registrada)
+Solo **hash exacto** (copias byte-idénticas). Escaneos/re-exportes del mismo papel
+en municipios distintos NO se detectan (bytes distintos); si algún día hace falta,
+sería una tabla de relaciones manual (`v2.68.0`, descartada por ahora).
 
 ## 7. Notas / rollback
 - El agrupamiento SQL filtra por documento y agrupa: un filtro (`q`, tipo, fechas)
