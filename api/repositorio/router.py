@@ -135,6 +135,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         fecha_documento: str,
         nombre_documento: str,
         observaciones: str | None,
+        codigo_documento: str | None = None,
     ) -> dict:
         """Valida el PDF, valida la firma y persiste. Devuelve el documento.
 
@@ -213,6 +214,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             fecha_validacion_firma=fecha_validacion_firma,
             id_evento_rida=id_evento_rida,
             origen=origen,
+            codigo_documento=codigo_documento,
         )
 
         return dict(service.get_documento(db, id_doc))
@@ -297,6 +299,11 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                              "**Multipart** (mismos campos que EDAN/RIDA): `file` (PDF, max 50MB), "
                              "`id_tipo_documento`, `id_departamento`, `id_provincia`, `id_municipio`, "
                              "`fecha_documento` (YYYY-MM-DD), `nombre_documento`, `observaciones` (texto libre, opcional).\n\n"
+                             "**`codigo_documento` (opcional, máx 64)**: clave de rastreo/agrupación tipo "
+                             "`id_edan`/`id_evento_rida` para respaldos. Se normaliza a MAYÚSCULAS y NO es única: "
+                             "varios documentos pueden compartir el mismo código (expediente). Si no se envía, la "
+                             "API genera uno `RES-{codigo_ine}-{YYYY}-{sec}` y lo devuelve en la respuesta; "
+                             "reenvíe ese código en subidas futuras para anexar documentos al mismo expediente.\n\n"
                              "No requiere `id_edan` ni `id_evento_rida`. El documento queda vinculado al municipio "
                              "y al usuario autenticado que lo sube (`id_usuario_subio`).\n\n"
                              + _VALIDACIONES_UPLOAD)
@@ -309,10 +316,24 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         fecha_documento: str = Form(..., description="YYYY-MM-DD"),
         nombre_documento: str = Form(...),
         observaciones: str | None = Form(None, description="Texto libre (opcional)"),
+        codigo_documento: str | None = Form(
+            None, max_length=64,
+            description="Clave de agrupación/expediente (opcional). Si falta se autogenera RES-{codigo_ine}-{YYYY}-{sec}."),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Sube un PDF de respaldo municipal (DOC_PRECEDENTE)."""
+        """Sube un PDF de respaldo municipal (DOC_PRECEDENTE).
+
+        `codigo_documento`: si el cliente lo envía, el documento se une a ese
+        expediente; si no, se autogenera con la secuencia de la BD.
+        """
+        cod = service.normalizar_codigo_documento(codigo_documento)
+        if cod is not None and len(cod) > 64:
+            raise HTTPException(status_code=400,
+                                detail="codigo_documento no puede exceder 64 caracteres")
+        if cod is None:
+            cod = service.generar_codigo_documento(db, id_municipio)
+
         destino = {
             "id_edan": None,
             "id_evento_rida": None,
@@ -324,7 +345,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             id_tipo_documento=id_tipo_documento, id_departamento=id_departamento,
             id_provincia=id_provincia, id_municipio=id_municipio,
             fecha_documento=fecha_documento, nombre_documento=nombre_documento,
-            observaciones=observaciones,
+            observaciones=observaciones, codigo_documento=cod,
         )
         return SuccessResponse(message="Documento subido correctamente", data=doc)
 
@@ -345,6 +366,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "Orden: los más recientes primero (`fecha_documento` DESC, `fecha_subida` DESC).\n\n"
                             "Filtros opcionales: `origen` (EDAN|RIDA|DOC_PRECEDENTE), geografía "
                             "(`id_departamento`, `id_provincia`, `id_municipio`), `id_edan`, `id_evento_rida`, "
+                            "`codigo_documento` (expediente de respaldos, exacto, sin distinguir mayúsculas), "
                             "`id_tipo_documento`, `id_usuario_subio`, rango `fecha_desde`/`fecha_hasta` (YYYY-MM-DD), "
                             "`q` (búsqueda en nombre), `tiene_firma_digital`, `include_inactive`.\n\n"
                             + _CAMPOS_FIRMA)
@@ -354,6 +376,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         todos: bool = Query(False, description="Devolver todos sin paginar (ignora limit/skip)"),
         origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(
             None, description="Filtrar por origen: EDAN, RIDA o DOC_PRECEDENTE"),
+        codigo_documento: str | None = Query(
+            None, max_length=64, description="Filtrar por clave de agrupación/expediente (DOC_PRECEDENTE)"),
         id_edan: int | None = Query(None, description="Filtrar por EDAN"),
         id_evento_rida: int | None = Query(None, description="Filtrar por evento RIDA"),
         id_departamento: int | None = Query(None, description="Filtrar por departamento"),
@@ -371,7 +395,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     ):
         """Lista documentos con cantidad, paginación y filtros (vista nacional)."""
         data, total = service.list_documentos_filtrados(
-            db, origen=origen, id_edan=id_edan, id_evento_rida=id_evento_rida,
+            db, origen=origen, codigo_documento=codigo_documento,
+            id_edan=id_edan, id_evento_rida=id_evento_rida,
             id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
             id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
             fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, nombre_documento_like=q,
@@ -379,6 +404,32 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             limit=limit, skip=skip, todos=todos,
         )
         return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
+
+    @router.get("/documentos/codigo/{codigo_documento}", tags=[TAG_DOCS],
+                summary="Listar documentos de un expediente (codigo_documento)",
+                description="Todos los documentos activos agrupados bajo el mismo "
+                            "`codigo_documento` (clave de rastreo de la 3ª subida "
+                            "DOC_PRECEDENTE, equivalente municipal de `id_edan`/"
+                            "`id_evento_rida`). El código se normaliza (trim + "
+                            "MAYÚSCULAS). Orden reciente primero con paginación "
+                            "`limit`/`skip`/`todos`.\n\n" + _CAMPOS_FIRMA)
+    def listar_documentos_codigo(
+        codigo_documento: str,
+        limit: int = Query(50, ge=1, le=200, description="Cantidad a devolver (los más recientes primero)"),
+        skip: int = Query(0, ge=0, description="Saltar registros (paginación, sólo con limit)"),
+        todos: bool = Query(False, description="Devolver todos sin paginar (ignora limit/skip)"),
+        db: Session = Depends(get_db),
+        _user=Depends(get_current_user),
+    ):
+        """Documentos que comparten un codigo_documento (expediente)."""
+        cod = service.normalizar_codigo_documento(codigo_documento)
+        if not cod:
+            raise HTTPException(status_code=400, detail="codigo_documento vacío")
+        data, total = service.list_documentos_by_codigo(
+            db, cod, limit=limit, skip=skip, todos=todos,
+        )
+        return SuccessResponse(message="Documentos del expediente listados",
+                               data=[dict(r) for r in data], total=total)
 
     @router.get("/edan/{id_edan}/documentos", tags=[TAG_DOCS],
                 summary="Listar documentos de un EDAN específico",
@@ -428,6 +479,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "Se recomienda el endpoint general `GET /repositorio/documentos`.\n\n" + _CAMPOS_FIRMA)
     def filtrar_documentos(
         origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(None, description="Origen"),
+        codigo_documento: str | None = Query(None, max_length=64, description="Clave de agrupación/expediente"),
         id_edan: int | None = Query(None, description="FK a edan.edan.id_edan"),
         id_evento_rida: int | None = Query(None, description="FK a rida.evento_rida.id_evento_rida"),
         id_departamento: int | None = Query(None),
@@ -448,7 +500,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     ):
         """Filtra documentos por metadata estructurada."""
         data, total = service.list_documentos_filtrados(
-            db, origen=origen, id_edan=id_edan, id_evento_rida=id_evento_rida,
+            db, origen=origen, codigo_documento=codigo_documento,
+            id_edan=id_edan, id_evento_rida=id_evento_rida,
             id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
             id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
             fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,

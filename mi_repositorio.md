@@ -65,6 +65,13 @@ curl -X POST "$API/api/v2/repositorio/rida/eventos/45/documentos" \
 
 Subida municipal para documentos fuera de EDAN/RIDA. Mismos campos que las anteriores.
 
+**Campo extra opcional `codigo_documento`** (≤64): clave de rastreo/expediente, el
+equivalente municipal de `id_edan`/`id_evento_rida`. No es única: **varios documentos
+pueden compartir el mismo código** para anexarse al mismo expediente. Se normaliza a
+MAYÚSCULAS. Si **no** la envías, la API la **autogenera** (`RES-{codigo_ine}-{año}-{sec}`,
+p. ej. `RES-070101-2026-00002`) y la devuelve en la respuesta: úsala en subidas
+posteriores para agrupar.
+
 ```bash
 curl -X POST "$API/api/v2/repositorio/documentos" \
   -H "Authorization: Bearer $TOKEN" \
@@ -73,7 +80,8 @@ curl -X POST "$API/api/v2/repositorio/documentos" \
   -F "id_departamento=2" -F "id_provincia=201" -F "id_municipio=20101" \
   -F "fecha_documento=2026-11-15" \
   -F "nombre_documento=Convenio interinstitucional" \
-  -F "observaciones=Respaldo municipal, texto libre"
+  -F "observaciones=Respaldo municipal, texto libre" \
+  -F "codigo_documento=RES-020101-2026-00001"   # opcional: anexa a ese expediente
 ```
 
 ### Respuesta de subida (ejemplo, `201`)
@@ -84,6 +92,7 @@ curl -X POST "$API/api/v2/repositorio/documentos" \
   "data": {
     "id_documento": 987,
     "origen": "DOC_PRECEDENTE",
+    "codigo_documento": "RES-020101-2026-00001",
     "id_edan": null,
     "id_evento_rida": null,
     "id_departamento": 2,
@@ -120,6 +129,7 @@ Lista **EDAN + RIDA + DOC_PRECEDENTE** (vista nacional) con filtros geográficos
 | Filtro | Tipo | Descripción |
 |---|---|---|
 | `origen` | `EDAN` \| `RIDA` \| `DOC_PRECEDENTE` | Origen del documento |
+| `codigo_documento` | string ≤64 | Expediente/rastreo de DOC_PRECEDENTE (exacto, sin distinguir mayúsculas) |
 | `id_departamento` | int | Filtro geográfico: departamento |
 | `id_provincia` | int | Filtro geográfico: provincia |
 | `id_municipio` | int | Filtro geográfico: municipio |
@@ -197,6 +207,7 @@ Ejemplo de respuesta:
 | `GET` | `/api/v2/repositorio/documentos/filtrar` | Filtros por metadata (incluye `DOC_PRECEDENTE`, `total` correcto). Compatible con clientes existentes. |
 | `GET` | `/api/v2/repositorio/documentos/buscar?q=...` | Búsqueda por nombre (`ILIKE`), con `id_municipio`, `origen`, `limit/skip/todos`. |
 | `GET` | `/api/v2/repositorio/edan/{id_edan}/documentos` | Documentos de un EDAN (filtros `id_tipo_documento`, `origen` EDAN/RIDA, paginación). |
+| `GET` | `/api/v2/repositorio/documentos/codigo/{codigo_documento}` | **Todos los documentos de un expediente** (DOC_PRECEDENTE). El código se normaliza (admite minúsculas); `limit`/`skip`/`todos`; solo activos. |
 | `GET` | `/api/v2/repositorio/rida/eventos/{id_evento_rida}/documentos` | Documentos de un evento RIDA. |
 | `GET` | `/api/v2/repositorio/documentos/{id_documento}` | Metadata de un documento. |
 | `GET` | `/api/v2/repositorio/documentos/{id_documento}/descargar` | Descarga el PDF (`application/pdf`). |
@@ -210,8 +221,14 @@ Ejemplo de respuesta:
 
 ## 4. Notas
 - `observaciones` es **texto libre** (opcional) en subida y en actualización.
+- `codigo_documento` (expediente): solo lo usan los `DOC_PRECEDENTE`; la 3ª subida lo
+  acepta o lo autogenera (`RES-{codigo_ine}-{año}-{sec}`), y es la clave para **agrupar
+  varios PDFs en un mismo expediente** (varios documentos → mismo código). Se consulta
+  con `GET /documentos?codigo_documento=...` o `GET /documentos/codigo/{codigo}`.
+  EDAN/RIDA lo devuelven `null` (sus padres son `id_edan`/`id_evento_rida`).
 - `DOC_PRECEDENTE`: solo el usuario que subió puede editar/eliminar (soft y hard) y dentro de 72 h desde la subida (403 si no). No aplica a `EDAN`/`RIDA`.
 - Verificado en dev (2026-11-17): subida municipal → `origen=DOC_PRECEDENTE`, mezcla en la vista nacional (`total` con EDAN/RIDA), filtros por departamento/provincia/municipio/tipo/fecha/`q`/`todos`, y `403` tanto a usuario distinto del dueño como al dueño pasadas las 72 h. Detalle en `cambios_replicacion/REPOSITORIO_doc_precedente_v265.md` §7.1.
+- Agrupación probada (2026-11-17): 2 subidas sin código → códigos distintos; 3ª subida con el código de la 1ª en minúsculas → quedó en el mismo expediente; `/codigo/...` y filtro `?codigo_documento` devuelven el grupo; PUT del dueño reasigna el expediente y PUT de otro usuario → 403. Detalle en `cambios_replicacion/REPOSITORIO_codigo_documento_v267.md`.
 - La subida `DOC_PRECEDENTE` es **municipal** (vinculada al municipio enviado) y la consulta es de **vista nacional** con filtros geográficos.
-- Requiere migración `v2.65.0_repositorio_origen_doc_precedente.sql` (y su espejo en `despliegue/migraciones/`) aplicada en la BD.
-- Handoff técnico de replicación: `cambios_replicacion/REPOSITORIO_doc_precedente_v265.md`.
+- Requiere migraciones `v2.65.0_repositorio_origen_doc_precedente.sql` y `v2.67.0_repositorio_codigo_documento.sql` (con sus espejos en `despliegue/migraciones/`) aplicadas en la BD.
+- Handoff técnico de replicación: `cambios_replicacion/REPOSITORIO_doc_precedente_v265.md` y `cambios_replicacion/REPOSITORIO_codigo_documento_v267.md`.

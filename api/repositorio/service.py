@@ -172,6 +172,30 @@ def resolver_destino_documento(
     }
 
 
+def normalizar_codigo_documento(codigo: str | None) -> str | None:
+    """Codigo de agrupacion/rastreo en formato canonico (trim + MAYUSCULAS)."""
+    if codigo is None:
+        return None
+    cod = codigo.strip().upper()
+    return cod or None
+
+
+def generar_codigo_documento(db: Session, id_municipio: int | None) -> str:
+    """Codigo autogenerado para DOC_PRECEDENTE: RES-{codigo_ine}-{YYYY}-{sec:05d}.
+
+    Usa la secuencia repositorio.codigo_documento_seq (sin condiciones de carrera
+    entre workers uvicorn).
+    """
+    codigo_ine = "SINMUN"
+    if id_municipio is not None:
+        row = _row(db, "SELECT codigo_ine FROM shared.municipio WHERE id = :id",
+                   {"id": id_municipio})
+        if row and row["codigo_ine"]:
+            codigo_ine = str(row["codigo_ine"])
+    seq = db.execute(text("SELECT nextval('repositorio.codigo_documento_seq')")).scalar()
+    return f"RES-{codigo_ine}-{datetime_type.now().year}-{int(seq):05d}"
+
+
 def upload_documento(
     db: Session,
     id_edan: int | None,
@@ -192,6 +216,7 @@ def upload_documento(
     fecha_validacion_firma: datetime_type | None = None,
     id_evento_rida: int | None = None,
     origen: str | None = None,
+    codigo_documento: str | None = None,
 ) -> int:
     """Inserta un nuevo documento PDF (sin versionado).
 
@@ -208,14 +233,14 @@ def upload_documento(
              id_municipio, id_departamento, id_provincia,
              fecha_documento, nombre_documento,
              observaciones, tiene_firma_digital, resultado_firma,
-             fecha_validacion_firma)
+             fecha_validacion_firma, codigo_documento)
         VALUES
             (:id_edan, :id_evento_rida, :origen, :id_tipo_documento, :nombre_original, :path_archivo,
              :tamano_bytes, :hash_sha256, :id_usuario_subio,
              :id_municipio, :id_departamento, :id_provincia,
              :fecha_documento, :nombre_documento,
              :observaciones, :tiene_firma_digital,
-             CAST(:resultado_firma AS jsonb), :fecha_validacion_firma)
+             CAST(:resultado_firma AS jsonb), :fecha_validacion_firma, :codigo_documento)
         RETURNING id_documento
     """), {
         "id_edan": id_edan,
@@ -236,6 +261,7 @@ def upload_documento(
         "tiene_firma_digital": tiene_firma_digital,
         "resultado_firma": json.dumps(resultado_firma) if resultado_firma else None,
         "fecha_validacion_firma": fecha_validacion_firma,
+        "codigo_documento": normalizar_codigo_documento(codigo_documento),
     }).scalar()
     db.commit()
     return result
@@ -244,6 +270,7 @@ def upload_documento(
 def _aplicar_filtros_documentos(
     *,
     origen: str | None = None,
+    codigo_documento: str | None = None,
     id_edan: int | None = None,
     id_evento_rida: int | None = None,
     id_departamento: int | None = None,
@@ -267,6 +294,9 @@ def _aplicar_filtros_documentos(
     if origen is not None:
         conds.append(f"({_ORIGEN_SQL.split(' AS ')[0]}) = :origen")
         params["origen"] = origen
+    if codigo_documento:
+        conds.append("d.codigo_documento = :codigo_documento")
+        params["codigo_documento"] = normalizar_codigo_documento(codigo_documento)
     if id_edan is not None:
         conds.append("d.id_edan = :id_edan")
         params["id_edan"] = id_edan
@@ -371,8 +401,11 @@ def get_documento(db: Session, id_documento: int):
 
 
 def update_documento(db: Session, id_documento: int, data: dict) -> bool:
-    """Actualiza observaciones/activo de un documento."""
+    """Actualiza observaciones/activo/codigo_documento de un documento."""
     fields = {k: v for k, v in data.items() if v is not None}
+    if "codigo_documento" in fields:
+        fields["codigo_documento"] = normalizar_codigo_documento(
+            fields["codigo_documento"])
     if not fields:
         return True
     set_clause = ", ".join(f"{k} = :{k}" for k in fields)
@@ -432,6 +465,7 @@ def buscar_documentos(
 def list_documentos_filtrados(
     db: Session,
     origen: str | None = None,
+    codigo_documento: str | None = None,
     id_edan: int | None = None,
     id_evento_rida: int | None = None,
     id_departamento: int | None = None,
@@ -455,6 +489,7 @@ def list_documentos_filtrados(
     """
     where, params = _aplicar_filtros_documentos(
         origen=origen,
+        codigo_documento=codigo_documento,
         id_edan=id_edan,
         id_evento_rida=id_evento_rida,
         id_departamento=id_departamento,
@@ -477,3 +512,24 @@ def list_documentos_filtrados(
         {page}
     """, {**params, **page_params})
     return rows, total
+
+
+def list_documentos_by_codigo(
+    db: Session,
+    codigo_documento: str,
+    limit: int = 50,
+    skip: int = 0,
+    todos: bool = False,
+):
+    """Documentos activos agrupados por codigo_documento (expediente de
+    DOC_PRECEDENTE). Normaliza el codigo (trim + MAYUSCULAS).
+
+    Devuelve (rows, total) con paginacion reciente primero, misma forma que
+    el listado general.
+    """
+    cod = normalizar_codigo_documento(codigo_documento)
+    if not cod:
+        return [], 0
+    return list_documentos_filtrados(
+        db, codigo_documento=cod, limit=limit, skip=skip, todos=todos,
+    )

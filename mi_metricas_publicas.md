@@ -39,10 +39,16 @@ curl "$API/api/v2/publico/edan/sectores"           # [{sector, total}] 14 sector
 ```bash
 curl "$API/api/v2/publico/repositorio/serie-anios"          # [{origen, anio, total}]  origen: EDAN|RIDA|DOC_PRECEDENTE
 curl "$API/api/v2/publico/repositorio/serie-anios-por-tipo" # [{id_tipo_documento, tipo, anio, total}]
-curl "$API/api/v2/publico/repositorio/resumen"              # [{dimension, llave, total}]  (total/origen/tipo/firma)
+curl "$API/api/v2/publico/repositorio/resumen"              # [{dimension, llave, total}]  (total/origen/tipo/firma/expedientes)
 ```
 Nota: una `dimension='origen'` solo incluye orígenes con documentos; `DOC_PRECEDENTE`
 aparecerá cuando el primer municipio suba un respaldo.
+
+`dimension='expedientes'` (3 filas): cantidad de grupos de documentos por origen —
+EDAN = `distinct id_edan`, RIDA = `distinct id_evento_rida`, DOC_PRECEDENTE =
+`distinct codigo_documento` (clave de rastreo de la 3ª subida; ver
+`mi_repositorio.md`). Solo conteos: nunca se exponen los códigos. Sirve para la
+tarjeta "expedientes abiertos" o barras comparativas.
 
 ## Usuarios (solo cantidades — nunca datos personales)
 ```bash

@@ -63,6 +63,9 @@ class DocumentoCreate(BaseModel):
 class DocumentoUpdate(BaseModel):
     observaciones: Optional[str] = Field(None, description="Texto libre (opcional)")
     activo: Optional[bool] = None
+    codigo_documento: Optional[str] = Field(
+        None, max_length=64,
+        description="Clave de agrupación/expediente (DOC_PRECEDENTE). Se normaliza a MAYÚSCULAS.")
 
 
 class DocumentoResponse(BaseModel):
@@ -73,6 +76,8 @@ class DocumentoResponse(BaseModel):
     id_evento_rida: Optional[int] = None
     # Origen explícito (asignado por la ruta de subida): EDAN, RIDA, DOC_PRECEDENTE.
     origen: Optional[str] = None
+    # Clave de agrupación/rastreo de DOC_PRECEDENTE (null en EDAN/RIDA).
+    codigo_documento: Optional[str] = None
     # Derivados de resultado_firma: cuantas firmas tiene y si se pudo validar.
     cantidad_firmas: int = 0
     firma_validada: bool = False
