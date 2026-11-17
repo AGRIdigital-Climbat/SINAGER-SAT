@@ -27,6 +27,7 @@ from .ayuda_humanitaria import ayuda_humanitaria_router
 from .sinb.router_v2 import router as sinb_router
 from .sinb.router_ndvi import router as ndvi_router
 from .motor_ia.router import router as motor_ia_router
+from .publico.router import router as publico_router
 from .audit import AuditMiddleware
 
 TAGS_METADATA_V1 = [
@@ -104,6 +105,7 @@ V2_ROUTERS = [
     ("sinb", sinb_router),
     ("sinb_ndvi", ndvi_router),
     ("motor_ia", motor_ia_router),
+    ("publico", publico_router),
 ]
 
 app = FastAPI(
