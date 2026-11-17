@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pathlib import Path
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from ..database import get_db
@@ -526,9 +526,44 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     #  ACTUALIZAR / ELIMINAR
     # ============================================================================
 
+    DIAS_MAX_DOC_PRECEDENTE = 3  # ventana para editar/eliminar respaldos municipales
+
+    def _validar_permiso_doc_precedente(doc: dict, _user: dict) -> None:
+        """Restringe edición/eliminación de DOC_PRECEDENTE (3ª API).
+
+        Aplica SOLO a documentos con origen DOC_PRECEDENTE: los puede editar o
+        eliminar únicamente el usuario que los subió y hasta 72 h (3 días)
+        después de la subida. Los documentos EDAN y RIDA conservan el
+        comportamiento anterior.
+        """
+        origen = (doc.get("origen") or "").upper()
+        if origen != "DOC_PRECEDENTE":
+            return
+
+        if int(doc.get("id_usuario_subio") or 0) != int(_user.get("id_usuario") or 0):
+            raise HTTPException(
+                status_code=403,
+                detail="Solo el usuario que subió el documento puede editarlo o eliminarlo",
+            )
+
+        fecha_subida = doc.get("fecha_subida")
+        if not isinstance(fecha_subida, datetime):
+            raise HTTPException(
+                status_code=403,
+                detail="No se pudo validar la antigüedad del documento",
+            )
+        ahora = datetime.now(fecha_subida.tzinfo) if fecha_subida.tzinfo else datetime.now()
+        if ahora - fecha_subida > timedelta(days=DIAS_MAX_DOC_PRECEDENTE):
+            raise HTTPException(
+                status_code=403,
+                detail="No se puede editar ni eliminar: han pasado más de 3 días desde la subida",
+            )
+
     @router.put("/documentos/{id_documento}", tags=[TAG_DOCS],
             summary="Actualizar metadata del documento",
-            description="Solo `observaciones` y `activo` son modificables (PUT parcial).")
+            description="Solo `observaciones` (texto libre) y `activo` son modificables (PUT parcial).\n\n"
+                        "**DOC_PRECEDENTE** (3ª API): solo el usuario que lo subió y dentro de las 72 h "
+                        "(3 días) desde la subida; fuera de eso responde **403**. No aplica a EDAN/RIDA.")
     def actualizar_documento(
         id_documento: int,
         data: DocumentoUpdate,
@@ -536,28 +571,37 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         _user=Depends(get_current_user),
     ):
         """Actualiza observaciones/activo de un documento."""
-        if not service.get_documento(db, id_documento):
+        doc = service.get_documento(db, id_documento)
+        if not doc:
             raise HTTPException(status_code=404, detail="Documento no encontrado")
+        _validar_permiso_doc_precedente(dict(doc), _user)
         service.update_documento(db, id_documento, data.model_dump(exclude_unset=True))
         updated = service.get_documento(db, id_documento)
         return SuccessResponse(message="Documento actualizado", data=dict(updated))
 
     @router.delete("/documentos/{id_documento}", tags=[TAG_DOCS],
             summary="Eliminar documento (soft delete)",
-            description="Marca `activo=FALSE`. El archivo físico permanece en disco.")
+            description="Marca `activo=FALSE`. El archivo físico permanece en disco.\n\n"
+                        "**DOC_PRECEDENTE** (3ª API): solo el usuario que lo subió y dentro de las 72 h "
+                        "(3 días) desde la subida; fuera de eso responde **403**. No aplica a EDAN/RIDA.")
     def eliminar_documento(
         id_documento: int,
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
         """Soft delete (activo=FALSE)."""
-        if not service.delete_documento(db, id_documento, hard=False):
+        doc = service.get_documento(db, id_documento)
+        if not doc:
             raise HTTPException(status_code=404, detail="Documento no encontrado")
+        _validar_permiso_doc_precedente(dict(doc), _user)
+        service.delete_documento(db, id_documento, hard=False)
         return MessageResponse(message="Documento eliminado correctamente")
 
     @router.delete("/documentos/{id_documento}/hard", tags=[TAG_DOCS],
             summary="Eliminar documento físicamente (hard delete)",
-            description="DELETE irreversible: borra fila en BD **Y** archivo del servidor.")
+            description="DELETE irreversible: borra fila en BD **Y** archivo del servidor.\n\n"
+                        "**DOC_PRECEDENTE** (3ª API): solo el usuario que lo subió y dentro de las 72 h "
+                        "(3 días) desde la subida; fuera de eso responde **403**. No aplica a EDAN/RIDA.")
     def eliminar_documento_hard(
         id_documento: int,
         db: Session = Depends(get_db),
@@ -567,6 +611,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         doc = service.get_documento(db, id_documento)
         if not doc:
             raise HTTPException(status_code=404, detail="Documento no encontrado")
+        _validar_permiso_doc_precedente(dict(doc), _user)
 
         delete_file_from_server(doc["path_archivo"])
         service.delete_documento(db, id_documento, hard=True)
