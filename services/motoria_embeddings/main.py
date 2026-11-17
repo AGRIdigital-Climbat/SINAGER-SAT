@@ -30,6 +30,14 @@ SERVICE_TOKEN = (
     or ""
 ).strip()
 MAX_BATCH = max(1, int(os.getenv("EMBEDDINGS_LOCAL_MAX_BATCH", "128") or 128))
+# Cache persistente del modelo ONNX. Por defecto fastembed usa <tmp>/fastembed_cache,
+# que se pierde al limpiar /tmp y deja el servicio sin modelo (arranque con
+# HF_HUB_OFFLINE=1). Se fuerza una ruta estable dentro del HOME del usuario
+# de servicio para que el modelo quede versionado en el servidor.
+CACHE_DIR = (
+    os.getenv("EMBEDDINGS_LOCAL_CACHE_DIR")
+    or os.path.join(os.path.expanduser("~"), ".cache", "motoria-embeddings")
+).strip()
 
 _model = None
 
@@ -56,13 +64,37 @@ def _validar_autorizacion(request: Request):
 
 @app.on_event("startup")
 def cargar_modelo():
-    global _model
-    if _model is None:
-        from fastembed import TextEmbedding
+    """Carga el modelo ONNX desde CACHE_DIR.
 
-        print(f"Cargando modelo de embeddings local: {MODEL_NAME}", flush=True)
-        _model = TextEmbedding(model_name=MODEL_NAME)
-        print("Modelo de embeddings local cargado.", flush=True)
+    Con HF_HUB_OFFLINE=1 (modo servidor sin internet) exige tener el modelo
+    precargado; si falla se reintenta una vez permitiendo la descarga, para
+    que el primer arranque en un servidor nuevo funcione.
+    """
+    global _model
+    if _model is not None:
+        return
+
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
+    from fastembed import TextEmbedding
+
+    print(
+        f"Cargando modelo de embeddings local: {MODEL_NAME} (cache: {CACHE_DIR})",
+        flush=True,
+    )
+    try:
+        _model = TextEmbedding(model_name=MODEL_NAME, cache_dir=CACHE_DIR)
+    except Exception as exc:
+        if os.getenv("HF_HUB_OFFLINE", "").strip().lower() not in ("1", "true", "yes"):
+            raise
+        print(
+            f"Modelo no disponible en modo offline ({exc}); "
+            "reintentando con descarga habilitada.",
+            flush=True,
+        )
+        os.environ["HF_HUB_OFFLINE"] = "0"
+        _model = TextEmbedding(model_name=MODEL_NAME, cache_dir=CACHE_DIR)
+    print("Modelo de embeddings local cargado.", flush=True)
 
 
 @app.get("/health")
@@ -71,6 +103,7 @@ def health():
         "status": "ok" if _model is not None else "cargando",
         "modelo": MODEL_NAME,
         "dimension": DIMENSION,
+        "cache_dir": CACHE_DIR,
     }
 
 

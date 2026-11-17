@@ -75,6 +75,32 @@ APIEOF
 ok "sinagersat-api.service escrita"
 
 # --- Unidad: motoria-embeddings.service ---
+# Cache estable del modelo ONNX (evita /tmp, que se limpia y deja el servicio
+# sin modelo cuando HF_HUB_OFFLINE=1).
+MOTORIA_CACHE="${HOME_EMB:-$(getent passwd "$REAL_USER" | cut -d: -f6)}/.cache/motoria-embeddings"
+mkdir -p "$MOTORIA_CACHE"
+chown "$REAL_USER":"$(id -gn "$REAL_USER")" "$MOTORIA_CACHE" 2>/dev/null || true
+if [ ! -d "$MOTORIA_CACHE/models--Qdrant--paraphrase-multilingual-MiniLM-L12-v2-onnx-Q" ]; then
+    echo "  Precargando modelo de embeddings (descarga unica, ~250 MB)..."
+    sudo -u "$REAL_USER" env HF_HUB_OFFLINE=0 \
+        EMBEDDINGS_LOCAL_CACHE_DIR="$MOTORIA_CACHE" \
+        PROJECT_DIR="$PROJECT_DIR" \
+        "${PROJECT_DIR}/venv/bin/python" - << 'PYPRELOAD' || warn "No se pudo precargar el modelo; el servicio lo descargara al arrancar"
+import os
+from dotenv import dotenv_values
+
+cfg = dotenv_values(os.path.join(os.environ["PROJECT_DIR"], ".env"))
+model = (cfg.get("EMBEDDINGS_LOCAL_MODEL")
+         or "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2").strip()
+cache = os.environ["EMBEDDINGS_LOCAL_CACHE_DIR"]
+
+from fastembed import TextEmbedding
+
+TextEmbedding(model_name=model, cache_dir=cache)
+print(f"Modelo '{model}' precargado en {cache}")
+PYPRELOAD
+fi
+
 cat > /etc/systemd/system/motoria-embeddings.service << MIAEOF
 [Unit]
 Description=SINAGERSAT MotorIA Embeddings (FastEmbed ONNX)
@@ -90,11 +116,18 @@ Restart=on-failure
 RestartSec=10
 Environment=PATH=${PROJECT_DIR}/venv/bin:/usr/bin:/bin
 EnvironmentFile=${PROJECT_DIR}/.env
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=MKL_NUM_THREADS=1
+Environment=NUMEXPR_NUM_THREADS=1
+Environment=VECLIB_MAXIMUM_THREADS=1
+Environment=EMBEDDINGS_LOCAL_CACHE_DIR=${MOTORIA_CACHE}
+Environment=HF_HUB_OFFLINE=1
 
 [Install]
 WantedBy=multi-user.target
 MIAEOF
-ok "motoria-embeddings.service escrita"
+ok "motoria-embeddings.service escrita (cache: ${MOTORIA_CACHE})"
 
 # Recargar y habilitar
 systemctl daemon-reload
