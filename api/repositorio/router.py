@@ -374,34 +374,29 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                                   {"tipo": "DOC_PRECEDENTE", "clave": "PRUEBA-CROSS-1",
                                    "id_edan": None, "id_evento_rida": None,
                                    "codigo_documento": "PRUEBA-CROSS-1",
-                                   "etiqueta": "PRUEBA-CROSS-1",
                                    "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
                                    "total_documentos": 1, "fecha_documento_max": "2026-11-10",
                                    "fecha_subida_max": "2026-11-17T19:57:56",
                                    "documentos_compartidos": 1,
-                                   "comparte_con": [{"tipo": "EDAN", "clave": "ED-79",
-                                                     "etiqueta": "EDAN 070101/2026/003",
+                                   "comparte_con": [{"tipo": "EDAN", "clave": "070101/2026/003",
                                                      "documentos_comunes": 1,
                                                      "documentos": [{"id_documento": 373,
                                                                      "nombre_documento": "Declaratoria 034/2026 (copia EDAN)",
                                                                      "hash_sha256": "b4b2f45d041f9d89"}]}]},
                                   {"tipo": "EDAN", "clave": "070101/2026/003", "id_edan": 79,
                                    "id_evento_rida": None, "codigo_documento": None,
-                                   "etiqueta": "070101/2026/003",
                                    "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
                                    "total_documentos": 3, "fecha_documento_max": "2026-11-10",
                                    "fecha_subida_max": "2026-11-17T19:57:56",
                                    "documentos_compartidos": 1,
                                    "comparte_con": [{"tipo": "DOC_PRECEDENTE",
                                                      "clave": "PRUEBA-CROSS-1",
-                                                     "etiqueta": "PRUEBA-CROSS-1",
                                                      "documentos_comunes": 1,
                                                      "documentos": [{"id_documento": 374,
                                                                      "nombre_documento": "Declaratoria 034/2026 (copia expediente)",
                                                                      "hash_sha256": "b4b2f45d041f9d89"}]}]},
                                   {"tipo": "RIDA", "clave": "070101/2026/003-R", "id_edan": 79,
                                    "id_evento_rida": 15, "codigo_documento": None,
-                                   "etiqueta": "070101/2026/003-R",
                                    "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
                                    "total_documentos": 2, "fecha_documento_max": "2026-10-09",
                                    "fecha_subida_max": "2026-10-09T16:17:52",
@@ -442,7 +437,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "padre/expediente — RIDA por `id_evento_rida` (se mantiene como RIDA aunque "
                             "herede `id_edan`), EDAN por `id_edan`, DOC_PRECEDENTE por `codigo_documento`— "
                             "con `total_documentos`, geografía, fechas máximas y su **código real** en "
-                            "`clave`/`etiqueta` (`codigo_edan` para EDAN, "
+                            "`clave` (`codigo_edan` para EDAN, "
                             "`rida.evento_rida.codigo` para RIDA, "
                             "`codigo_documento` para DOC_PRECEDENTE). "
                             "`data` es la lista de grupos y `total` el nº de **grupos** sin paginar.\n\n"

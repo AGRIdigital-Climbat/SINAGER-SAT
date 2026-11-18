@@ -606,7 +606,7 @@ def list_documentos_grupos(
       - origen DOC_PRECEDENTE -> grupo por codigo_documento (si faltara, el
                                  propio documento forma su grupo)
 
-    Identidad visible: `clave` (y `etiqueta`, igual a `clave`) es el CODIGO REAL
+    Identidad visible: `clave` es el CODIGO REAL
     del grupo: `edan.edan.codigo_edan` (p. ej. 070101/2026/003) para EDAN,
     `rida.evento_rida.codigo` (p. ej. 070101/2026/003-R) para RIDA y el mismo
     `codigo_documento` para DOC_PRECEDENTE. Solo si el padre careciera de
@@ -721,7 +721,6 @@ def list_documentos_grupos(
                    jsonb_agg(jsonb_build_object(
                        'tipo', dest_tipo,
                        'clave', dest_clave,
-                       'etiqueta', dest_clave,
                        'documentos_comunes', documentos_comunes,
                        'documentos', documentos)
                        ORDER BY documentos_comunes DESC) AS comparte_con
@@ -738,7 +737,7 @@ def list_documentos_grupos(
 
     rows = _rows(db, f"""
         {hash_ctes}
-        SELECT g.tipo, g.clave, g.clave AS etiqueta,
+        SELECT g.tipo, g.clave,
                g.id_edan, g.id_evento_rida, g.codigo_documento,
                g.id_departamento, g.id_provincia, g.id_municipio,
                g.total_documentos, g.fecha_documento_max, g.fecha_subida_max,

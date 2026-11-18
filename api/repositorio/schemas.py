@@ -125,7 +125,6 @@ class GrupoCoincidenciaResponse(BaseModel):
     tipo: str = Field(..., description="EDAN | RIDA | DOC_PRECEDENTE")
     clave: str = Field(..., description="Codigo real del grupo: codigo_edan, "
                        "codigo de evento RIDA o codigo_documento")
-    etiqueta: Optional[str] = None
     documentos_comunes: int
     documentos: list[DocumentoCopiaResponse] = []
 
@@ -145,8 +144,6 @@ class DocumentoGrupoResponse(BaseModel):
     id_edan: Optional[int] = Field(None, description="EDAN del grupo (EDAN y, heredado, RIDA)")
     id_evento_rida: Optional[int] = None
     codigo_documento: Optional[str] = None
-    etiqueta: Optional[str] = Field(None, description="Igual que `clave` (el "
-                       "frente muestra el codigo y usa `tipo` para la etiqueta)")
     id_departamento: Optional[int] = None
     id_provincia: Optional[int] = None
     id_municipio: Optional[int] = None

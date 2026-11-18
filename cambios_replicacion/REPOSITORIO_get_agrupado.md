@@ -202,6 +202,26 @@ Verificación final dev 2026-11-17 (JSON real):
 - `GET /edan/79/documentos` (producción) sigue devolviendo 4 (EDAN+RIDA heredados).
 - OpenAPI v2: `codigo_grupo` en params; ruta `/codigo/{codigo_grupo:path}` con summary nuevo; ejemplo agrupado con `clave:"070101/2026/003"`.
 
+## 6.4 Simplificación de contrato: se elimina `etiqueta` (2026-11-17)
+
+Comprobado en uso real que `etiqueta` duplicaba `clave` (mismo valor código
+real). Decisión: **campo `etiqueta` eliminado** de las filas de grupo y de los
+objetos de `comparte_con`; la identidad visible es únicamente `clave`
+(+ `tipo` para la etiqueta de UI). Cambios: proyección del SELECT final de
+`list_documentos_grupos` (sin `g.clave AS etiqueta`), `jsonb_build_object` de
+`comp_con` (sin 'etiqueta'), modelos `DocumentoGrupoResponse`/
+`GrupoCoincidenciaResponse` de `schemas.py`, ejemplos OpenAPI y descripciones.
+
+Verificación dev tras el cambio (4 docs reales + par efímero cross-hash):
+- `GET /documentos` → grupos con claves `070101/2026/003-R` y `070101/2026/003`;
+  `'etiqueta' in fila == False`.
+- `?origen=EDAN|RIDA|DOC_PRECEDENTE` → 1/1/0 grupos correctos.
+- Par efímero (doc EDAN 201 + doc PRECEDENTE 201 mismo PDF): `comparte_con`
+  con claves `['clave','documentos','documentos_comunes','tipo']` (sin
+  etiqueta), gemelo `RES-070101-2026-00005` referenciado por código.
+- Limpieza: ambos hard-deleteados; BD volvió a 4 docs activos.
+- Frontend: no usar `etiqueta` en ninguna pantalla; pintar `tipo` + `clave`.
+
 ## 6.1 Límite conocido (decisión registrada)
 Solo **hash exacto** (copias byte-idénticas). Escaneos/re-exportes del mismo papel
 en municipios distintos NO se detectan (bytes distintos); si algún día hace falta,

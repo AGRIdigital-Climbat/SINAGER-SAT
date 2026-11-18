@@ -127,9 +127,10 @@ Lista **EDAN + RIDA + DOC_PRECEDENTE** (vista nacional) con filtros geográficos
 - Cada grupo trae: `tipo`, **`clave` = el código REAL del grupo** (`codigo_edan`
   para EDAN → `070101/2026/003`; `rida.evento_rida.codigo` para RIDA →
   `070101/2026/003-R`; `codigo_documento` tal cual para DOC_PRECEDENTE →
-  `RES-070101-2026-00002` o el que el municipio haya puesto), `etiqueta`
-  (igual que `clave`), `id_edan`, `id_evento_rida`, `codigo_documento`, geografía
-  del grupo, **`total_documentos`**, `fecha_documento_max`, `fecha_subida_max`.
+  `RES-070101-2026-00002` o el que el municipio haya puesto), `id_edan`,
+  `id_evento_rida`, `codigo_documento`, geografía del grupo,
+  **`total_documentos`**, `fecha_documento_max`, `fecha_subida_max`.
+  (No existe campo `etiqueta`: era duplicado de `clave` y se eliminó.)
   (Los identificadores técnicos `ED-79`/`EV-15` ya NO se devuelven; solo
   quedarían como fallback si un padre no tuviera código.)
 - **Copias idénticas entre grupos (hash exacto, sin API extra)**: cada grupo incluye
@@ -156,7 +157,6 @@ Ejemplo (respuesta `modo=agrupado`):
   "success": true, "message": "Grupos de documentos listados", "total": 3,
   "data": [
     {"tipo": "DOC_PRECEDENTE", "clave": "PRUEBA-AGRUP-2026-001",
-     "etiqueta": "PRUEBA-AGRUP-2026-001",
      "id_edan": null, "id_evento_rida": null,
      "codigo_documento": "PRUEBA-AGRUP-2026-001",
      "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
