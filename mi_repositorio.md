@@ -184,8 +184,8 @@ Ejemplo (respuesta `modo=agrupado`):
 | `id_departamento` | int | Filtro geográfico: departamento |
 | `id_provincia` | int | Filtro geográfico: provincia |
 | `id_municipio` | int | Filtro geográfico: municipio |
-| `id_edan` | int | EDAN asociado |
-| `id_evento_rida` | int | Evento RIDA asociado |
+| `id_edan` | int | **Solo documentos de origen EDAN** de ese EDAN (regla 'id_edan gana'). Los RIDA que heredan ese `id_edan` NO se incluyen; para ver TODO lo del EDAN usa `GET /edan/{id_edan}/documentos` |
+| `id_evento_rida` | int | Solo documentos RIDA de ese evento |
 | `id_tipo_documento` | int | Tipo de documento (catálogo) |
 | `id_usuario_subio` | int | Usuario que subió |
 | `fecha_desde` | `YYYY-MM-DD` | `fecha_documento` desde |

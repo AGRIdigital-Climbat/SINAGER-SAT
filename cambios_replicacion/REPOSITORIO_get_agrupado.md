@@ -140,6 +140,29 @@ Verificado contra `GET /openapi.v2.json` (2026-11-17):
   `_EJEMPLOS_GET_DOCUMENTOS` pasado a `responses=`; import `Union`). Sin efecto
   en runtime más allá de la serialización/validación de respuesta.
 
+## 6.2 Regla 'id_edan gana' (decisión del usuario, 2026-11-17)
+
+En `GET /documentos` (ambos modos) y `GET /documentos/filtrar`, el parámetro
+`id_edan` empareja **únicamente documentos con origen EDAN**: los documentos RIDA
+que heredan el mismo `id_edan` quedan excluidos (antes salían y generaban el
+hallazgo reportado: `?id_edan=79` devolvía 4). Implementación:
+`edan_solo=True` en `_aplicar_filtros_documentos` desde `list_documentos_filtrados`
+y `list_documentos_grupos` (añade `UPPER(origen_expr)='EDAN'` junto a
+`d.id_edan = :id_edan`).
+
+- `GET /edan/{id_edan}/documentos` (producción) **no cambia**: sigue devolviendo
+  EDAN + RIDA heredados (helper con `edan_solo` por defecto False).
+- Consecuencia documentada: `?id_edan=79&origen=RIDA` → 0 (usar
+  `id_evento_rida` o `/edan/79/documentos`).
+- `id_evento_rida` ya era exclusivo de RIDA (columna NULL en EDAN).
+- La coincidencia por hash (`comparte_con`) sigue calculándose contra TODO el
+  repositorio activo, independiente de este filtro.
+
+Verificación tras el cambio (dev): plano `id_edan=79` → **2 solo EDAN** (antes 4);
+agrupado `id_edan=79` → solo grupo ED-79; `id_evento_rida=15` → 2 RIDA;
+`id_edan+origen=RIDA` → 0; `/edan/79/documentos` → 4 (intacto);
+`/filtrar?id_edan=79` → 2; sin filtros → 4 docs / 2 grupos; hash fields siguen OK.
+
 ## 6.1 Límite conocido (decisión registrada)
 Solo **hash exacto** (copias byte-idénticas). Escaneos/re-exportes del mismo papel
 en municipios distintos NO se detectan (bytes distintos); si algún día hace falta,

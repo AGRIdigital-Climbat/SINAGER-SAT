@@ -449,7 +449,10 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "`?modo=plano&id_edan=79` o `?modo=plano&codigo_documento=RES-...`.\n\n"
                             "Orden: los más recientes primero. Filtros opcionales (aplican a ambos modos): "
                             "`origen` (EDAN|RIDA|DOC_PRECEDENTE), geografía "
-                            "(`id_departamento`, `id_provincia`, `id_municipio`), `id_edan`, `id_evento_rida`, "
+                            "(`id_departamento`, `id_provincia`, `id_municipio`), `id_edan` (**solo documentos "
+                            "de origen EDAN**: los RIDA que heredan ese `id_edan` no se incluyen; "
+                            "para ver todo el EDAN use `GET /edan/{id_edan}/documentos`), "
+                            "`id_evento_rida` (solo RIDA de ese evento), "
                             "`codigo_documento` (expediente de respaldos, exacto, sin distinguir mayúsculas), "
                             "`id_tipo_documento`, `id_usuario_subio`, rango `fecha_desde`/`fecha_hasta` (YYYY-MM-DD), "
                             "`q` (búsqueda en nombre), `tiene_firma_digital`, `include_inactive`.\n\n"
@@ -464,7 +467,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             None, description="Filtrar por origen: EDAN, RIDA o DOC_PRECEDENTE"),
         codigo_documento: str | None = Query(
             None, max_length=64, description="Filtrar por clave de agrupación/expediente (DOC_PRECEDENTE)"),
-        id_edan: int | None = Query(None, description="Filtrar por EDAN"),
+        id_edan: int | None = Query(
+            None, description="EDAN (solo documentos origen EDAN; los RIDA que heredan este id no se incluyen)"),
         id_evento_rida: int | None = Query(None, description="Filtrar por evento RIDA"),
         id_departamento: int | None = Query(None, description="Filtrar por departamento"),
         id_provincia: int | None = Query(None, description="Filtrar por provincia"),
@@ -581,7 +585,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     def filtrar_documentos(
         origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(None, description="Origen"),
         codigo_documento: str | None = Query(None, max_length=64, description="Clave de agrupación/expediente"),
-        id_edan: int | None = Query(None, description="FK a edan.edan.id_edan"),
+        id_edan: int | None = Query(
+            None, description="FK a edan.edan.id_edan; solo origen EDAN (los RIDA heredados quedan excluidos: use /edan/{id}/documentos)"),
         id_evento_rida: int | None = Query(None, description="FK a rida.evento_rida.id_evento_rida"),
         id_departamento: int | None = Query(None),
         id_provincia: int | None = Query(None),

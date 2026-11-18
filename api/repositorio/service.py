@@ -283,6 +283,7 @@ def _aplicar_filtros_documentos(
     nombre_documento_like: str | None = None,
     tiene_firma_digital: bool | None = None,
     include_inactive: bool = False,
+    edan_solo: bool = False,
     conds: list | None = None,
     params: dict | None = None,
 ):
@@ -300,6 +301,12 @@ def _aplicar_filtros_documentos(
     if id_edan is not None:
         conds.append("d.id_edan = :id_edan")
         params["id_edan"] = id_edan
+        if edan_solo:
+            # 'id_edan gana': el filtro por EDAN solo empareja documentos de
+            # origen EDAN; los RIDA que heredan este id_edan quedan fuera
+            # (para verlos usar GET /edan/{id_edan}/documentos).
+            _origen_expr = _ORIGEN_SQL.split(" AS ")[0]
+            conds.append(f"UPPER({_origen_expr}) = 'EDAN'")
     if id_evento_rida is not None:
         conds.append("d.id_evento_rida = :id_evento_rida")
         params["id_evento_rida"] = id_evento_rida
@@ -485,11 +492,14 @@ def list_documentos_filtrados(
     """Listado general de documentos (vista nacional) con filtros y paginación.
 
     Incluye EDAN, RIDA y DOC_PRECEDENTE. 'total' es el total sin paginar con
-    los mismos filtros.
+    los mismos filtros. `id_edan` usa la regla 'id_edan gana': solo empareja
+    documentos de origen EDAN (los RIDA que heredan el id se excluyen; ver
+    GET /edan/{id_edan}/documentos para la vista completa).
     """
     where, params = _aplicar_filtros_documentos(
         origen=origen,
         codigo_documento=codigo_documento,
+        edan_solo=True,
         id_edan=id_edan,
         id_evento_rida=id_evento_rida,
         id_departamento=id_departamento,
@@ -598,6 +608,7 @@ def list_documentos_grupos(
         nombre_documento_like=nombre_documento_like,
         tiene_firma_digital=tiene_firma_digital,
         include_inactive=include_inactive,
+        edan_solo=True,
     )
 
     tipo_expr = (
