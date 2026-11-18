@@ -14,10 +14,12 @@ from ..response import SuccessResponse, MessageResponse, DataListResponse, DataI
 from ..upload import save_documento_pdf, delete_file_from_server
 from ..firma_digital import service as firma_service
 from . import service
+from typing import Union
+
 from .schemas import (
     TipoDocumentoCreate, TipoDocumentoUpdate,
     TipoDocumentoResponse,
-    DocumentoUpdate,
+    DocumentoUpdate, DocumentoResponse, DocumentoGrupoResponse,
 )
 
 
@@ -360,7 +362,80 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         "- `tiene_firma_digital`: `cantidad_firmas > 0`\n\n"
     )
 
-    @router.get("/documentos", tags=[TAG_DOCS], response_model=DataListResponse[dict],
+    _EJEMPLOS_GET_DOCUMENTOS = {
+        200: {
+            "description": "Grupos (modo=agrupado, default) o documentos (modo=plano). "
+                           "Esquema `data`: oneOf de DocumentoGrupoResponse / DocumentoResponse.",
+            "content": {"application/json": {"examples": {
+                "agrupado": {
+                    "summary": "Grupo con copias identicas por hash en OTRO grupo",
+                    "value": {"success": True, "message": "Grupos de documentos listados",
+                              "total": 3, "data": [
+                                  {"tipo": "DOC_PRECEDENTE", "clave": "PRUEBA-CROSS-1",
+                                   "id_edan": None, "id_evento_rida": None,
+                                   "codigo_documento": "PRUEBA-CROSS-1",
+                                   "etiqueta": "PRUEBA-CROSS-1",
+                                   "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
+                                   "total_documentos": 1, "fecha_documento_max": "2026-11-10",
+                                   "fecha_subida_max": "2026-11-17T19:57:56",
+                                   "documentos_compartidos": 1,
+                                   "comparte_con": [{"tipo": "EDAN", "clave": "ED-79",
+                                                     "etiqueta": "EDAN 070101/2026/003",
+                                                     "documentos_comunes": 1,
+                                                     "documentos": [{"id_documento": 373,
+                                                                     "nombre_documento": "Declaratoria 034/2026 (copia EDAN)",
+                                                                     "hash_sha256": "b4b2f45d041f9d89"}]}]},
+                                  {"tipo": "EDAN", "clave": "ED-79", "id_edan": 79,
+                                   "id_evento_rida": None, "codigo_documento": None,
+                                   "etiqueta": "EDAN 070101/2026/003",
+                                   "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
+                                   "total_documentos": 3, "fecha_documento_max": "2026-11-10",
+                                   "fecha_subida_max": "2026-11-17T19:57:56",
+                                   "documentos_compartidos": 1,
+                                   "comparte_con": [{"tipo": "DOC_PRECEDENTE",
+                                                     "clave": "PRUEBA-CROSS-1",
+                                                     "etiqueta": "PRUEBA-CROSS-1",
+                                                     "documentos_comunes": 1,
+                                                     "documentos": [{"id_documento": 374,
+                                                                     "nombre_documento": "Declaratoria 034/2026 (copia expediente)",
+                                                                     "hash_sha256": "b4b2f45d041f9d89"}]}]},
+                                  {"tipo": "RIDA", "clave": "EV-15", "id_edan": 79,
+                                   "id_evento_rida": 15, "codigo_documento": None,
+                                   "etiqueta": "EVENTO RIDA 15",
+                                   "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
+                                   "total_documentos": 2, "fecha_documento_max": "2026-10-09",
+                                   "fecha_subida_max": "2026-10-09T16:17:52",
+                                   "documentos_compartidos": 0, "comparte_con": []}]},
+                },
+                "plano": {
+                    "summary": "Documentos individuales (modo=plano)",
+                    "value": {"success": True, "message": "Documentos listados", "total": 1,
+                              "data": [{"id_documento": 72, "origen": "RIDA",
+                                        "id_edan": 79, "id_evento_rida": 15,
+                                        "codigo_documento": None, "id_tipo_documento": 1,
+                                        "nombre_original": "RIDA_Municipio_Santa_Cruz.pdf",
+                                        "path_archivo": "/uploads/rida/documentos/15/doc_070101_28_x.pdf",
+                                        "tamano_bytes": 810065,
+                                        "hash_sha256": "88eb878f94ed04ee",
+                                        "id_usuario_subio": 28,
+                                        "id_departamento": 7, "id_provincia": 701,
+                                        "id_municipio": 70101, "fecha_documento": "2026-10-09",
+                                        "nombre_documento": "RIDA_Municipio_Santa_Cruz",
+                                        "fecha_subida": "2026-10-09T16:17:52",
+                                        "activo": True,
+                                        "observaciones": "Informe de validacion departamental",
+                                        "tiene_firma_digital": False, "cantidad_firmas": 0,
+                                        "firma_validada": False,
+                                        "tipo_codigo": "informe_legal",
+                                        "tipo_nombre": "Informe Legal"}]},
+                },
+            }}},
+        }
+    }
+
+    @router.get("/documentos", tags=[TAG_DOCS],
+                response_model=DataListResponse[Union[DocumentoGrupoResponse, DocumentoResponse]],
+                responses=_EJEMPLOS_GET_DOCUMENTOS,
                 summary="Listar documentos (vista nacional, agrupado por expediente)",
                 description="Listado general del repositorio (EDAN + RIDA + DOC_PRECEDENTE), vista nacional.\n\n"
                             "**Por defecto devuelve GRUPOS** (`modo=agrupado`): un grupo por entidad "
@@ -430,6 +505,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
     @router.get("/documentos/codigo/{codigo_documento}", tags=[TAG_DOCS],
+                response_model=DataListResponse[DocumentoResponse],
                 summary="Listar documentos de un expediente (codigo_documento)",
                 description="Todos los documentos activos agrupados bajo el mismo "
                             "`codigo_documento` (clave de rastreo de la 3ª subida "
@@ -498,6 +574,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
     @router.get("/documentos/filtrar", tags=[TAG_DOCS],
+                response_model=DataListResponse[DocumentoResponse],
                 summary="Filtrar documentos por metadata estructurada (compatibilidad)",
                 description="Listado con filtros (EDAN + RIDA + DOC_PRECEDENTE). Mantiene compatibilidad con clientes existentes.\n\n"
                             "Se recomienda el endpoint general `GET /repositorio/documentos`.\n\n" + _CAMPOS_FIRMA)
@@ -540,6 +617,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         )
 
     @router.get("/documentos/buscar", tags=[TAG_DOCS],
+                response_model=DataListResponse[DocumentoResponse],
                 summary="Buscar documentos por nombre (ILIKE)",
                 description="Búsqueda parcial en `nombre_documento` y `nombre_original` (EDAN, RIDA, DOC_PRECEDENTE).\n\n"
                             "Filtros opcionales: `id_municipio` y `origen`.")

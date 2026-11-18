@@ -118,6 +118,28 @@ git pull origin migraciones
 # y GET ...?modo=plano -> message "Documentos listados"
 ```
 
+## 6.0 Swagger/OpenAPI (esquemas reales generados por FastAPI)
+
+Verificado contra `GET /openapi.v2.json` (2026-11-17):
+- `components.schemas`: `DocumentoGrupoResponse` (14 props incl.
+  `documentos_compartidos` y `comparte_con`), `GrupoCoincidenciaResponse`,
+  `DocumentoCopiaResponse`; `DocumentoResponse` expone `codigo_documento` y
+  `hash_sha256`; `Body_..._put` (PUT) con `observaciones/activo/codigo_documento`.
+- `GET /documentos`: `response_model=DataListResponse[Union[
+  DocumentoGrupoResponse, DocumentoResponse]]` → esquema `oneOf` correcto +
+  `responses` con **ejemplos reales** `agrupado`/`plano` (se muestran en Swagger UI);
+  parámetros documentados incluyen `modo`, `codigo_documento` y todo el set de
+  filtros.
+- `GET /documentos/codigo/{...}`, `/filtrar` y `/buscar`:
+  `response_model=DataListResponse[DocumentoResponse]`.
+- Forms multipart en OpenAPI: `/documentos` (3ª subida) con 9 campos incl.
+  `codigo_documento`; `/edan/{id}/documentos` y `/rida/eventos/{id}/documentos`
+  con 8 campos **sin** `codigo_documento` (contratos EDAN/RIDA intactos).
+- Cambio implementado en `api/repositorio/schemas.py` (modelos nuevos) y
+  `api/repositorio/router.py` (response_model + diccionario
+  `_EJEMPLOS_GET_DOCUMENTOS` pasado a `responses=`; import `Union`). Sin efecto
+  en runtime más allá de la serialización/validación de respuesta.
+
 ## 6.1 Límite conocido (decisión registrada)
 Solo **hash exacto** (copias byte-idénticas). Escaneos/re-exportes del mismo papel
 en municipios distintos NO se detectan (bytes distintos); si algún día hace falta,

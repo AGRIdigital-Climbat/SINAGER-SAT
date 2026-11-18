@@ -103,3 +103,56 @@ class DocumentoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============================================================================
+#  GRUPOS / EXPEDIENTES (GET /repositorio/documentos, modo=agrupado)
+# ============================================================================
+
+class DocumentoCopiaResponse(BaseModel):
+    """Documento gemelo (mismo hash_sha256) localizado en otro grupo."""
+    id_documento: int
+    nombre_documento: Optional[str] = None
+    hash_sha256: Optional[str] = Field(
+        None, description="Primeros 16 caracteres del SHA-256 (coincidencia exacta)")
+
+    class Config:
+        from_attributes = True
+
+
+class GrupoCoincidenciaResponse(BaseModel):
+    """Grupo hermano con el que se comparten documentos idénticos por hash."""
+    tipo: str = Field(..., description="EDAN | RIDA | DOC_PRECEDENTE")
+    clave: str = Field(..., description="Clave del grupo (EV-{id}, ED-{id} o codigo_documento)")
+    etiqueta: Optional[str] = None
+    documentos_comunes: int
+    documentos: list[DocumentoCopiaResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentoGrupoResponse(BaseModel):
+    """Fila de GET /repositorio/documentos?modo=agrupado (un grupo/expediente)."""
+    tipo: str = Field(..., description="EDAN (por id_edan) | RIDA (por id_evento_rida, "
+                        "aunque herede id_edan) | DOC_PRECEDENTE (por codigo_documento)")
+    clave: str = Field(..., description="'EV-<id>', 'ED-<id>' o el codigo_documento "
+                       "('DOC-<id_documento>' si faltara el codigo)")
+    id_edan: Optional[int] = Field(None, description="EDAN del grupo (EDAN y, heredado, RIDA)")
+    id_evento_rida: Optional[int] = None
+    codigo_documento: Optional[str] = None
+    etiqueta: Optional[str] = Field(None, description="Etiqueta legible del grupo")
+    id_departamento: Optional[int] = None
+    id_provincia: Optional[int] = None
+    id_municipio: Optional[int] = None
+    total_documentos: int
+    fecha_documento_max: Optional[date] = None
+    fecha_subida_max: Optional[datetime] = None
+    documentos_compartidos: int = Field(
+        0, description="Docs del grupo cuyo hash exacto aparece en OTRO grupo "
+        "(copias dentro del mismo grupo no cuentan)")
+    comparte_con: list[GrupoCoincidenciaResponse] = Field(
+        default_factory=list, description="Grupos hermanos con copia identica por hash")
+
+    class Config:
+        from_attributes = True
