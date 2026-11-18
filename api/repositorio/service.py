@@ -750,3 +750,121 @@ def list_documentos_grupos(
          {q_page}
     """, {**params, **page_params})
     return rows, total
+
+
+_TIPO_EXPR = (
+    "COALESCE(d.origen, CASE WHEN d.id_evento_rida IS NULL THEN 'EDAN' ELSE 'RIDA' END)"
+)
+
+_CODIGO_REAL_FILA = f"""CASE {_TIPO_EXPR}
+        WHEN 'EDAN' THEN COALESCE(ee2.codigo_edan, 'ED-' || d.id_edan::text)
+        WHEN 'RIDA' THEN COALESCE(ev2.codigo, 'EV-' || d.id_evento_rida::text)
+        ELSE COALESCE(d.codigo_documento, 'DOC-' || d.id_documento::text)
+    END"""
+
+
+def repositorio_todo(
+    db: Session,
+    origen: str | None = None,
+    codigo_documento: str | None = None,
+    codigo_grupo: str | None = None,
+    id_edan: int | None = None,
+    id_evento_rida: int | None = None,
+    id_departamento: int | None = None,
+    id_provincia: int | None = None,
+    id_municipio: int | None = None,
+    id_tipo_documento: int | None = None,
+    id_usuario_subio: int | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    nombre_documento_like: str | None = None,
+    tiene_firma_digital: bool | None = None,
+    include_inactive: bool = False,
+    limite_documentos: int = 500,
+):
+    """Todo el repositorio en UNA respuesta, por secciones de origen.
+
+    data = {"EDAN": {...}, "RIDA": {...}, "DOC_PRECEDENTE": {...}}. Cada seccion
+    contiene `grupos` (misma fila que modo=agrupado: clave=codigo real,
+    total_documentos, fechas, documentos_compartidos, comparte_con) con los
+    `documentos` de cada grupo anidados. Obedece todos los filtros (geografia,
+    fechas, tipo, q, etc.). `limite_documentos` (default 500, duro) acota el
+    listado anidado por payload; si recorta, la seccion marca `truncateda`.
+    Reglas de negocio identicas al agrupado: RIDA no se mezcla con el EDAN
+    heredado; DOC_PRECEDENTE agrupa por codigo_documento tal cual.
+    """
+    groups, _ = list_documentos_grupos(
+        db, origen=origen, codigo_documento=codigo_documento,
+        codigo_grupo=codigo_grupo, id_edan=id_edan, id_evento_rida=id_evento_rida,
+        id_departamento=id_departamento, id_provincia=id_provincia,
+        id_municipio=id_municipio, id_tipo_documento=id_tipo_documento,
+        id_usuario_subio=id_usuario_subio, fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta, nombre_documento_like=nombre_documento_like,
+        tiene_firma_digital=tiene_firma_digital, include_inactive=include_inactive,
+        todos=True,
+    )
+
+    where, params = _aplicar_filtros_documentos(
+        origen=origen,
+        codigo_documento=codigo_documento,
+        codigo_grupo=codigo_grupo,
+        id_edan=id_edan,
+        id_evento_rida=id_evento_rida,
+        id_departamento=id_departamento,
+        id_provincia=id_provincia,
+        id_municipio=id_municipio,
+        id_tipo_documento=id_tipo_documento,
+        id_usuario_subio=id_usuario_subio,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        nombre_documento_like=nombre_documento_like,
+        tiene_firma_digital=tiene_firma_digital,
+        include_inactive=include_inactive,
+        edan_solo=True,
+    )
+
+    rows = _rows(db, f"""
+        SELECT d.id_documento, d.id_edan, d.id_evento_rida, d.codigo_documento,
+               {_TIPO_EXPR} AS tipo,
+               {_CODIGO_REAL_FILA} AS clave,
+               d.id_tipo_documento, t.codigo AS tipo_codigo, t.nombre AS tipo_nombre,
+               d.nombre_documento, d.fecha_documento, d.fecha_subida,
+               d.id_usuario_subio, d.tamano_bytes, d.hash_sha256,
+               d.tiene_firma_digital, d.activo,
+               d.id_departamento, d.id_provincia, d.id_municipio,
+               d.observaciones
+        FROM repositorio.documentos d
+        JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
+        LEFT JOIN edan.edan ee2 ON ee2.id_edan = d.id_edan
+        LEFT JOIN rida.evento_rida ev2 ON ev2.id_evento_rida = d.id_evento_rida
+        WHERE {where}
+        ORDER BY 6, 7, d.fecha_documento DESC NULLS LAST, d.fecha_subida DESC
+        LIMIT :limite_documentos
+    """, {**params, "limite_documentos": limite_documentos})
+
+    docs_map: dict = {}
+    for r in rows:
+        docs_map.setdefault((r["tipo"], r["clave"]), []).append(r)
+
+    secciones = {}
+    for tipo in ("EDAN", "RIDA", "DOC_PRECEDENTE"):
+        grupos = []
+        total_docs = 0
+        listados = 0
+        for g in groups:
+            if g["tipo"] != tipo:
+                continue
+            doc_hijos = docs_map.get((g["tipo"], g["clave"]), [])
+            total_docs += g["total_documentos"]
+            listados += len(doc_hijos)
+            grupos.append({**g, "documentos": doc_hijos})
+        secciones[tipo] = {
+            "total_grupos": len(grupos),
+            "total_documentos": total_docs,
+            "documentos_listados": listados,
+            "truncateda": listados < total_docs,
+            "grupos": grupos,
+        }
+
+    total_general = sum(s["total_documentos"] for s in secciones.values())
+    return secciones, total_general

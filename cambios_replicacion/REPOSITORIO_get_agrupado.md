@@ -222,6 +222,41 @@ Verificación dev tras el cambio (4 docs reales + par efímero cross-hash):
 - Limpieza: ambos hard-deleteados; BD volvió a 4 docs activos.
 - Frontend: no usar `etiqueta` en ninguna pantalla; pintar `tipo` + `clave`.
 
+## 6.5 `GET /repositorio/documentos/todo` — todo por secciones con documentos anidados (2026-11-17)
+
+Petición del usuario: una API que traiga TODO, obedeciendo filtros (geografía,
+fechas, etc.), con el resultado organizado en las 3 secciones y los documentos
+dentro de cada grupo/expediente.
+
+- Ruta nueva en `api/repositorio/router.py`: `GET /api/v2/repositorio/documentos/todo`
+  (declarada ANTES de `/documentos/{id_documento}`; auth JWT;
+  `response_model=DataItemResponse[dict]`; aparece en OpenAPI v2).
+- Servicio nuevo `api/repositorio/service.py::repositorio_todo(...)`:
+  reutiliza `list_documentos_grupos(todos=True)` para las filas de grupo y una
+  query plana (`_aplicar_filtros_documentos` con `edan_solo=True`) que añade por
+  documento `tipo` (`_TIPO_EXPR`) y `clave` real (`_CODIGO_REAL_FILA`:
+  codigo_edan / ev2.codigo / codigo_documento) para anidar los documentos por
+  `(tipo, clave)`. Nuevas constantes de módulo `_TIPO_EXPR` y
+  `_CODIGO_REAL_FILA` (mismas semánticas que los CTEs de hash).
+- Parámetros: los mismos filtros del listado general (origen, codigo_documento,
+  codigo_grupo, id_edan, id_evento_rida, geo, tipo, usuario, fechas, q, firma,
+  include_inactive) + `limite_documentos` (500, le=2000).
+- Forma: `data = {EDAN|RIDA|DOC_PRECEDENTE: {total_grupos, total_documentos,
+  documentos_listados, truncateda, grupos:[fila_agrupado + documentos:[...]]}}`;
+  `total` del envelope = documentos reales totales (sin truncar);
+  `truncateda` solo afecta a los anidados.
+- Reglas de negocio heredadas: RIDA no se mezcla con EDAN (id_edan gana por
+  origen), DOC_PRECEDENTE agrupa por codigo_documento tal cual,
+  `comparte_con` con códigos reales.
+
+Verificación dev 2026-11-17 (sin token 401; admin): sin filtros → total 4,
+EDAN 1 grupo (docs 18,19), RIDA 1 grupo (71,72), PRECEDENTE 0;
+`id_departamento=2` → todo 0; `id_municipio=70101` → 4; `fecha_desde=2026-10-01`
+→ solo RIDA 2; `q=RIDA_Municipio` → RIDA 1 doc; `origen=RIDA` → solo sección
+RIDA; `codigo_grupo=070101/2026/003-R` → solo RIDA; `limite_documentos=1` →
+`truncateda:true` con `total_*` reales intactos. No-colisión: `/documentos/18`
+200 y `/documentos/codigo/...` 200 siguen OK. Sin migración.
+
 ## 6.1 Límite conocido (decisión registrada)
 Solo **hash exacto** (copias byte-idénticas). Escaneos/re-exportes del mismo papel
 en municipios distintos NO se detectan (bytes distintos); si algún día hace falta,

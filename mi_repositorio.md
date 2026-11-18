@@ -264,6 +264,44 @@ Ejemplo de respuesta (`modo=plano`; ver arriba el ejemplo de `modo=agrupado`):
 }
 ```
 
+
+## 2.1 Todo el repositorio en una sola llamada (por secciones)
+
+`GET /api/v2/repositorio/documentos/todo`
+
+Devuelve las **3 secciones** (`EDAN`, `RIDA`, `DOC_PRECEDENTE`), cada una con sus
+grupos (mismas filas que `modo=agrupado`, `clave` = código real) y **los
+documentos anidados** dentro de cada grupo. Acepta todos los filtros del
+listado general (geografía, fechas, tipo, `q`, `origen`, `codigo_grupo`…), más
+`limite_documentos` (default 500, máx 2000) para acotar el payload; si recorta,
+la sección marca `truncateda: true` pero los `total_*` siguen siendo reales.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN"   "$API/api/v2/repositorio/documentos/todo?id_departamento=7&fecha_desde=2026-01-01"
+```
+Estructura (datos reales dev 2026-11-17):
+```json
+{
+  "success": true, "message": "Repositorio completo por secciones", "total": 4,
+  "data": {
+    "EDAN":  {"total_grupos": 1, "total_documentos": 2, "documentos_listados": 2,
+              "truncateda": false,
+              "grupos": [{"tipo": "EDAN", "clave": "070101/2026/003",
+                          "id_edan": 79, "total_documentos": 2,
+                          "documentos_compartidos": 0, "comparte_con": [],
+                          "documentos": [{"id_documento": 18, "...": "..."},
+                                          {"id_documento": 19, "...": "..."}]}]},
+    "RIDA":  {"total_grupos": 1, "total_documentos": 2, "truncateda": false,
+              "grupos": [{"clave": "070101/2026/003-R", "id_evento_rida": 15, "...": "..."}]},
+    "DOC_PRECEDENTE": {"total_grupos": 0, "total_documentos": 0,
+                       "documentos_listados": 0, "truncateda": false, "grupos": []}
+  }
+}
+```
+Reglas (idénticas al agrupado): en `EDAN` solo documentos EDAN; en `RIDA` solo
+RIDA (aunque hereden el `id_edan`); en `DOC_PRECEDENTE` cada grupo es un
+`codigo_documento` con TODOS sus documentos dentro.
+
 ---
 
 ## 3. Otros endpoints de consulta/gestión (compatibilidad)

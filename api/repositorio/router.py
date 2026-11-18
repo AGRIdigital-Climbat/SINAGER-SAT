@@ -512,6 +512,66 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         )
         return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
+    @router.get("/documentos/todo", tags=[TAG_DOCS],
+                response_model=DataItemResponse[dict],
+                summary="Todo el repositorio en una respuesta, por secciones y grupos",
+                description="Una sola llamada que devuelve **las tres secciones** "
+                            "`EDAN`, `RIDA` y `DOC_PRECEDENTE`, cada una con sus "
+                            "**grupos/expedientes** (fila igual que `modo=agrupado`: "
+                            "`clave` = código real, `total_documentos`, fechas, "
+                            "`documentos_compartidos`, `comparte_con`) y los "
+                            "**documentos anidados** dentro de cada grupo.\n\n"
+                            "Respeta **todos los filtros** del listado general "
+                            "(geografía `id_departamento/id_provincia/id_municipio`, "
+                            "`fecha_desde`/`fecha_hasta`, `origen`, `id_tipo_documento`, "
+                            "`q`, `codigo_documento`, `codigo_grupo`, `id_edan`, "
+                            "`id_evento_rida`, `id_usuario_subio`, "
+                            "`tiene_firma_digital`, `include_inactive`). "
+                            "Reglas de negocio identicas al modo agrupado: los RIDA "
+                            "viven solo en su seccion (aunque hereden `id_edan`); "
+                            "DOC_PRECEDENTE agrupa por `codigo_documento` tal cual.\n\n"
+                            "`limite_documentos` (default 500, max 2000) acota los "
+                            "documentos anidados por peso; si recorta, la seccion "
+                            "marca `truncateda: true` (los conteos `total_*` siguen "
+                            "siendo los reales).\n\n" + _CAMPOS_FIRMA)
+    def listar_repositorio_todo(
+        origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(
+            None, description="Limitar a una seccion (las otras se devuelven vacias)"),
+        codigo_documento: str | None = Query(None, max_length=64,
+            description="Expediente DOC_PRECEDENTE"),
+        codigo_grupo: str | None = Query(None, max_length=80,
+            description="Codigo real del grupo en cualquier origen"),
+        id_edan: int | None = Query(None, description="Solo documentos de origen EDAN de ese EDAN"),
+        id_evento_rida: int | None = Query(None, description="Solo RIDA de ese evento"),
+        id_departamento: int | None = Query(None, description="Filtro geográfico: departamento"),
+        id_provincia: int | None = Query(None, description="Filtro geográfico: provincia"),
+        id_municipio: int | None = Query(None, description="Filtro geográfico: municipio"),
+        id_tipo_documento: int | None = Query(None, description="Filtrar por tipo de documento"),
+        id_usuario_subio: int | None = Query(None, description="Filtrar por usuario que subió"),
+        fecha_desde: str | None = Query(None, description="Fecha documento desde (YYYY-MM-DD)"),
+        fecha_hasta: str | None = Query(None, description="Fecha documento hasta (YYYY-MM-DD)"),
+        q: str | None = Query(None, description="Búsqueda por nombre (ILIKE)"),
+        tiene_firma_digital: bool | None = Query(None, description="Filtrar por firma digital"),
+        include_inactive: bool = Query(False, description="Incluir documentos inactivos"),
+        limite_documentos: int = Query(500, ge=1, le=2000,
+            description="Máximo de documentos anidados en toda la respuesta"),
+        db: Session = Depends(get_db),
+        _user=Depends(get_current_user),
+    ):
+        """Todo el repositorio por secciones (EDAN/RIDA/DOC_PRECEDENTE) con grupos y documentos anidados."""
+        data, total = service.repositorio_todo(
+            db, origen=origen, codigo_documento=codigo_documento,
+            codigo_grupo=codigo_grupo, id_edan=id_edan, id_evento_rida=id_evento_rida,
+            id_departamento=id_departamento, id_provincia=id_provincia,
+            id_municipio=id_municipio, id_tipo_documento=id_tipo_documento,
+            id_usuario_subio=id_usuario_subio, fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta, nombre_documento_like=q,
+            tiene_firma_digital=tiene_firma_digital, include_inactive=include_inactive,
+            limite_documentos=limite_documentos,
+        )
+        return SuccessResponse(message="Repositorio completo por secciones",
+                               data=data, total=total)
+
     @router.get("/documentos/codigo/{codigo_grupo:path}", tags=[TAG_DOCS],
                 response_model=DataListResponse[DocumentoResponse],
                 summary="Listar documentos de un grupo por su código real",
