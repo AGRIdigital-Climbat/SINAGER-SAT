@@ -46,12 +46,16 @@ _SELECT_DOCS = f"""
            t.codigo AS tipo_codigo, t.nombre AS tipo_nombre
     FROM repositorio.documentos d
     JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
+    LEFT JOIN edan.edan ee2 ON ee2.id_edan = d.id_edan
+    LEFT JOIN rida.evento_rida ev2 ON ev2.id_evento_rida = d.id_evento_rida
 """
 
 # Mismo FROM del listado, para el COUNT(*) del total sin paginar.
 _FROM_DOCS = """
     FROM repositorio.documentos d
     JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
+    LEFT JOIN edan.edan ee2 ON ee2.id_edan = d.id_edan
+    LEFT JOIN rida.evento_rida ev2 ON ev2.id_evento_rida = d.id_evento_rida
 """
 
 
@@ -271,6 +275,7 @@ def _aplicar_filtros_documentos(
     *,
     origen: str | None = None,
     codigo_documento: str | None = None,
+    codigo_grupo: str | None = None,
     id_edan: int | None = None,
     id_evento_rida: int | None = None,
     id_departamento: int | None = None,
@@ -298,6 +303,17 @@ def _aplicar_filtros_documentos(
     if codigo_documento:
         conds.append("d.codigo_documento = :codigo_documento")
         params["codigo_documento"] = normalizar_codigo_documento(codigo_documento)
+    if codigo_grupo:
+        # Codigo VISIBLE del grupo, respetando la regla 'id_edan gana':
+        # cada codigo empareja SOLO documentos de su propio origen
+        # (codigo_edan->EDAN, evento.codigo->RIDA, codigo_documento->PRECEDENTE),
+        # ignorando codigos heredados del EDAN padre. Sin distinguir mayusculas.
+        _origen_expr_up = f"UPPER({_ORIGEN_SQL.split(' AS ')[0]})"
+        conds.append(
+            f"(({_origen_expr_up} = 'EDAN' AND UPPER(ee2.codigo_edan) = UPPER(:codigo_grupo)) "
+            f"OR ({_origen_expr_up} = 'RIDA' AND UPPER(ev2.codigo) = UPPER(:codigo_grupo)) "
+            "OR UPPER(d.codigo_documento) = UPPER(:codigo_grupo))")
+        params["codigo_grupo"] = codigo_grupo.strip()
     if id_edan is not None:
         conds.append("d.id_edan = :id_edan")
         params["id_edan"] = id_edan
@@ -473,6 +489,7 @@ def list_documentos_filtrados(
     db: Session,
     origen: str | None = None,
     codigo_documento: str | None = None,
+    codigo_grupo: str | None = None,
     id_edan: int | None = None,
     id_evento_rida: int | None = None,
     id_departamento: int | None = None,
@@ -499,6 +516,7 @@ def list_documentos_filtrados(
     where, params = _aplicar_filtros_documentos(
         origen=origen,
         codigo_documento=codigo_documento,
+        codigo_grupo=codigo_grupo,
         edan_solo=True,
         id_edan=id_edan,
         id_evento_rida=id_evento_rida,
@@ -526,22 +544,24 @@ def list_documentos_filtrados(
 
 def list_documentos_by_codigo(
     db: Session,
-    codigo_documento: str,
+    codigo: str,
     limit: int = 50,
     skip: int = 0,
     todos: bool = False,
 ):
-    """Documentos activos agrupados por codigo_documento (expediente de
-    DOC_PRECEDENTE). Normaliza el codigo (trim + MAYUSCULAS).
+    """Documentos activos de un grupo por su CODIGO VISIBLE.
 
-    Devuelve (rows, total) con paginacion reciente primero, misma forma que
-    el listado general.
+    Acepta cualquiera de los tres: `codigo_edan` (EDAN, p. ej.
+    070101/2026/003), `rida.evento_rida.codigo` (RIDA, p. ej. 070101/2026/003-R)
+    o `codigo_documento` (DOC_PRECEDENTE). Comparacion sin distinguir
+    mayusculas. Devuelve (rows, total) reciente primero, misma forma que el
+    listado general.
     """
-    cod = normalizar_codigo_documento(codigo_documento)
+    cod = (codigo or "").strip()
     if not cod:
         return [], 0
     return list_documentos_filtrados(
-        db, codigo_documento=cod, limit=limit, skip=skip, todos=todos,
+        db, codigo_grupo=cod, limit=limit, skip=skip, todos=todos,
     )
 
 
@@ -560,6 +580,7 @@ def list_documentos_grupos(
     db: Session,
     origen: str | None = None,
     codigo_documento: str | None = None,
+    codigo_grupo: str | None = None,
     id_edan: int | None = None,
     id_evento_rida: int | None = None,
     id_departamento: int | None = None,
@@ -585,17 +606,23 @@ def list_documentos_grupos(
       - origen DOC_PRECEDENTE -> grupo por codigo_documento (si faltara, el
                                  propio documento forma su grupo)
 
-    Identificacion de copias EXACTAS (hash_sha256, sin apis nuevas): cada grupo
-    incluye `documentos_compartidos` (cuantos de sus documentos tienen el mismo
-    hash en OTRO grupo del repositorio, siempre contra todos los docs activos)
-    y `comparte_con` (grupos hermanos con los documentos comunes). Dos copias
-    dentro del MISMO grupo no cuentan (clave identica).
+    Identidad visible: `clave` (y `etiqueta`, igual a `clave`) es el CODIGO REAL
+    del grupo: `edan.edan.codigo_edan` (p. ej. 070101/2026/003) para EDAN,
+    `rida.evento_rida.codigo` (p. ej. 070101/2026/003-R) para RIDA y el mismo
+    `codigo_documento` para DOC_PRECEDENTE. Solo si el padre careciera de
+    codigo se usa el fallback tecnico ED-<id>/EV-<id>/DOC-<id_documento>.
+
+    Copias EXACTAS por hash (sin apis nuevas): `documentos_compartidos` y
+    `comparte_con` (grupos hermanos referenciados por su codigo real, con los
+    documentos comunes). Se calcula contra todos los docs activos,
+    independiente de filtros/paginacion; copias del mismo grupo no cuentan.
 
     `total` = numero de GRUPOS sin paginar con los mismos filtros.
     """
     where, params = _aplicar_filtros_documentos(
         origen=origen,
         codigo_documento=codigo_documento,
+        codigo_grupo=codigo_grupo,
         id_edan=id_edan,
         id_evento_rida=id_evento_rida,
         id_departamento=id_departamento,
@@ -615,22 +642,34 @@ def list_documentos_grupos(
         "COALESCE(d.origen, CASE WHEN d.id_evento_rida IS NULL THEN 'EDAN' ELSE 'RIDA' END)"
     )
 
-    grupo_sel = f"""
+    joins_padres = """
+            LEFT JOIN edan.edan ee2 ON ee2.id_edan = d.id_edan
+            LEFT JOIN rida.evento_rida ev2 ON ev2.id_evento_rida = d.id_evento_rida"""
+
+    codigo_fila = f"""CASE {tipo_expr}
+                WHEN 'EDAN' THEN COALESCE(ee2.codigo_edan, 'ED-' || d.id_edan::text)
+                WHEN 'RIDA' THEN COALESCE(ev2.codigo, 'EV-' || d.id_evento_rida::text)
+                ELSE COALESCE(d.codigo_documento, 'DOC-' || d.id_documento::text)
+            END"""
+
+    grupo_inner = f"""
         SELECT
             {tipo_expr} AS tipo,
-            {_GRUPO_KEY_SQL} AS clave,
+            {_GRUPO_KEY_SQL} AS clave_tecnica,
+            CASE {tipo_expr}
+                WHEN 'EDAN' THEN COALESCE(min(ee2.codigo_edan),
+                                          'ED-' || min(d.id_edan)::text)
+                WHEN 'RIDA' THEN COALESCE(min(ev2.codigo),
+                                          'EV-' || min(d.id_evento_rida)::text)
+                ELSE min(COALESCE(d.codigo_documento,
+                                  'DOC-' || d.id_documento::text))
+            END AS clave,
             min(d.id_edan) AS id_edan,
             min(d.id_evento_rida) AS id_evento_rida,
             CASE WHEN {tipo_expr} = 'DOC_PRECEDENTE'
-                 THEN min(COALESCE(d.codigo_documento, 'DOC-' || d.id_documento::text))
+                 THEN min(COALESCE(d.codigo_documento,
+                                   'DOC-' || d.id_documento::text))
             END AS codigo_documento,
-            CASE {tipo_expr}
-                WHEN 'EDAN' THEN COALESCE('EDAN ' || min(ee.codigo_edan),
-                                          'EDAN ' || min(d.id_edan)::text)
-                WHEN 'RIDA' THEN 'EVENTO RIDA ' || min(d.id_evento_rida)::text
-                ELSE COALESCE(min(d.codigo_documento),
-                              'DOC-' || min(d.id_documento)::text)
-            END AS etiqueta,
             min(d.id_departamento) AS id_departamento,
             min(d.id_provincia) AS id_provincia,
             min(d.id_municipio) AS id_municipio,
@@ -639,54 +678,50 @@ def list_documentos_grupos(
             max(d.fecha_subida) AS fecha_subida_max
         FROM repositorio.documentos d
         JOIN repositorio.tipo_documento t ON t.id_tipo_documento = d.id_tipo_documento
-        LEFT JOIN edan.edan ee ON ee.id_edan = d.id_edan
+        {joins_padres}
         WHERE {where}
         GROUP BY {tipo_expr}, {_GRUPO_KEY_SQL}
     """
 
-    # CTEs de coincidencias por hash (siempre contra todo el repositorio activo,
-    # independientes de los filtros: el badge debe seguir siendo correcto).
     hash_ctes = f"""
         WITH docs AS (
             SELECT d.id_documento, d.hash_sha256, d.nombre_documento,
                    {tipo_expr} AS tipo,
-                   {_GRUPO_KEY_SQL} AS clave,
-                   CASE {tipo_expr}
-                       WHEN 'EDAN' THEN COALESCE('EDAN ' || ee.codigo_edan,
-                                                 'EDAN ' || d.id_edan::text)
-                       WHEN 'RIDA' THEN 'EVENTO RIDA ' || d.id_evento_rida::text
-                       ELSE COALESCE(d.codigo_documento,
-                                     'DOC-' || d.id_documento::text)
-                   END AS etiqueta
+                   {_GRUPO_KEY_SQL} AS clave_tecnica,
+                   {codigo_fila} AS clave
               FROM repositorio.documentos d
-              LEFT JOIN edan.edan ee ON ee.id_edan = d.id_edan
+              {joins_padres}
              WHERE d.activo = TRUE AND d.hash_sha256 IS NOT NULL
-        ), pares AS (
-            SELECT a.clave AS clave, a.id_documento AS doc_propio,
-                   b.clave AS dest_clave, b.tipo AS dest_tipo,
-                   b.etiqueta AS dest_etiqueta,
-                   b.id_documento AS dest_doc, b.nombre_documento AS dest_nombre,
-                   b.hash_sha256 AS dest_hash
+        ), comp AS (
+            SELECT a.clave_tecnica AS clave,
+                   count(DISTINCT a.id_documento)::int AS documentos_compartidos
+              FROM docs a
+             WHERE EXISTS (
+                 SELECT 1 FROM docs b
+                  WHERE b.hash_sha256 = a.hash_sha256
+                    AND b.clave_tecnica <> a.clave_tecnica)
+             GROUP BY a.clave_tecnica
+        ), por_dest AS (
+            SELECT a.clave_tecnica AS clave,
+                   b.clave_tecnica AS dest_tecnica,
+                   min(b.tipo) AS dest_tipo,
+                   min(b.clave) AS dest_clave,
+                   count(DISTINCT b.id_documento)::int AS documentos_comunes,
+                   jsonb_agg(DISTINCT jsonb_build_object(
+                       'id_documento', b.id_documento,
+                       'nombre_documento', b.nombre_documento,
+                       'hash_sha256', left(b.hash_sha256, 16))) AS documentos
               FROM docs a
               JOIN docs b
-                ON a.hash_sha256 = b.hash_sha256 AND a.clave <> b.clave
-        ), comp AS (
-            SELECT clave, count(DISTINCT doc_propio)::int AS documentos_compartidos
-              FROM pares GROUP BY clave
-        ), por_dest AS (
-            SELECT clave, dest_clave,
-                   min(dest_tipo) AS tipo, min(dest_etiqueta) AS etiqueta,
-                   count(DISTINCT dest_doc)::int AS documentos_comunes,
-                   jsonb_agg(DISTINCT jsonb_build_object(
-                       'id_documento', dest_doc,
-                       'nombre_documento', dest_nombre,
-                       'hash_sha256', left(dest_hash, 16))) AS documentos
-              FROM pares
-             GROUP BY clave, dest_clave
+                ON a.hash_sha256 = b.hash_sha256
+               AND a.clave_tecnica <> b.clave_tecnica
+             GROUP BY a.clave_tecnica, b.clave_tecnica
         ), comp_con AS (
             SELECT clave,
                    jsonb_agg(jsonb_build_object(
-                       'tipo', tipo, 'clave', dest_clave, 'etiqueta', etiqueta,
+                       'tipo', dest_tipo,
+                       'clave', dest_clave,
+                       'etiqueta', dest_clave,
                        'documentos_comunes', documentos_comunes,
                        'documentos', documentos)
                        ORDER BY documentos_comunes DESC) AS comparte_con
@@ -694,19 +729,24 @@ def list_documentos_grupos(
         )
     """
 
-    total = _row(db, f"SELECT COUNT(*) AS total FROM ({grupo_sel}) g", params)["total"]
+    total = _row(
+        db, f"SELECT COUNT(*) AS total FROM ({grupo_inner}) g", params
+    )["total"]
 
     q_page = "" if todos else " LIMIT :limit OFFSET :skip"
     page_params = {} if todos else {"limit": limit, "skip": skip}
 
     rows = _rows(db, f"""
         {hash_ctes}
-        SELECT g.*,
+        SELECT g.tipo, g.clave, g.clave AS etiqueta,
+               g.id_edan, g.id_evento_rida, g.codigo_documento,
+               g.id_departamento, g.id_provincia, g.id_municipio,
+               g.total_documentos, g.fecha_documento_max, g.fecha_subida_max,
                COALESCE(c.documentos_compartidos, 0) AS documentos_compartidos,
                COALESCE(k.comparte_con, '[]'::jsonb) AS comparte_con
-          FROM ({grupo_sel}) g
-          LEFT JOIN comp c ON c.clave = g.clave
-          LEFT JOIN comp_con k ON k.clave = g.clave
+          FROM ({grupo_inner}) g
+          LEFT JOIN comp c ON c.clave = g.clave_tecnica
+          LEFT JOIN comp_con k ON k.clave = g.clave_tecnica
          ORDER BY g.fecha_documento_max DESC NULLS LAST, g.fecha_subida_max DESC
          {q_page}
     """, {**params, **page_params})

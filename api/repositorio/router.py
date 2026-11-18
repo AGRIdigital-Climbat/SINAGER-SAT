@@ -385,9 +385,9 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                                                      "documentos": [{"id_documento": 373,
                                                                      "nombre_documento": "Declaratoria 034/2026 (copia EDAN)",
                                                                      "hash_sha256": "b4b2f45d041f9d89"}]}]},
-                                  {"tipo": "EDAN", "clave": "ED-79", "id_edan": 79,
+                                  {"tipo": "EDAN", "clave": "070101/2026/003", "id_edan": 79,
                                    "id_evento_rida": None, "codigo_documento": None,
-                                   "etiqueta": "EDAN 070101/2026/003",
+                                   "etiqueta": "070101/2026/003",
                                    "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
                                    "total_documentos": 3, "fecha_documento_max": "2026-11-10",
                                    "fecha_subida_max": "2026-11-17T19:57:56",
@@ -399,9 +399,9 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                                                      "documentos": [{"id_documento": 374,
                                                                      "nombre_documento": "Declaratoria 034/2026 (copia expediente)",
                                                                      "hash_sha256": "b4b2f45d041f9d89"}]}]},
-                                  {"tipo": "RIDA", "clave": "EV-15", "id_edan": 79,
+                                  {"tipo": "RIDA", "clave": "070101/2026/003-R", "id_edan": 79,
                                    "id_evento_rida": 15, "codigo_documento": None,
-                                   "etiqueta": "EVENTO RIDA 15",
+                                   "etiqueta": "070101/2026/003-R",
                                    "id_departamento": 7, "id_provincia": 701, "id_municipio": 70101,
                                    "total_documentos": 2, "fecha_documento_max": "2026-10-09",
                                    "fecha_subida_max": "2026-10-09T16:17:52",
@@ -441,7 +441,10 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "**Por defecto devuelve GRUPOS** (`modo=agrupado`): un grupo por entidad "
                             "padre/expediente — RIDA por `id_evento_rida` (se mantiene como RIDA aunque "
                             "herede `id_edan`), EDAN por `id_edan`, DOC_PRECEDENTE por `codigo_documento`— "
-                            "con `total_documentos`, etiqueta, geografía y fechas máximas. "
+                            "con `total_documentos`, geografía, fechas máximas y su **código real** en "
+                            "`clave`/`etiqueta` (`codigo_edan` para EDAN, "
+                            "`rida.evento_rida.codigo` para RIDA, "
+                            "`codigo_documento` para DOC_PRECEDENTE). "
                             "`data` es la lista de grupos y `total` el nº de **grupos** sin paginar.\n\n"
                             "Con `modo=plano` devuelve los documentos individuales (contrato clásico "
                             "reciente primero). Para el detalle de un grupo reenvíe sus claves como "
@@ -453,7 +456,8 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                             "de origen EDAN**: los RIDA que heredan ese `id_edan` no se incluyen; "
                             "para ver todo el EDAN use `GET /edan/{id_edan}/documentos`), "
                             "`id_evento_rida` (solo RIDA de ese evento), "
-                            "`codigo_documento` (expediente de respaldos, exacto, sin distinguir mayúsculas), "
+                            "`codigo_documento` (expediente de respaldos, exacto, sin distinguir mayúsculas) y "
+                            "`codigo_grupo` (código real del grupo en cualquier origen), "
                             "`id_tipo_documento`, `id_usuario_subio`, rango `fecha_desde`/`fecha_hasta` (YYYY-MM-DD), "
                             "`q` (búsqueda en nombre), `tiene_firma_digital`, `include_inactive`.\n\n"
                             + _CAMPOS_FIRMA)
@@ -467,6 +471,11 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
             None, description="Filtrar por origen: EDAN, RIDA o DOC_PRECEDENTE"),
         codigo_documento: str | None = Query(
             None, max_length=64, description="Filtrar por clave de agrupación/expediente (DOC_PRECEDENTE)"),
+        codigo_grupo: str | None = Query(
+            None, max_length=80,
+            description="Código real del grupo en cualquier origen: codigo_edan "
+                        "(070101/2026/003), codigo de evento RIDA (070101/2026/003-R) "
+                        "o codigo_documento; sin distinguir mayúsculas"),
         id_edan: int | None = Query(
             None, description="EDAN (solo documentos origen EDAN; los RIDA que heredan este id no se incluyen)"),
         id_evento_rida: int | None = Query(None, description="Filtrar por evento RIDA"),
@@ -486,7 +495,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         """Lista documentos (plano) o grupos por expediente (agrupado, default)."""
         if modo == "agrupado":
             data, total = service.list_documentos_grupos(
-                db, origen=origen, codigo_documento=codigo_documento,
+                db, origen=origen, codigo_documento=codigo_documento, codigo_grupo=codigo_grupo,
                 id_edan=id_edan, id_evento_rida=id_evento_rida,
                 id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
                 id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
@@ -498,7 +507,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
                                    data=[dict(r) for r in data], total=total)
 
         data, total = service.list_documentos_filtrados(
-            db, origen=origen, codigo_documento=codigo_documento,
+            db, origen=origen, codigo_documento=codigo_documento, codigo_grupo=codigo_grupo,
             id_edan=id_edan, id_evento_rida=id_evento_rida,
             id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
             id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,
@@ -508,27 +517,28 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
         )
         return SuccessResponse(message="Documentos listados", data=[dict(r) for r in data], total=total)
 
-    @router.get("/documentos/codigo/{codigo_documento}", tags=[TAG_DOCS],
+    @router.get("/documentos/codigo/{codigo_grupo:path}", tags=[TAG_DOCS],
                 response_model=DataListResponse[DocumentoResponse],
-                summary="Listar documentos de un expediente (codigo_documento)",
-                description="Todos los documentos activos agrupados bajo el mismo "
-                            "`codigo_documento` (clave de rastreo de la 3ª subida "
-                            "DOC_PRECEDENTE, equivalente municipal de `id_edan`/"
-                            "`id_evento_rida`). El código se normaliza (trim + "
-                            "MAYÚSCULAS). Orden reciente primero con paginación "
-                            "`limit`/`skip`/`todos`.\n\n" + _CAMPOS_FIRMA)
+                summary="Listar documentos de un grupo por su código real",
+                description="Todos los documentos activos del grupo cuyo **código "
+                            "real** coincide con el dado: `codigo_edan` de un EDAN "
+                            "(p. ej. 070101/2026/003), `rida.evento_rida.codigo` "
+                            "(p. ej. 070101/2026/003-R) o `codigo_documento` de un "
+                            "expediente DOC_PRECEDENTE (RES-... o el puesto por el "
+                            "municipio). Sin distinguir mayúsculas. Orden reciente "
+                            "primero con paginación `limit`/`skip`/`todos`.\n\n" + _CAMPOS_FIRMA)
     def listar_documentos_codigo(
-        codigo_documento: str,
+        codigo_grupo: str,
         limit: int = Query(50, ge=1, le=200, description="Cantidad a devolver (los más recientes primero)"),
         skip: int = Query(0, ge=0, description="Saltar registros (paginación, sólo con limit)"),
         todos: bool = Query(False, description="Devolver todos sin paginar (ignora limit/skip)"),
         db: Session = Depends(get_db),
         _user=Depends(get_current_user),
     ):
-        """Documentos que comparten un codigo_documento (expediente)."""
-        cod = service.normalizar_codigo_documento(codigo_documento)
+        """Documentos del grupo cuyo codigo real coincide (EDAN/RIDA/PRECEDENTE)."""
+        cod = (codigo_grupo or "").strip()
         if not cod:
-            raise HTTPException(status_code=400, detail="codigo_documento vacío")
+            raise HTTPException(status_code=400, detail="codigo vacío")
         data, total = service.list_documentos_by_codigo(
             db, cod, limit=limit, skip=skip, todos=todos,
         )
@@ -585,6 +595,9 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     def filtrar_documentos(
         origen: Literal["EDAN", "RIDA", "DOC_PRECEDENTE"] | None = Query(None, description="Origen"),
         codigo_documento: str | None = Query(None, max_length=64, description="Clave de agrupación/expediente"),
+        codigo_grupo: str | None = Query(
+            None, max_length=80,
+            description="Código real del grupo (codigo_edan, código RIDA o codigo_documento)"),
         id_edan: int | None = Query(
             None, description="FK a edan.edan.id_edan; solo origen EDAN (los RIDA heredados quedan excluidos: use /edan/{id}/documentos)"),
         id_evento_rida: int | None = Query(None, description="FK a rida.evento_rida.id_evento_rida"),
@@ -606,7 +619,7 @@ def create_repositorio_router(require_module: bool = False) -> APIRouter:
     ):
         """Filtra documentos por metadata estructurada."""
         data, total = service.list_documentos_filtrados(
-            db, origen=origen, codigo_documento=codigo_documento,
+            db, origen=origen, codigo_documento=codigo_documento, codigo_grupo=codigo_grupo,
             id_edan=id_edan, id_evento_rida=id_evento_rida,
             id_departamento=id_departamento, id_provincia=id_provincia, id_municipio=id_municipio,
             id_tipo_documento=id_tipo_documento, id_usuario_subio=id_usuario_subio,

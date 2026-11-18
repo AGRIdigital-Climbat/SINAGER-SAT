@@ -123,7 +123,8 @@ class DocumentoCopiaResponse(BaseModel):
 class GrupoCoincidenciaResponse(BaseModel):
     """Grupo hermano con el que se comparten documentos idénticos por hash."""
     tipo: str = Field(..., description="EDAN | RIDA | DOC_PRECEDENTE")
-    clave: str = Field(..., description="Clave del grupo (EV-{id}, ED-{id} o codigo_documento)")
+    clave: str = Field(..., description="Codigo real del grupo: codigo_edan, "
+                       "codigo de evento RIDA o codigo_documento")
     etiqueta: Optional[str] = None
     documentos_comunes: int
     documentos: list[DocumentoCopiaResponse] = []
@@ -136,12 +137,16 @@ class DocumentoGrupoResponse(BaseModel):
     """Fila de GET /repositorio/documentos?modo=agrupado (un grupo/expediente)."""
     tipo: str = Field(..., description="EDAN (por id_edan) | RIDA (por id_evento_rida, "
                         "aunque herede id_edan) | DOC_PRECEDENTE (por codigo_documento)")
-    clave: str = Field(..., description="'EV-<id>', 'ED-<id>' o el codigo_documento "
-                       "('DOC-<id_documento>' si faltara el codigo)")
+    clave: str = Field(..., description="Codigo real del grupo: `codigo_edan` "
+                       "(EDAN), `rida.evento_rida.codigo` (RIDA, p. ej. "
+                       "070101/2026/003-R) o `codigo_documento` (DOC_PRECEDENTE, "
+                       "tal cual se puso). Fallback ED-<id>/EV-<id>/DOC-<id> solo "
+                       "si el padre no tuviera codigo")
     id_edan: Optional[int] = Field(None, description="EDAN del grupo (EDAN y, heredado, RIDA)")
     id_evento_rida: Optional[int] = None
     codigo_documento: Optional[str] = None
-    etiqueta: Optional[str] = Field(None, description="Etiqueta legible del grupo")
+    etiqueta: Optional[str] = Field(None, description="Igual que `clave` (el "
+                       "frente muestra el codigo y usa `tipo` para la etiqueta)")
     id_departamento: Optional[int] = None
     id_provincia: Optional[int] = None
     id_municipio: Optional[int] = None

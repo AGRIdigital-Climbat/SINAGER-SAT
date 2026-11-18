@@ -124,10 +124,14 @@ Lista **EDAN + RIDA + DOC_PRECEDENTE** (vista nacional) con filtros geográficos
   | `RIDA` | `id_evento_rida` | se mantiene RIDA aunque el documento herede `id_edan` (no se mezcla con el grupo EDAN) |
   | `EDAN` | `id_edan` | formulario padre del municipio |
   | `DOC_PRECEDENTE` | `codigo_documento` | expediente municipal; si faltara el código, el doc forma su propio grupo |
-- Cada grupo trae: `tipo`, `clave` (`EV-15`, `ED-79`, `RES-...`), `id_edan`,
-  `id_evento_rida`, `codigo_documento`, `etiqueta` (legible: p. ej.
-  `EDAN 070101/2026/003`, `EVENTO RIDA 15`, o el propio código), geografía del grupo,
-  **`total_documentos`**, `fecha_documento_max`, `fecha_subida_max`.
+- Cada grupo trae: `tipo`, **`clave` = el código REAL del grupo** (`codigo_edan`
+  para EDAN → `070101/2026/003`; `rida.evento_rida.codigo` para RIDA →
+  `070101/2026/003-R`; `codigo_documento` tal cual para DOC_PRECEDENTE →
+  `RES-070101-2026-00002` o el que el municipio haya puesto), `etiqueta`
+  (igual que `clave`), `id_edan`, `id_evento_rida`, `codigo_documento`, geografía
+  del grupo, **`total_documentos`**, `fecha_documento_max`, `fecha_subida_max`.
+  (Los identificadores técnicos `ED-79`/`EV-15` ya NO se devuelven; solo
+  quedarían como fallback si un padre no tuviera código.)
 - **Copias idénticas entre grupos (hash exacto, sin API extra)**: cada grupo incluye
   `documentos_compartidos` (cuántos de sus documentos tienen el mismo `hash_sha256`
   en OTRO grupo) y `comparte_con`: grupos hermanos con `tipo`, `clave`, `etiqueta`,
@@ -139,9 +143,11 @@ Lista **EDAN + RIDA + DOC_PRECEDENTE** (vista nacional) con filtros geográficos
 - **`total` = nº de GRUPOS** sin paginar con los mismos filtros; `limit/skip` paginan grupos.
 - **`modo=plano`**: comportamiento clásico, lista de documentos individuales
   (respuesta `Documentos listados`, `total` = nº de docs).
-- **Drill-down de un grupo** (sin endpoint nuevo): reenvía sus claves con `modo=plano`:
-  `?modo=plano&id_evento_rida=15`, `?modo=plano&id_edan=79`,
-  `?modo=plano&codigo_documento=RES-...` (o `GET /documentos/codigo/{código}`).
+- **Drill-down de un grupo** (sin endpoint nuevo): `?modo=plano&codigo_grupo=<código visible>`
+  (sirve para los 3 tipos, admite minúsculas) o los filtros técnicos
+  `id_evento_rida=15` / `id_edan=79` / `codigo_documento=RES-...`.
+  También `GET /documentos/codigo/{código}` con el código completo tal cual
+  (usa `:path`, los `/` del código como `070101/2026/003-R` van sin escapar).
 - **Orden:** más recientes primero (grupos por su documento más nuevo).
 
 Ejemplo (respuesta `modo=agrupado`):
@@ -181,6 +187,7 @@ Ejemplo (respuesta `modo=agrupado`):
 |---|---|---|
 | `origen` | `EDAN` \| `RIDA` \| `DOC_PRECEDENTE` | Origen del documento |
 | `codigo_documento` | string ≤64 | Expediente/rastreo de DOC_PRECEDENTE (exacto, sin distinguir mayúsculas) |
+| `codigo_grupo` | string ≤80 | **Código real del grupo en cualquier origen** (codigo_edan, código de evento RIDA o codigo_documento); respeta 'id_edan gana': cada código empareja solo su propio origen |
 | `id_departamento` | int | Filtro geográfico: departamento |
 | `id_provincia` | int | Filtro geográfico: provincia |
 | `id_municipio` | int | Filtro geográfico: municipio |

@@ -163,6 +163,45 @@ agrupado `id_edan=79` → solo grupo ED-79; `id_evento_rida=15` → 2 RIDA;
 `id_edan+origen=RIDA` → 0; `/edan/79/documentos` → 4 (intacto);
 `/filtrar?id_edan=79` → 2; sin filtros → 4 docs / 2 grupos; hash fields siguen OK.
 
+## 6.3 Identidad por código real del grupo (decisión 'ED-79 no quiero', 2026-11-17)
+
+Por pedido del usuario, `ED-79`/`EV-15` desaparecen de la respuesta:
+- **`clave` = `etiqueta` = código real**: EDAN→`edan.edan.codigo_edan`
+  (070101/2026/003), RIDA→`rida.evento_rida.codigo` (070101/2026/003-R),
+  DOC_PRECEDENTE→`codigo_documento` tal cual (RES-020101-2026-00004 o el que se
+  haya puesto). Fallback ED-<id>/EV-<id>/DOC-<iddoc> solo si el padre no tuviera
+  código (no ocurre: 7/7 EDAN y 1/1 evento con código, todos distintos).
+- Implementación: `list_documentos_grupos` ahora hace
+  `LEFT JOIN edan.edan ee2` + `LEFT JOIN rida.evento_rida ev2`; agrupa por la
+  clave técnica interna (`clave_tecnica`, no se expone) y proyecta el código.
+- **`comparte_con`** referencia a los grupos hermanos por su **código real**
+  (y `etiqueta` = mismo valor), `tipo` aparte.
+- Nuevo filtro `codigo_grupo` (GET /documentos y /filtrar, ambos modos):
+  empareja el código **solo dentro de su propio origen** (regla id_edan gana
+  también aquí): (EDAN∧codigo_edan) OR (RIDA∧ev.codigo) OR codigo_documento.
+- `GET /documentos/codigo/{codigo_documento}` se convirtió a
+  `GET /documentos/codigo/{codigo_grupo:path}`: ahora acepta CUALQUIER código de
+  grupo y los `/` del código van literales en la URL (070101/2026/003-R).
+  Para PRECEDENTE el comportamiento es idéntico al anterior (retro-compatible).
+
+Bugs encontrados y corregidos durante esta implementación (el gemelo debe
+quedar con la versión final commiteada):
+1. `SELECT g.* EXCEPT (clave_tecnica)` → syntax error en PostgreSQL (eso es
+   de BigQuery). Corregido proyectando columnas explícitamente.
+2. `codigo_grupo` comparaba `ee2.codigo_edan` sin mirar el origen y traía los
+   RIDA heredados (violaba 'id_edan gana'). Corregido con la condición por
+   origen arriba.
+3. Códigos con `/` rompían la ruta `{codigo_documento}` (404). Corregido con
+   convertidor `:path`.
+
+Verificación final dev 2026-11-17 (JSON real):
+- Agrupado sin filtros → 2 grupos: `{tipo:RIDA, clave:"070101/2026/003-R", total_documentos:2}` y `{tipo:EDAN, clave:"070101/2026/003", total_documentos:2}`, ambos `documentos_compartidos:0`, `comparte_con:[]`.
+- `?codigo_grupo=070101/2026/003` → solo el grupo EDAN (1); `?codigo_grupo=070101/2026/003-R&modo=plano` → 2 RIDA.
+- `/documentos/codigo/070101/2026/003-R` → docs 71,72; `/codigo/070101/2026/003` → 18,19; en minúsculas → igual (case-insensitive).
+- Gemelo cross-hash: mismo PDF en EDAN (doc 375) y en expediente nuevo (doc 376, autogenerado `RES-020101-2026-00004`) → grupo PREC: `compartes=1`, `comparte_con=[{tipo:EDAN, clave:"070101/2026/003"}]`; `/filtrar?codigo_grupo=RES-...` → 1 doc. Limpieza posterior: BD volvió a 4 docs.
+- `GET /edan/79/documentos` (producción) sigue devolviendo 4 (EDAN+RIDA heredados).
+- OpenAPI v2: `codigo_grupo` en params; ruta `/codigo/{codigo_grupo:path}` con summary nuevo; ejemplo agrupado con `clave:"070101/2026/003"`.
+
 ## 6.1 Límite conocido (decisión registrada)
 Solo **hash exacto** (copias byte-idénticas). Escaneos/re-exportes del mismo papel
 en municipios distintos NO se detectan (bytes distintos); si algún día hace falta,
